@@ -1,0 +1,9 @@
+[
+  { "id": 1, "name": "Imran Hossain", "role": "KAM", "email": "kam@milex.com", "password": "demo" },
+  { "id": 2, "name": "Saleh Uddin", "role": "SALES_COORDINATOR", "email": "sales@milex.com", "password": "demo" },
+  { "id": 3, "name": "SK Md Aliraz", "role": "LINE_MANAGER", "email": "lm@milex.com", "password": "demo" },
+  { "id": 4, "name": "Operations Dept", "role": "OPERATIONS", "email": "ops@milex.com", "password": "demo" },
+  { "id": 5, "name": "Credit Dept", "role": "ACCOUNTS", "email": "accounts@milex.com", "password": "demo" },
+  { "id": 6, "name": "System Admin", "role": "ADMIN", "email": "admin@milex.com", "password": "demo" },
+  { "id": 7, "name": "Super Admin", "role": "SUPER_ADMIN", "email": "superadmin@milex.com", "password": "demo" }
+]

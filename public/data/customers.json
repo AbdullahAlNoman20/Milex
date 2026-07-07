@@ -1,0 +1,41 @@
+[
+  {
+    "id": "MLX8903801",
+    "barcode": "MLX8903801",
+    "accountName": "L'USINE FASHION LTD.",
+    "address": "A-127-131, BSCIC Industrial Area, Fatullah, Narayanganj",
+    "mobile": "+8802997746185",
+    "email": "info@fakirapparels.com",
+    "businessType": "Garments",
+    "serviceRequired": "IB",
+    "accountMode": "Express",
+    "accountType": "CREDIT CUSTOMER",
+    "handledBy": "Imran Hossain",
+    "creditLimitTk": "50000",
+    "creditPeriodDays": "15",
+    "areaName": "Gulshan-1",
+    "zoneName": "Dhaka North",
+    "contacts": [
+      { "type": "SENIOR MANAGEMENT", "name": "Mr. X (MD)", "designation": "MD", "mobile": "+8802997746185", "email": "info@fakirapparels.com" },
+      { "type": "KEY CONTACT PERSON", "name": "Mr. Y (Ops)", "designation": "Ops Manager", "mobile": "+8802997746185", "email": "info@fakirapparels.com" },
+      { "type": "FINANCIAL CONTACT", "name": "Mr. Z (CFO)", "designation": "CFO", "mobile": "+8802997746185", "email": "info@fakirapparels.com" }
+    ],
+    "shippingDetails": [
+      { "shipmentType": ["Document"], "rateFor": "Import", "country": "China", "volume": "20", "weight": "200", "revenue": "1400", "provider": "DPEX" }
+    ],
+    "recNote": "NEED TO OFFER MX RATE.",
+    "status": "RATE APPROVED (GENERATE OFFER)",
+    "rateRef": "REF-MLX1707581",
+    "revision": 0,
+    "proposedRate": "32 USD/Kg + 10 USD Custom",
+    "approvedRate": "32 USD/Kg + 10 USD Custom",
+    "lmNote": "Approved as proposed.",
+    "accountProfileType": "REGULAR",
+    "history": [
+      { "date": "Oct 24, 2026 - 09:41 AM", "action": "RATE APPROVED BY LM", "status": "completed" },
+      { "date": "Oct 24, 2026 - 09:30 AM", "action": "RATE PREPARED BY SC", "status": "completed" },
+      { "date": "Oct 24, 2026 - 09:00 AM", "action": "RECOMMENDATION CREATED", "status": "completed" }
+    ],
+    "profileData": {}
+  }
+]
