@@ -1,8 +1,8 @@
 // src/Pages/modules/sales/constants/weeklyPlanStatus.js
 export const WEEKLY_PLAN_STATUS = Object.freeze({
   DRAFT: 'DRAFT',
-  SUBMITTED: 'SUBMITTED (AWAITING LM REVIEW)',
-  NEEDS_REVISION: 'NEEDS REVISION (LM FEEDBACK)',
+  SUBMITTED: 'SUBMITTED',
+  NEEDS_REVISION: 'NEEDS_REVISION',
   APPROVED: 'APPROVED',
 });
 
@@ -22,6 +22,12 @@ export const getWeekStart = (date = new Date()) => {
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
+};
+
+export const getNextWeekStart = (date = new Date()) => {
+  const current = new Date(getWeekStart(date));
+  current.setDate(current.getDate() + 7);
+  return current.toISOString().slice(0, 10);
 };
 
 export const buildEmptyVisit = () => ({

@@ -1,0 +1,333 @@
+// src/database/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+
+}
+
+enum RoleName {
+  KAM
+  SALES_COORDINATOR
+  LINE_MANAGER
+  SUPER_ADMIN
+}
+
+enum CustomerStatus {
+  PENDING_RATE_PREPARATION
+  PENDING_RATE_APPROVAL
+  RATE_APPROVED_PENDING_OFFER
+  DRAFTING_OFFER_LETTER
+  OFFER_SENT_AWAITING_FEEDBACK
+  OFFER_REJECTED_REVISE_RATE
+  OFFER_ACCEPTED_PENDING_AGREEMENT
+  DRAFTING_AGREEMENT
+  AGREEMENT_SENT_AWAITING_SIGNATURE
+  AGREEMENT_SIGNED_PENDING_PROFILE
+  PROVISIONAL_ACTIVE
+  PROVISIONAL_DOCS_PENDING
+  PROVISIONAL_EXTENSION_REQUESTED
+  PROVISIONAL_FINAL_REVIEW_PENDING
+  PROVISIONAL_EXPIRED
+  INFO_UPDATE_PENDING_LM_APPROVAL
+  ACTIVE_ACCOUNT
+}
+
+enum AccountProfileType {
+  REGULAR
+  PROVISIONAL
+}
+
+enum WeeklyPlanStatus {
+  DRAFT
+  SUBMITTED
+  NEEDS_REVISION
+  APPROVED
+}
+
+enum ContactType {
+  SENIOR_MANAGEMENT
+  KEY_CONTACT_PERSON
+  FINANCIAL_CONTACT
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        RoleName         @unique
+  permissions RolePermission[]
+  users       User[]
+}
+
+model Permission {
+  id    String           @id @default(uuid())
+  key   String           @unique
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id                 String    @id @default(uuid())
+  name               String
+  email              String    @unique
+  passwordHash       String
+  passwordHistory    String[]  @default([])
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id])
+  branchId           String?
+  mfaSecret          String?
+  mfaEnabled         Boolean   @default(false)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  customersHandled   Customer[]        @relation("HandledBy")
+  customersCreated   Customer[]        @relation("RecommendedBy")
+  weeklyPlans        WeeklyPlan[]
+  dailyReports       DailyReport[]
+  auditLogs          AuditLog[]
+  refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  loginLogs          LoginLog[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  ip        String?
+  userAgent String?
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model LoginLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  success   Boolean
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model Customer {
+  id                       String             @id @default(uuid())
+  barcode                  String             @unique
+  accountName              String
+  address                  String
+  phone                    String
+  email                    String
+  businessType             String
+  serviceRequired          String
+  accountMode              String
+  accountType              String
+  creditLimitTk            String?
+  creditPeriodDays         String?
+  creditPeriodExtendedByLM Boolean            @default(false)
+  proposedRate             String?
+  approvedRate             String?
+  lmNote                   String?
+  recNote                  String?
+  rejectReason             String?
+  rateRef                  String?
+  offerText                String?
+  agreementText            String?
+  revision                 Int                @default(0)
+  status                   CustomerStatus     @default(PENDING_RATE_PREPARATION)
+  accountProfileType       AccountProfileType @default(REGULAR)
+
+  pendingInfoUpdateField    String?
+  pendingInfoUpdateValue    String?
+  pendingInfoUpdateAt       DateTime?
+
+  provisionalCreatedAt      DateTime?
+  provisionalExpiryDate     DateTime?
+  provisionalExtensionDays  Int               @default(0)
+
+  followUpDate              DateTime?
+  followUpNote              String?
+
+  recommendedById String
+  recommendedBy   User    @relation("RecommendedBy", fields: [recommendedById], references: [id])
+  handledById     String
+  handledBy       User    @relation("HandledBy", fields: [handledById], references: [id])
+
+  contacts        Contact[]
+  shippingDetails ShippingDetail[]
+  documents       OnboardingDocument[]
+  extensionRequests TimeExtensionRequest[]
+  history         CustomerHistoryEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([recommendedById])
+  @@index([handledById])
+}
+
+model Contact {
+  id           String      @id @default(uuid())
+  customerId   String
+  customer     Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type         ContactType
+  name         String
+  designation  String?
+  mobile       String?
+  email        String?
+
+  @@index([customerId])
+}
+
+model ShippingDetail {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shipmentType String[]
+  rateFor      String
+  country      String
+  volume       String
+  weight       String
+  revenue      String
+  provider     String
+
+  @@index([customerId])
+}
+
+model CustomerHistoryEntry {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  action     String
+  subText    String?
+  status     String
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model OnboardingDocument {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  originalName String
+  documentType String   @default("Other")
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  scanStatus   String   @default("PENDING")
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model TimeExtensionRequest {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedDays Int
+  reason       String
+  approved     Boolean?
+  decidedById  String?
+  decidedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([customerId])
+}
+
+model WeeklyPlan {
+  id             String           @id @default(uuid())
+  kamId          String
+  kam            User             @relation(fields: [kamId], references: [id])
+  weekStartDate  String
+  status         WeeklyPlanStatus @default(DRAFT)
+  lmComments     String?
+  existingVisits Visit[]          @relation("ExistingVisits")
+  prospectVisits Visit[]          @relation("ProspectVisits")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([kamId, weekStartDate])
+}
+
+model Visit {
+  id                 String      @id @default(uuid())
+  day                String
+  customerName       String
+  purpose            String
+  outcomeNotes       String?
+  existingPlanId     String?
+  existingPlan       WeeklyPlan? @relation("ExistingVisits", fields: [existingPlanId], references: [id], onDelete: Cascade)
+  prospectPlanId     String?
+  prospectPlan       WeeklyPlan? @relation("ProspectVisits", fields: [prospectPlanId], references: [id], onDelete: Cascade)
+}
+
+model DailyReport {
+  id        String       @id @default(uuid())
+  kamId     String
+  kam       User         @relation(fields: [kamId], references: [id])
+  date      String
+  visits    ReportVisit[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([kamId, date])
+}
+
+model ReportVisit {
+  id                     String      @id @default(uuid())
+  customerName           String
+  completed              Boolean     @default(true)
+  reasonIfNotCompleted   String?
+  outcomeNotes           String?
+  dailyReportId          String
+  dailyReport            DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  entity      String
+  entityId    String
+  action      String
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  beforeState Json?
+  afterState  Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorId])
+}

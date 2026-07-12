@@ -1,7 +1,7 @@
 // src/Pages/modules/sales/layout/SalesSidebar.jsx
 import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileBox, FileText, Users, ShieldCheck, CalendarDays, ClipboardList, BellRing } from 'lucide-react';
+import { LayoutDashboard, FileBox, FileText, Users, ShieldCheck, CalendarDays, ClipboardList, BellRing, Eye } from 'lucide-react';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { ROLES } from '../../../../Components/constants/roles';
 import { hasAnyPermission, PERMISSIONS } from '../../../../Components/constants/permissions';
@@ -43,6 +43,13 @@ const NAV_ITEMS = [
     label: 'Follow-up Reminders',
     icon: BellRing,
     roles: [ROLES.LINE_MANAGER],
+    permissions: null,
+  },
+  {
+    to: '/app/team-reports',
+    label: 'Team Reports',
+    icon: Eye,
+    roles: [ROLES.LINE_MANAGER, ROLES.SUPER_ADMIN],
     permissions: null,
   },
   {

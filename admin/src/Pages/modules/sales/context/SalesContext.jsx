@@ -1,14 +1,32 @@
-// src/Pages/modules/sales/context/SalesContext.jsx
 import React, { createContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '../../../../Components/hooks/useToast';
-import {
-  fetchCustomers,
-  generateBarcode,
-  buildHistoryEntry,
-} from '../services/customerService';
-import { STATUS } from '../constants/salesStatus';
+import * as customerService from '../services/customerService';
 
 export const SalesContext = createContext(null);
+
+// Maps the historyAction text each panel already sends into the specific
+// backend endpoint that must run. This is the single place that translates
+// "what the UI is asking for" into "which real API call to make" — every
+// panel keeps calling updateStatus(...) exactly as before, unchanged.
+const ACTION_TO_SERVICE_CALL = {
+  'RATE APPROVED BY LM': (id, updates) => customerService.approveRate(id, updates),
+  'RATE REJECTED BY LM': (id) => customerService.rejectRate(id),
+  'DRAFTING OFFER LETTER': (id) => customerService.draftOffer(id),
+  'OFFER LETTER SENT': (id, updates) => customerService.finalizeOffer(id, updates.offerText),
+  'OFFER ACCEPTED BY CUSTOMER': (id) => customerService.submitClientFeedback(id, true),
+  'OFFER REJECTED BY CUSTOMER': (id, updates) =>
+    customerService.submitClientFeedback(id, false, updates.rejectReason),
+  'RATE SUBMITTED BY KAM': (id, updates) => customerService.reviseRate(id, updates.proposedRate),
+  'REVISED RATE SUBMITTED TO LM': (id, updates) => customerService.reviseRate(id, updates.proposedRate),
+  'DRAFTING AGREEMENT': (id) => customerService.draftAgreement(id),
+  'AGREEMENT FINALIZED': (id, updates) => customerService.finalizeAgreement(id, updates.agreementText),
+  'AGREEMENT SIGNED — PROVISIONAL ACCOUNT CREATED': (id) => customerService.activateProvisional(id),
+  'AGREEMENT SIGNED — ACCOUNT ACTIVATED': (id) => customerService.activateDirect(id),
+  'INFO UPDATE REQUESTED BY KAM': (id, updates) =>
+    customerService.requestInfoUpdate(id, updates.pendingInfoUpdate?.field, updates.pendingInfoUpdate?.newValue),
+  'INFO UPDATE APPROVED BY LM': (id) => customerService.decideInfoUpdate(id, true),
+  'INFO UPDATE REJECTED BY LM': (id) => customerService.decideInfoUpdate(id, false),
+};
 
 export const SalesProvider = ({ children }) => {
   const { showToast } = useToast();
@@ -18,94 +36,102 @@ export const SalesProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        setIsLoading(true);
-        setLoadError(null);
-        const data = await fetchCustomers();
-        if (isMounted) setCustomers(Array.isArray(data) ? data : []);
-      } catch (err) {
-        if (isMounted) setLoadError('Failed to load customer records.');
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    })();
-    return () => {
-      isMounted = false;
-    };
+  const reload = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const data = await customerService.fetchCustomers();
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch {
+      setLoadError('Failed to load customer records.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // Lightweight background refresh so status changes made by another role
+  // (LM approving/rejecting, SC sending an offer, etc.) show up without a
+  // manual page reload. Plain interval + focus re-check — no websockets,
+  // no extra infra, single small GET per tick.
+  useEffect(() => {
+    const POLL_MS = 20000;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') reload();
+    }, POLL_MS);
+    const onFocus = () => reload();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [reload]);
+
+  // Every role panel calls updateStatus(id, newStatus, updates, actionText, subText)
+  // exactly as before — this now forwards to the real backend endpoint that
+  // matches the actionText, then refetches so all roles see the live result.
   const updateStatus = useCallback(
-    (id, newStatus, updates = {}, actionText, subText = '') => {
-      if (!id || !newStatus || !actionText) return;
-
-      const historyEntry = buildHistoryEntry(actionText, subText);
-
-      setCustomers((prev) =>
-        prev.map((c) => {
-          if (c.id !== id) return c;
-          const closedHistory = (c.history || []).map((h) => ({ ...h, status: 'completed' }));
-          return {
-            ...c,
-            ...updates,
-            status: newStatus,
-            history: [historyEntry, ...closedHistory],
-          };
-        })
-      );
-
-      setSelectedCustomer((prev) => {
-        if (!prev || prev.id !== id) return prev;
-        const closedHistory = (prev.history || []).map((h) => ({ ...h, status: 'completed' }));
-        return {
-          ...prev,
-          ...updates,
-          status: newStatus,
-          history: [historyEntry, ...closedHistory],
-        };
-      });
-
-      showToast(`Success: ${actionText}`);
+    async (id, _newStatus, updates = {}, actionText, _subText = '') => {
+      if (!id || !actionText) return;
+      const call = ACTION_TO_SERVICE_CALL[actionText];
+      if (!call) {
+        showToast(`No backend mapping for action: ${actionText}`, 'error');
+        return;
+      }
+      try {
+        const updated = await call(id, updates);
+        setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
+        setSelectedCustomer((prev) => (prev && prev.id === id ? updated : prev));
+        showToast(`Success: ${actionText}`);
+      } catch (err) {
+        showToast(err?.message || `Failed: ${actionText}`, 'error');
+      }
     },
     [showToast]
   );
 
   const addCustomer = useCallback(
-    (customerDraft) => {
-      const id = generateBarcode();
-      const record = {
-        id,
-        barcode: id,
-        revision: 0,
-        accountProfileType: 'REGULAR',
-        profileData: {},
-        history: [buildHistoryEntry('RECOMMENDATION FORM CREATED BY KAM')],
-        status: STATUS.PENDING_RATE,
-        ...customerDraft,
-      };
-      setCustomers((prev) => [...prev, record]);
-      showToast('Recommendation Form Submitted Successfully!');
-      return record;
+    async (customerDraft) => {
+      try {
+        const record = await customerService.createRecommendation(customerDraft);
+        setCustomers((prev) => [...prev, record]);
+        showToast('Recommendation Form Submitted Successfully!');
+        return record;
+      } catch (err) {
+        showToast(err?.message || 'Failed to submit recommendation', 'error');
+        throw err;
+      }
     },
     [showToast]
   );
 
-const findByBarcode = useCallback(
-    (barcode) => {
+  const findByBarcode = useCallback(
+    async (barcode) => {
       if (typeof barcode !== 'string' || !barcode.trim()) return null;
-      const normalized = barcode.trim().toLowerCase();
-      return customers.find((c) => c.barcode?.toLowerCase() === normalized) || null;
+      try {
+        return await customerService.fetchCustomerByBarcode(barcode.trim());
+      } catch {
+        return null;
+      }
     },
-    [customers]
+    []
   );
 
-  const updateCustomerMeta = useCallback((id, updates = {}) => {
-    if (!id || typeof updates !== 'object') return;
-    setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-    setSelectedCustomer((prev) => (prev && prev.id === id ? { ...prev, ...updates } : prev));
-  }, []);
+  const updateCustomerMeta = useCallback(
+    async (id, updates = {}) => {
+      try {
+        const updated = await customerService.updateFollowUp(id, updates.followUpDate, updates.followUpNote);
+        setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
+        setSelectedCustomer((prev) => (prev && prev.id === id ? updated : prev));
+      } catch (err) {
+        showToast(err?.message || 'Failed to update follow-up', 'error');
+      }
+    },
+    [showToast]
+  );
 
   const value = useMemo(
     () => ({
@@ -120,9 +146,9 @@ const findByBarcode = useCallback(
       updateCustomerMeta,
       addCustomer,
       findByBarcode,
-      generateBarcode,
+      reload,
     }),
-    [customers, isLoading, loadError, selectedCustomer, printData, updateStatus, updateCustomerMeta, addCustomer, findByBarcode]
+    [customers, isLoading, loadError, selectedCustomer, printData, updateStatus, updateCustomerMeta, addCustomer, findByBarcode, reload]
   );
 
   return <SalesContext.Provider value={value}>{children}</SalesContext.Provider>;

@@ -58,9 +58,8 @@ const Countdown = ({ expiryDate, onExpire, className = '' }) => {
   }
 
   return (
-    <span className={`font-mono text-xs font-bold ${className}`}>
-      {days}d {String(hours).padStart(2, '0')}h {String(minutes).padStart(2, '0')}m{' '}
-      {String(seconds).padStart(2, '0')}s
+    <span className={`font-mono text-sm font-bold tabular-nums ${className}`}>
+      {String(days).padStart(2, '0')}:{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
     </span>
   );
 };

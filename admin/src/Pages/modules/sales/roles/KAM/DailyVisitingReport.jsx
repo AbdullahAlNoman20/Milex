@@ -1,10 +1,10 @@
-// src/Pages/modules/sales/roles/KAM/DailyVisitingReport.jsx
-import React, { useState, useCallback } from 'react';
-import { Plus, Trash2, Send } from 'lucide-react';
-import { useAuth } from '../../../../../Components/hooks/useAuth';
+// admin/src/Pages/modules/sales/roles/KAM/DailyVisitingReport.jsx — REPLACE ENTIRE FILE
+import React, { useState, useCallback, useEffect } from 'react';
+import { Plus, Trash2, Send, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { getReportByDate, saveReport } from '../../services/dailyReportService';
+import { getReportByDate, saveReport, listMyReports } from '../../services/dailyReportService';
 import { isRequired } from '../../../../../Components/utils/validators';
+import Loader from '../../../../../Components/Shared/Loader';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -17,30 +17,54 @@ const buildEmptyEntry = () => ({
 });
 
 const DailyVisitingReport = () => {
-  const { currentUser } = useAuth();
   const { showToast } = useToast();
   const [date, setDate] = useState(todayISO());
-  const [visits, setVisits] = useState(() => {
-    const existing = getReportByDate(currentUser?.id, todayISO());
-    return existing?.visits?.length ? existing.visits : [buildEmptyEntry()];
-  });
-  const [submitted, setSubmitted] = useState(!!getReportByDate(currentUser?.id, todayISO()));
+  const [visits, setVisits] = useState([buildEmptyEntry()]);
+  const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [history, setHistory] = useState([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [expandedReportId, setExpandedReportId] = useState(null);
 
-  const handleDateChange = useCallback(
-    (newDate) => {
-      setDate(newDate);
-      const existing = getReportByDate(currentUser?.id, newDate);
+  const loadHistory = useCallback(() => {
+    listMyReports()
+      .then((reports) => setHistory(reports.filter((r) => r.date !== todayISO())))
+      .catch(() => setHistory([]));
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const loadForDate = useCallback(async (targetDate) => {
+    setIsLoading(true);
+    try {
+      const existing = await getReportByDate(targetDate);
       setVisits(existing?.visits?.length ? existing.visits : [buildEmptyEntry()]);
       setSubmitted(!!existing);
-    },
-    [currentUser]
-  );
+    } catch {
+      setVisits([buildEmptyEntry()]);
+      setSubmitted(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadForDate(date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDateChange = (newDate) => {
+    setDate(newDate);
+    loadForDate(newDate);
+  };
 
   const updateVisit = (id, updated) => setVisits((prev) => prev.map((v) => (v.id === id ? updated : v)));
   const removeVisit = (id) => setVisits((prev) => prev.filter((v) => v.id !== id));
   const addVisit = () => setVisits((prev) => [...prev, buildEmptyEntry()]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (visits.length === 0) return showToast('Add at least one visit entry', 'warning');
     const invalid = visits.find(
       (v) => !isRequired(v.customerName) || (!v.completed && !isRequired(v.reasonIfNotCompleted))
@@ -51,20 +75,18 @@ const DailyVisitingReport = () => {
         'warning'
       );
     }
-    const saved = saveReport({
-      id: `report_${currentUser?.id}_${date}`,
-      kamId: currentUser?.id,
-      kamName: currentUser?.name,
-      date,
-      visits,
-    });
-    if (saved) {
+    try {
+      const saved = await saveReport({ date, visits });
+      setVisits(saved.visits);
       setSubmitted(true);
       showToast('Daily visiting report submitted', 'success');
-    } else {
-      showToast('Failed to submit report', 'error');
+      loadHistory();
+    } catch (err) {
+      showToast(err?.message || 'Failed to submit report', 'error');
     }
   };
+
+  if (isLoading) return <Loader fullScreen label="Loading report..." />;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -140,6 +162,67 @@ const DailyVisitingReport = () => {
         >
           <Send size={16} className="mr-2" /> {submitted ? 'Update Report' : 'Submit Report'}
         </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+        <button
+          type="button"
+          onClick={() => setIsHistoryOpen((o) => !o)}
+          className="w-full flex justify-between items-center p-5 text-left"
+        >
+          <h3 className="font-bold text-slate-800 text-sm flex items-center">
+            <History size={16} className="mr-2 text-slate-400" /> My Report History ({history.length})
+          </h3>
+          {isHistoryOpen ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+        </button>
+        {isHistoryOpen && (
+          <div className="border-t border-slate-100 divide-y divide-slate-100">
+            {history.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6">No previous reports yet.</p>
+            ) : (
+              history.map((r) => (
+                <div key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedReportId(expandedReportId === r.id ? null : r.id)}
+                    className="w-full flex justify-between items-center px-5 py-3 text-left hover:bg-slate-50 transition"
+                  >
+                    <span className="text-xs font-bold text-slate-700">{r.date}</span>
+                    <span className="text-[10px] text-slate-400">{r.visits.length} visit(s)</span>
+                  </button>
+                  {expandedReportId === r.id && (
+                    <div className="px-5 pb-4 overflow-x-auto">
+                      <table className="w-full text-left border-collapse min-w-[560px]">
+                        <thead>
+                          <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                            <th className="py-2 pr-3">Customer Name</th>
+                            <th className="py-2 pr-3">Status</th>
+                            <th className="py-2 pr-3">Reason (if not completed)</th>
+                            <th className="py-2">Outcome / Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {r.visits.map((v) => (
+                            <tr key={v.id} className="text-xs align-top">
+                              <td className="py-2.5 pr-3 font-semibold text-slate-700">{v.customerName}</td>
+                              <td className="py-2.5 pr-3">
+                                <span className={`font-bold ${v.completed ? 'text-emerald-600' : 'text-red-500'}`}>
+                                  {v.completed ? 'Completed' : 'Not Completed'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 pr-3 text-slate-500">{v.reasonIfNotCompleted || '—'}</td>
+                              <td className="py-2.5 text-slate-500">{v.outcomeNotes || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

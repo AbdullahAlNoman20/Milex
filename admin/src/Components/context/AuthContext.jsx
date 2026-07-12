@@ -1,7 +1,7 @@
 // src/Components/context/AuthContext.jsx — REPLACE ENTIRE FILE
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { ALL_ROLES } from '../constants/roles';
-import { apiLogin, apiFetchMe, setToken, getToken } from '../services/api';
+import { apiLogin, apiFetchMe } from '../services/api';
 
 export const AuthContext = createContext(null);
 
@@ -54,26 +54,17 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  useEffect(() => {
+useEffect(() => {
     const restore = async () => {
-      const restoredUser = readSession();
-      const token = getToken();
-
-      if (!restoredUser || !token) {
-        clearSession();
-        setToken(null);
-        setIsInitializing(false);
-        return;
-      }
-
+      // No storage gate here — always ask the backend, since the httpOnly
+      // refresh cookie (valid 7 days) is the real source of truth, and
+      // request() will silently refresh an expired access token for us.
       try {
-        // Re-validate token against backend on refresh
-        const { user } = await apiFetchMe();
-        setCurrentUser(user);
-        writeSession(user);
+        const { data } = await apiFetchMe();
+        setCurrentUser(data.user);
+        writeSession(data.user);
       } catch {
         clearSession();
-        setToken(null);
         setCurrentUser(null);
       } finally {
         setIsInitializing(false);
@@ -87,11 +78,13 @@ export const AuthProvider = ({ children }) => {
       return { ok: false, error: 'Email and password are required' };
     }
     try {
-      const { token, user } = await apiLogin(email.trim(), password);
-      if (!token || !user || !ALL_ROLES.includes(user.role)) {
+      // Auth token lives in an httpOnly cookie set by the backend — never in
+      // the JSON body, so we don't check for or store a token here at all.
+      const { data } = await apiLogin(email.trim(), password);
+      const { user } = data;
+      if (!user || !ALL_ROLES.includes(user.role)) {
         return { ok: false, error: 'Invalid login response' };
       }
-      setToken(token);
       setCurrentUser(user);
       writeSession(user);
       return { ok: true };
@@ -103,7 +96,6 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     setCurrentUser(null);
     clearSession();
-    setToken(null);
   }, []);
 
   const value = useMemo(

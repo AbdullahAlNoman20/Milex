@@ -215,28 +215,25 @@ const NewRecommendationWizard = () => {
     setStep((s) => Math.min(s + 1, 4));
   };
 
-  const handleSubmit = () => {
+const handleSubmit = async () => {
     const flatContacts = [
-      { type: 'SENIOR MANAGEMENT', ...contacts.senior },
-      { type: 'KEY CONTACT PERSON', ...contacts.key },
-      { type: 'FINANCIAL CONTACT', ...(sameAsKey ? contacts.key : contacts.financial) },
+      { type: 'SENIOR_MANAGEMENT', ...contacts.senior },
+      { type: 'KEY_CONTACT_PERSON', ...contacts.key },
+      { type: 'FINANCIAL_CONTACT', ...(sameAsKey ? contacts.key : contacts.financial) },
     ];
 
-    const created = addCustomer({
-      ...form,
-      recommendedBy: currentUser?.name,
-      handledBy: currentUser?.name,
-      contacts: flatContacts,
-      shippingDetails: shipping,
-      // New KAM-first flow: proposed rate is entered here and goes straight
-      // to Line Manager for approval (no separate SC rate-prep step).
-      status: 'PENDING RATE APPROVAL',
-    });
-
-    clearDraft();
-    navigate(`/app/customers/${encodeURIComponent(created.barcode)}`);
+    try {
+      const created = await addCustomer({
+        ...form,
+        contacts: flatContacts,
+        shippingDetails: shipping,
+      });
+      clearDraft();
+      navigate(`/app/customers/${encodeURIComponent(created.barcode)}`);
+    } catch {
+      /* toast already shown by addCustomer */
+    }
   };
-
   return (
     <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">

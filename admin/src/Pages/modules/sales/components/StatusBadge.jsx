@@ -1,6 +1,7 @@
 // src/Pages/modules/sales/components/StatusBadge.jsx
 import React from 'react';
 import { getStatusTone } from '../constants/salesStatus';
+import { humanizeStatus } from '../../../../Components/utils/format';
 
 const TONE_CLASSES = {
   danger: 'text-red-700 bg-red-50 border-red-200',
@@ -19,7 +20,7 @@ const StatusBadge = ({ status, size = 'md' }) => {
         TONE_CLASSES[tone] || TONE_CLASSES.pending
       }`}
     >
-      {status}
+      {humanizeStatus(status)}
     </span>
   );
 };
