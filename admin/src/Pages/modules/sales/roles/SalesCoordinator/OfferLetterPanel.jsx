@@ -23,8 +23,8 @@ const OfferLetterPanel = ({ customer }) => {
         <PenTool size={16} className="mr-2 text-indigo-600" /> Offer Letter
       </h3>
       <p className="text-[11px] text-slate-500">
-        Customer is now a Provisional Account. The KAM cannot begin document upload until this
-        offer letter is sent.
+        Customer is now a Provisional Account. Once sent, the KAM will record the customer's
+        Accept/Reject feedback before document upload unlocks.
       </p>
       <textarea
         className="w-full text-xs font-mono border border-slate-300 p-3 rounded-lg min-h-[220px] outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"

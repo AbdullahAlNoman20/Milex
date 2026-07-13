@@ -1,4 +1,6 @@
 // admin/src/Components/utils/format.js (NEW FILE)
+export const formatRevision = (revision) => (revision > 0 ? `R-${revision}` : 'New');
+
 export const humanizeStatus = (value) => {
   if (typeof value !== 'string' || !value) return '';
   return value

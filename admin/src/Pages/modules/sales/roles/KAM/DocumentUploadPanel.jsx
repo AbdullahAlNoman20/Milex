@@ -1,163 +1,151 @@
-// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx — REPLACE ENTIRE FILE
-import React, { useState, useRef, useCallback } from 'react';
-import { UploadCloud, FileCheck2, Loader2, X } from 'lucide-react';
+// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx 
+import React, { useState, useCallback } from 'react';
+import { FileCheck2, Loader2, UploadCloud, Printer } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { uploadOnboardingDocuments } from '../../services/customerService';
-import { DOCUMENT_TYPE_OPTIONS } from '../../constants/formOptions';
+import { uploadOnboardingDocument } from '../../services/customerService';
+import { useSales } from '../../hooks/useSales';
 import { humanizeStatus } from '../../../../../Components/utils/format';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
 
-const DocumentUploadPanel = ({ customer, onUploaded }) => {
-  const { showToast } = useToast();
-  const [documentType, setDocumentType] = useState(DOCUMENT_TYPE_OPTIONS[0]);
-  const [pendingFiles, setPendingFiles] = useState([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const inputRef = useRef(null);
+const DOCUMENT_CATEGORIES = [
+  { key: 'OFFER_LETTER', label: 'Offer Letter', hasMeta: false },
+  { key: 'SIGNED_AGREEMENT', label: 'Signed Agreement', hasMeta: false },
+  { key: 'CUSTOMER_TIN', label: 'Customer TIN', hasMeta: true },
+  { key: 'CUSTOMER_BIN', label: 'Customer BIN', hasMeta: true },
+  { key: 'TRADE_LICENSE', label: 'Trade License', hasMeta: true },
+  { key: 'OTHERS', label: 'Others Document', hasMeta: true },
+];
 
-  const isAllowedExtension = (name) =>
-    ALLOWED_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
+const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
+  const [number, setNumber] = useState(doc?.documentNumber || '');
+  const [expiry, setExpiry] = useState(doc?.expiryDate ? doc.expiryDate.slice(0, 10) : '');
+  const inputId = `doc-upload-${category.key}`;
 
-  const addFiles = useCallback(
-    (fileList) => {
-      const incoming = Array.from(fileList || []);
-      const accepted = [];
-      for (const file of incoming) {
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-          showToast(`${file.name} exceeds 10MB limit`, 'warning');
-          continue;
-        }
-        if (!isAllowedExtension(file.name)) {
-          showToast(`${file.name} — file type not allowed`, 'warning');
-          continue;
-        }
-        accepted.push(file);
-      }
-      if (accepted.length) setPendingFiles((prev) => [...prev, ...accepted]);
-    },
-    [showToast]
-  );
-
-  const removePendingFile = (index) => setPendingFiles((prev) => prev.filter((_, i) => i !== index));
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    addFiles(e.dataTransfer?.files);
-  };
-
-  const handleUpload = async () => {
-    if (pendingFiles.length === 0) return showToast('Select at least one file to upload', 'warning');
-    setIsUploading(true);
-    try {
-      const docs = await uploadOnboardingDocuments(customer.id, documentType, pendingFiles);
-      showToast('Document(s) uploaded — pending virus scan clearance', 'success');
-      onUploaded?.(docs);
-      setPendingFiles([]);
-    } catch (err) {
-      showToast(err?.message || 'Upload failed', 'error');
-    } finally {
-      setIsUploading(false);
-      if (inputRef.current) inputRef.current.value = '';
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      e.target.value = '';
+      return;
     }
+    onUpload(category.key, file, number, expiry);
+    e.target.value = '';
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-4">
-      <h3 className="font-bold text-slate-900 text-base flex items-center">
-        <UploadCloud size={18} className="mr-2 text-purple-600" /> Upload Onboarding Documents
-      </h3>
-      <p className="text-xs text-slate-500">
-        Accepted: PDF, JPG, PNG, DOC/DOCX — max 10MB per file. Files are scanned before they're accepted.
-      </p>
-
+    <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white">
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1.5">Document Type</label>
-        <select
-          className="w-full border border-slate-200 p-2.5 rounded text-sm bg-white outline-none focus:border-purple-500"
-          value={documentType}
-          onChange={(e) => setDocumentType(e.target.value)}
-        >
-          {DOCUMENT_TYPE_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
+        <p className="text-sm font-bold text-slate-800">{category.label}</p>
+        <p className="text-[10px] text-slate-400 mt-0.5">
+          {doc ? `Uploaded — ${humanizeStatus(doc.scanStatus)}` : 'Pending upload'}
+        </p>
       </div>
 
       <label
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={`block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition ${
-          isDragging ? 'border-purple-500 bg-purple-50' : 'border-purple-200 hover:bg-purple-50/50'
-        }`}
+        htmlFor={inputId}
+        className="block border-2 border-dashed border-emerald-200 rounded-lg py-4 text-center cursor-pointer hover:bg-emerald-50/50 transition text-xs font-semibold text-emerald-700"
       >
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          className="hidden"
-          accept={ALLOWED_EXTENSIONS.join(',')}
-          disabled={isUploading}
-          onChange={(e) => addFiles(e.target.files)}
-        />
-        <span className="text-sm font-semibold text-purple-700">
-          Drag & drop files here, or click to select ({documentType})
-        </span>
+        {isUploading ? (
+          <span className="flex items-center justify-center">
+            <Loader2 size={14} className="mr-2 animate-spin" /> Uploading...
+          </span>
+        ) : (
+          <span className="flex items-center justify-center">
+            <UploadCloud size={14} className="mr-2" /> {doc ? 'Replace File' : 'Upload File'}
+          </span>
+        )}
+        <input id={inputId} type="file" className="hidden" disabled={isUploading} onChange={handleFile} />
       </label>
 
-      {pendingFiles.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Selected — {documentType}</p>
-          {pendingFiles.map((file, i) => (
-            <div key={`${file.name}-${i}`} className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-              <span className="truncate text-slate-700 font-medium">{file.name}</span>
-              <button type="button" onClick={() => removePendingFile(i)} className="text-slate-300 hover:text-red-500 transition shrink-0 ml-2">
-                <X size={14} />
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            disabled={isUploading}
-            onClick={handleUpload}
-            className="w-full bg-purple-600 text-white font-bold py-2.5 rounded-lg text-sm shadow hover:bg-purple-700 transition disabled:opacity-50 flex items-center justify-center"
-          >
-            {isUploading ? (
-              <>
-                <Loader2 size={16} className="mr-2 animate-spin" /> Uploading...
-              </>
-            ) : (
-              `Upload ${pendingFiles.length} File(s)`
-            )}
-          </button>
-        </div>
+      {doc && (
+        <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
+          <FileCheck2 size={12} className={doc.scanStatus === 'CLEAN' ? 'text-emerald-600' : 'text-amber-500'} />
+          {doc.originalName}
+        </p>
       )}
 
-      {(customer.documents || []).length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Uploaded</p>
-          {customer.documents.map((doc) => (
-            <div key={doc.id} className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-3">
-              <span className="flex items-center gap-2 text-slate-700 font-medium truncate">
-                <FileCheck2 size={14} className={doc.scanStatus === 'CLEAN' ? 'text-emerald-600' : 'text-amber-500'} />
-                <span className="font-bold text-purple-700">{doc.documentType || 'Other'}:</span> {doc.originalName}
-              </span>
-              <span
-                className={`font-bold uppercase text-[9px] px-2 py-0.5 rounded shrink-0 ml-2 ${
-                  doc.scanStatus === 'CLEAN'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-amber-50 text-amber-700'
-                }`}
-              >
-                {humanizeStatus(doc.scanStatus)}
-              </span>
-            </div>
-          ))}
+      {category.hasMeta && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Number</label>
+            <input
+              className="w-full border border-slate-200 p-1.5 rounded text-xs outline-none focus:border-emerald-500"
+              value={number}
+              maxLength={100}
+              onChange={(e) => setNumber(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Expiry Date</label>
+            <input
+              type="date"
+              className="w-full border border-slate-200 p-1.5 rounded text-xs outline-none focus:border-emerald-500"
+              value={expiry}
+              onChange={(e) => setExpiry(e.target.value)}
+            />
+          </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const DocumentUploadPanel = ({ customer, onUploaded }) => {
+  const { showToast } = useToast();
+  const { setPrintData } = useSales();
+  const [uploadingKey, setUploadingKey] = useState(null);
+
+  const docsByType = (customer.documents || []).reduce((acc, d) => {
+    acc[d.documentType] = d;
+    return acc;
+  }, {});
+
+  const handleUpload = useCallback(
+    async (documentType, file, documentNumber, expiryDate) => {
+      setUploadingKey(documentType);
+      try {
+        await uploadOnboardingDocument(customer.id, { documentType, documentNumber, expiryDate, file });
+        showToast('Document uploaded — pending virus scan clearance', 'success');
+        onUploaded?.();
+      } catch (err) {
+        showToast(err?.message || 'Upload failed', 'error');
+      } finally {
+        setUploadingKey(null);
+      }
+    },
+    [customer.id, showToast, onUploaded]
+  );
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-4">
+      <div className="flex justify-between items-start gap-3">
+        <div>
+          <h3 className="font-bold text-slate-900 text-base">Supporting Documentation & Profile</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Upload PDF, image, or Word files for each category. Maximum file size 10MB.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setPrintData({ type: 'profile', customer })}
+          className="text-emerald-600 text-xs font-bold flex items-center bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-100 hover:bg-emerald-100 transition shrink-0"
+        >
+          <Printer size={14} className="mr-1.5" /> Print Profile
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {DOCUMENT_CATEGORIES.map((cat) => (
+          <CategoryCard
+            key={cat.key}
+            category={cat}
+            doc={docsByType[cat.key]}
+            onUpload={handleUpload}
+            isUploading={uploadingKey === cat.key}
+          />
+        ))}
+      </div>
     </div>
   );
 };

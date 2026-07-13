@@ -1,28 +1,34 @@
-// src/modules/onboarding/onboarding.controller.ts
+// server/src/modules/onboarding/onboarding.controller.ts 
 import { Request, Response, NextFunction } from 'express';
 import * as onboardingService from './onboarding.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 
+const asString = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  return undefined;
+};
+
 export const uploadDocumentHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const files = (req as any).files as Express.Multer.File[] | undefined;
-    if (!files || files.length === 0) return sendError(res, 400, 'MISSING_FILE', 'No file uploaded');
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) return sendError(res, 400, 'MISSING_FILE', 'No file uploaded');
 
-    const documentType = typeof req.body?.documentType === 'string' ? req.body.documentType.trim() : '';
+    const documentType = asString(req.body?.documentType);
     if (!documentType) return sendError(res, 400, 'MISSING_DOCUMENT_TYPE', 'Document type is required');
 
-    const documents = [];
-    for (const file of files) {
-      const doc = await onboardingService.uploadOnboardingDocument(
-        req.params.id,
-        file.buffer,
-        file.originalname,
-        documentType,
-        req.user!.id
-      );
-      documents.push(doc);
-    }
-    return sendSuccess(res, { documents }, 201);
+    const documentNumber = asString(req.body?.documentNumber);
+    const expiryDate = asString(req.body?.expiryDate);
+
+    const doc = await onboardingService.uploadOnboardingDocument(
+      req.params.id,
+      file.buffer,
+      file.originalname,
+      documentType,
+      documentNumber,
+      expiryDate,
+      req.user!.id
+    );
+    return sendSuccess(res, { document: doc }, 201);
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
@@ -38,7 +44,8 @@ export const requestExtensionHandler = async (req: Request, res: Response, next:
       req.user!.id
     );
     return sendSuccess(res, { request }, 201);
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };
@@ -52,7 +59,8 @@ export const decideExtensionHandler = async (req: Request, res: Response, next: 
       req.user!.id
     );
     return sendSuccess(res, { customer });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };
@@ -76,7 +84,8 @@ export const decideFinalOnboardingHandler = async (req: Request, res: Response, 
       req.user!.id
     );
     return sendSuccess(res, { customer });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };

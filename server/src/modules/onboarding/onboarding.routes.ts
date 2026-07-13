@@ -21,7 +21,7 @@ router.use(verifyCsrf);
 router.post(
   '/:id/documents',
   requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT),
-  uploadMiddleware.array('files', 10),
+  uploadMiddleware.single('file'),
   controller.uploadDocumentHandler
 );
 

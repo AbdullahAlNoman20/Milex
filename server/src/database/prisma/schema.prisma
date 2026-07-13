@@ -161,6 +161,7 @@ model Customer {
   rejectReason             String?
   rateRef                  String?
   offerText                String?
+  offerAccepted            Boolean            @default(false)
   agreementText            String?
   revision                 Int                @default(0)
   status                   CustomerStatus     @default(PENDING_RATE_PREPARATION)
@@ -237,11 +238,13 @@ model CustomerHistoryEntry {
 }
 
 model OnboardingDocument {
-  id           String   @id @default(uuid())
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  originalName String
-  documentType String   @default("Other")
+  id             String    @id @default(uuid())
+  customerId     String
+  customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  originalName   String
+  documentType   String    @default("Other")
+  documentNumber String?
+  expiryDate     DateTime?
   storageKey   String
   mimeType     String
   sizeBytes    Int

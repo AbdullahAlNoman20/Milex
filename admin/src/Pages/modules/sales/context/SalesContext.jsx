@@ -49,25 +49,8 @@ export const SalesProvider = ({ children }) => {
     }
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
     reload();
-  }, [reload]);
-
-  // Lightweight background refresh so status changes made by another role
-  // (LM approving/rejecting, SC sending an offer, etc.) show up without a
-  // manual page reload. Plain interval + focus re-check — no websockets,
-  // no extra infra, single small GET per tick.
-  useEffect(() => {
-    const POLL_MS = 20000;
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') reload();
-    }, POLL_MS);
-    const onFocus = () => reload();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener('focus', onFocus);
-    };
   }, [reload]);
 
   // Every role panel calls updateStatus(id, newStatus, updates, actionText, subText)

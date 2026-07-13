@@ -98,10 +98,12 @@ export const fetchFollowUps = async () => {
 
 // --- Onboarding workflow (Section 6) ---
 
-export const uploadOnboardingDocuments = async (customerId, documentType, files) => {
+export const uploadOnboardingDocument = async (customerId, { documentType, documentNumber, expiryDate, file }) => {
   const formData = new FormData();
   formData.append('documentType', documentType);
-  files.forEach((file) => formData.append('files', file));
+  if (documentNumber) formData.append('documentNumber', documentNumber);
+  if (expiryDate) formData.append('expiryDate', expiryDate);
+  formData.append('file', file);
   const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
   const res = await fetch(
     `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/onboarding/${customerId}/documents`,
@@ -116,7 +118,7 @@ export const uploadOnboardingDocuments = async (customerId, documentType, files)
   );
   const json = await res.json();
   if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
-  return json.data.documents;
+  return json.data.document;
 };
 
 export const requestTimeExtension = async (customerId, requestedDays, reason) => {

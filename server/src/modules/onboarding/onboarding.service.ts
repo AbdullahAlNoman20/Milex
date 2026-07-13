@@ -1,12 +1,8 @@
-// src/modules/onboarding/onboarding.service.ts
-// Implements the "কাস্টমার অনবোর্ডিং - সম্পূর্ণ ওয়ার্কফ্লো" (Section 6) that was
-// missing from the frontend: Provisional -> Document Upload (21d) ->
-// Time Extension (LM, default +5d, LM can grant more) -> Final Onboarding
-// Request -> Final LM Verification -> Active / back-to-revision loop.
+// server/src/modules/onboarding/onboarding.service.ts — REPLACE ENTIRE FILE
 import { prisma } from '../../config/db';
 import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
 import { transitionCustomerStatus } from '../../common/utils/stateMachine.util';
-import { uploadFileToR2 } from '../file-storage/fileStorage.service';
+import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
 import { runFileScan } from '../../jobs/file-scan.job';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from '../customers/sanitize.helper';
@@ -18,34 +14,59 @@ export const uploadOnboardingDocument = async (
   buffer: Buffer,
   originalName: string,
   documentType: string,
+  documentNumber: string | undefined,
+  expiryDate: string | undefined,
   kamId: string
 ) => {
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   if (customer.accountProfileType !== 'PROVISIONAL') {
     throw { statusCode: 409, code: 'NOT_PROVISIONAL', message: 'Customer is not in provisional stage' };
   }
+  if (!customer.offerAccepted) {
+    throw { statusCode: 409, code: 'OFFER_NOT_ACCEPTED', message: 'The offer must be accepted before documents can be uploaded' };
+  }
 
-  const { storageKey, mimeType, sizeBytes } = await uploadFileToR2(buffer, originalName);
-  const cleanType = sanitizeAndEscape({ t: documentType || 'Other' }).t;
+  const { storageKey, mimeType, sizeBytes } = await uploadFileToSupabase(buffer, originalName);
+  const cleanType = sanitizeAndEscape({ t: documentType }).t;
+  const cleanNumber = documentNumber ? sanitizeAndEscape({ n: documentNumber }).n : null;
+  const parsedExpiry = expiryDate ? new Date(expiryDate) : null;
+  const cleanName = sanitizeAndEscape({ n: originalName }).n;
 
-  const doc = await prisma.onboardingDocument.create({
-    data: {
-      customerId,
-      originalName: sanitizeAndEscape({ n: originalName }).n,
-      documentType: cleanType,
-      storageKey,
-      mimeType,
-      sizeBytes,
-      uploadedById: kamId,
-      scanStatus: 'PENDING',
-    },
-  });
+  // One document per category per customer — re-uploading the same
+  // category replaces the previous file rather than piling up duplicates.
+  const existing = await prisma.onboardingDocument.findFirst({ where: { customerId, documentType: cleanType } });
 
-  // Virus scan mandatory before file is marked accessible — runs synchronously
-  // inline now instead of via a queued worker (no Redis available).
+  const doc = existing
+    ? await prisma.onboardingDocument.update({
+        where: { id: existing.id },
+        data: {
+          originalName: cleanName,
+          documentNumber: cleanNumber,
+          expiryDate: parsedExpiry,
+          storageKey,
+          mimeType,
+          sizeBytes,
+          uploadedById: kamId,
+          scanStatus: 'PENDING',
+        },
+      })
+    : await prisma.onboardingDocument.create({
+        data: {
+          customerId,
+          originalName: cleanName,
+          documentType: cleanType,
+          documentNumber: cleanNumber,
+          expiryDate: parsedExpiry,
+          storageKey,
+          mimeType,
+          sizeBytes,
+          uploadedById: kamId,
+          scanStatus: 'PENDING',
+        },
+      });
+
   await runFileScan(doc.id);
-
-  await logAudit({ entity: 'OnboardingDocument', entityId: doc.id, action: 'DOCUMENT_UPLOADED', actorId: kamId, afterState: { originalName } });
+  await logAudit({ entity: 'OnboardingDocument', entityId: doc.id, action: 'DOCUMENT_UPLOADED', actorId: kamId, afterState: { documentType: cleanType, originalName: cleanName } });
   return doc;
 };
 
@@ -158,7 +179,6 @@ export const decideFinalOnboarding = async (
   });
 };
 
-// Auto-expiry sweep, intended to run on a schedule (e.g. BullMQ repeatable job).
 export const expireOverdueProvisionalAccounts = async () => {
   const now = new Date();
   const overdue = await prisma.customer.findMany({

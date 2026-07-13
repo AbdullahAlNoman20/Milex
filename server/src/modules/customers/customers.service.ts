@@ -6,6 +6,7 @@ import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from './sanitize.helper';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
+const generateRateRef = () => `MLX${Math.floor(1000000 + Math.random() * 9000000)}`;
 
 export const listCustomers = async (
   page: number,
@@ -32,7 +33,7 @@ export const listCustomers = async (
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { createdAt: 'desc' },
-      include: { contacts: true },
+      include: { contacts: true, handledBy: { select: { name: true } } },
     }),
     prisma.customer.count({ where }),
   ]);
@@ -49,6 +50,7 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       history: { orderBy: { createdAt: 'desc' } },
       documents: true,
       extensionRequests: true,
+      handledBy: { select: { name: true } },
     },
   });
   if (!customer) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
@@ -96,6 +98,7 @@ export const createRecommendation = async (data: any, kamId: string) => {
 };
 
 export const approveRate = async (customerId: string, data: any, lmId: string) => {
+  const existing = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const now = new Date();
   const expiry = new Date(now.getTime() + 21 * 86400000);
   return transitionCustomerStatus({
@@ -111,6 +114,8 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
       provisionalCreatedAt: now,
       provisionalExpiryDate: expiry,
       provisionalExtensionDays: 0,
+      rateRef: existing.rateRef || generateRateRef(),
+      offerAccepted: false,
     },
     historyAction: 'RATE APPROVED BY LM — PROVISIONAL CUSTOMER CREATED',
     historySubText: 'Document upload window started (21 days)',
@@ -140,21 +145,14 @@ export const draftOffer = async (customerId: string, scId: string) =>
 
 export const finalizeOffer = async (customerId: string, offerText: string, scId: string) => {
   const clean = sanitizeAndEscape({ offerText });
-  const updated = await prisma.customer.update({
-    where: { id: customerId },
-    data: { offerText: clean.offerText },
-  });
-  await prisma.customerHistoryEntry.create({
-    data: { customerId, action: 'OFFER LETTER SENT', subText: 'Sent by Sales Coordinator', status: 'completed' },
-  });
-  await logAudit({
-    entity: 'Customer',
-    entityId: customerId,
-    action: 'OFFER_LETTER_SENT',
+  return transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
     actorId: scId,
-    afterState: { offerText: clean.offerText },
+    extraUpdates: { offerText: clean.offerText },
+    historyAction: 'OFFER LETTER SENT',
+    historySubText: 'Awaiting customer feedback via KAM',
   });
-  return updated;
 };
 
 export const submitClientFeedback = async (
@@ -165,10 +163,11 @@ export const submitClientFeedback = async (
   if (data.accepted) {
     return transitionCustomerStatus({
       customerId,
-      toStatus: CUSTOMER_STATUS.OFFER_ACCEPTED_PENDING_AGREEMENT,
+      toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
       actorId: kamId,
+      extraUpdates: { offerAccepted: true },
       historyAction: 'OFFER ACCEPTED BY CUSTOMER',
-      historySubText: 'Proceed to SLA generation',
+      historySubText: 'Document upload unlocked',
     });
   }
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
