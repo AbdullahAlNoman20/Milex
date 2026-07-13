@@ -1,5 +1,5 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-
+import { env } from '../../config/env';
 // In-memory stores (default — no `store` option needed). Per-process only:
 // counters reset on restart and aren't shared across multiple instances.
 // Acceptable at current single-instance scale; revisit if you ever scale out.
@@ -9,6 +9,7 @@ export const loginRateLimiter = rateLimit({
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => !env.IS_PRODUCTION,
   keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? '')}:${(req.body?.email || '').toLowerCase()}`,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many login attempts, try again later' } },
 });
