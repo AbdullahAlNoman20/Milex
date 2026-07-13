@@ -75,8 +75,8 @@ const SalesSidebar = () => {
 
   return (
     <nav className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-20">
-      <div className="h-20 flex items-center px-6 border-b border-slate-100">
-        <h1 className="text-2xl font-black text-slate-800 tracking-tight italic uppercase">MILEX</h1>
+       <div className="h-20 flex items-center px-6 border-b border-slate-100">
+        <img src="/log.jpeg" alt="MILEX" className="h-12 w-auto object-contain" />
       </div>
       <div className="flex-1 py-6 space-y-1">
         {visibleItems.map(({ to, end, label, icon: Icon }) => (

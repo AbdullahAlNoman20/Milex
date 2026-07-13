@@ -1,9 +1,7 @@
 
 {
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://milex-nqnd.onrender.com/api/:path*"
-    }
+    { "source": "/api/:path*", "destination": "https://milex-nqnd.onrender.com/api/:path*" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

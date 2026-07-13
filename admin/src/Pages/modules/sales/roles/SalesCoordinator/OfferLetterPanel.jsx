@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx — REPLACE ENTIRE FILE
+// admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx
 import React, { useState } from 'react';
 import { Mail, Printer, PenTool } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
@@ -12,16 +12,26 @@ const OfferLetterPanel = ({ customer }) => {
         customer.approvedRate || customer.proposedRate || ''
       }\n\nNotes: ${customer.lmNote || 'Standard Delivery'}\n\n${SIGNATURE_LIBRARY.LM}`
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isResend = customer.revision > 0 && !!customer.rejectReason;
 
-  const handleSend = () => {
-    updateStatus(customer.id, customer.status, { offerText }, 'OFFER LETTER SENT', `Emailed to ${customer.email}`);
+  const handleSend = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    await updateStatus(customer.id, customer.status, { offerText }, 'OFFER LETTER SENT', `Emailed to ${customer.email}`);
+    setIsSubmitting(false);
   };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-emerald-600 p-6 space-y-4">
       <h3 className="font-bold text-slate-800 text-sm flex items-center">
-        <PenTool size={16} className="mr-2 text-indigo-600" /> Offer Letter
+        <PenTool size={16} className="mr-2 text-indigo-600" /> {isResend ? 'Revise & Resend Offer Letter' : 'Offer Letter'}
       </h3>
+      {isResend && (
+        <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-xs text-red-700">
+          <strong>Customer's previous feedback:</strong> {customer.rejectReason}
+        </div>
+      )}
       <p className="text-[11px] text-slate-500">
         Customer is now a Provisional Account. Once sent, the KAM will record the customer's
         Accept/Reject feedback. If accepted, you'll then send the Agreement before document
@@ -43,10 +53,11 @@ const OfferLetterPanel = ({ customer }) => {
         </button>
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={handleSend}
-          className="flex-[2] bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-800 transition flex items-center justify-center"
+          className="flex-[2] bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-800 transition flex items-center justify-center disabled:opacity-50"
         >
-          <Mail size={14} className="mr-1.5" /> Send Offer Letter
+          <Mail size={14} className="mr-1.5" /> {isResend ? 'Resend Offer Letter' : 'Send Offer Letter'}
         </button>
       </div>
     </div>

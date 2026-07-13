@@ -8,8 +8,8 @@ const Nav = () => {
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
-      <Link to="/" className="text-xl font-black text-slate-800 tracking-tight italic uppercase">
-        MILEX
+      <Link to="/" className="flex items-center">
+        <img src="/log.jpeg" alt="MILEX" className="h-10 w-auto object-contain" />
       </Link>
       <nav className="flex items-center gap-4">
         {isAuthenticated ? (

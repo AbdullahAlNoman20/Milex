@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx 
+// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx
 import React, { useState, useCallback } from 'react';
 import { FileCheck2, Loader2, UploadCloud, Printer } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -10,6 +10,7 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 const DOCUMENT_CATEGORIES = [
   { key: 'OFFER_LETTER', label: 'Offer Letter', hasMeta: false },
+  { key: 'OFFER_RATE_RECEIPT', label: 'Signed Offer & Rate Receipt (Hard Copy Scan)', hasMeta: false },
   { key: 'SIGNED_AGREEMENT', label: 'Signed Agreement', hasMeta: false },
   { key: 'CUSTOMER_TIN', label: 'Customer TIN', hasMeta: true },
   { key: 'CUSTOMER_BIN', label: 'Customer BIN', hasMeta: true },
