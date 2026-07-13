@@ -1,9 +1,15 @@
-// src/config/env.ts
+// server/src/config/env.ts — REPLACE ENTIRE FILE
 import dotenv from 'dotenv';
 import path from 'path';
 
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development';
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+// Single .env file for everything. The Prisma CLI only ever reads `.env`
+// (never `.env.development` / `.env.production`), so keeping one file means
+// `npx prisma migrate dev` and `npm run dev` always see identical values —
+// no more "works with .env but not .env.development" mismatch. On Render
+// (or any host that injects env vars directly into process.env) there is no
+// `.env` file at all — dotenv silently no-ops in that case, so this same
+// code works unchanged in production.
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const required = (key: string): string => {
   const value = process.env[key];

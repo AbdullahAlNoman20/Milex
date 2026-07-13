@@ -1,11 +1,12 @@
-// src/modules/daily-reports/dailyReports.controller.ts
+// server/src/modules/daily-reports/dailyReports.controller.ts 
 import { Request, Response, NextFunction } from 'express';
 import * as dailyReportsService from './dailyReports.service';
 import { sendSuccess } from '../../common/utils/apiResponse.util';
+import { asString } from '../../common/utils/requestParams.util';
 
 export const getByDateHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const report = await dailyReportsService.getReportByDate(req.user!.id, req.params.date);
+    const report = await dailyReportsService.getReportByDate(req.user!.id, asString(req.params.date));
     return sendSuccess(res, { report });
   } catch (err) {
     next(err);
@@ -23,7 +24,7 @@ export const upsertReportHandler = async (req: Request, res: Response, next: Nex
 
 export const listForKamHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const reports = await dailyReportsService.listReportsForKam(req.params.kamId);
+    const reports = await dailyReportsService.listReportsForKam(asString(req.params.kamId));
     return sendSuccess(res, { reports });
   } catch (err) {
     next(err);

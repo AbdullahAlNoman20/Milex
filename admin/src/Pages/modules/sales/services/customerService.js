@@ -37,6 +37,11 @@ export const finalizeOffer = async (id, offerText) => {
   return data.customer;
 };
 
+export const sendAgreement = async (id, agreementText) => {
+  const { data } = await request(`/customers/${id}/send-agreement`, { method: 'POST', body: { agreementText } });
+  return data.customer;
+};
+
 export const submitClientFeedback = async (id, accepted, rejectReason) => {
   const { data } = await request(`/customers/${id}/client-feedback`, {
     method: 'POST',

@@ -163,6 +163,7 @@ model Customer {
   offerText                String?
   offerAccepted            Boolean            @default(false)
   agreementText            String?
+  agreementSent            Boolean            @default(false)
   revision                 Int                @default(0)
   status                   CustomerStatus     @default(PENDING_RATE_PREPARATION)
   accountProfileType       AccountProfileType @default(REGULAR)
