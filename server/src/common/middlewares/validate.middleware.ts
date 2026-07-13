@@ -1,4 +1,4 @@
-// server/src/common/middlewares/validate.middleware.ts 
+// server/src/common/middlewares/validate.middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import { ZodType, ZodError } from 'zod';
 import { sendError } from '../utils/apiResponse.util';
@@ -17,7 +17,8 @@ export const validateBody = (schema: ZodType) => (req: Request, res: Response, n
 
 export const validateQuery = (schema: ZodType) => (req: Request, res: Response, next: NextFunction) => {
   try {
-    req.query = schema.parse(req.query) as any;
+    const parsed = schema.parse(req.query);
+    Object.defineProperty(req, 'query', { value: parsed, writable: true, configurable: true });
     next();
   } catch (err) {
     if (err instanceof ZodError) {

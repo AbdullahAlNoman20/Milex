@@ -12,9 +12,8 @@ export const issueCsrfCookie = (res: Response) => {
   const token = crypto.randomBytes(32).toString('hex');
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: false,
-    secure: env.IS_PRODUCTION,
-    sameSite: 'strict',
-    domain: env.COOKIE_DOMAIN,
+    secure: true,
+    sameSite: 'none',
   });
   return token;
 };
