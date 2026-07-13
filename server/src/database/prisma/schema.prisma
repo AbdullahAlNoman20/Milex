@@ -161,6 +161,7 @@ model Customer {
   rejectReason             String?
   rateRef                  String?
   offerText                String?
+  offerSent                Boolean            @default(false)
   offerAccepted            Boolean            @default(false)
   agreementText            String?
   agreementSent            Boolean            @default(false)
