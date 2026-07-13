@@ -19,7 +19,7 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
     const handleAccept = async () => {
       if (isSubmitting) return;
       setIsSubmittingLocal(true);
-      await updateStatus(customer.id, customer.status, {}, 'OFFER ACCEPTED BY CUSTOMER', 'Proceed to document upload');
+      await updateStatus(customer.id, customer.status, {}, 'OFFER ACCEPTED BY CUSTOMER', 'Proceed to Agreement');
       setIsSubmittingLocal(false);
     };
     const handleReject = async () => {

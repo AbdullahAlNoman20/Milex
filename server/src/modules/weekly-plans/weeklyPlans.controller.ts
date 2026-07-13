@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as weeklyPlansService from './weeklyPlans.service';
 import { sendSuccess } from '../../common/utils/apiResponse.util';
+import { asString } from '../../common/utils/requestParams.util';
 
 export const listMinePlansHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -23,7 +24,7 @@ export const listForReviewHandler = async (_req: Request, res: Response, next: N
 
 export const listForKamHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const plans = await weeklyPlansService.listPlansForKam(req.params.kamId);
+    const plans = await weeklyPlansService.listPlansForKam(asString(req.params.kamId));
     return sendSuccess(res, { plans });
   } catch (err) {
     next(err);
@@ -50,7 +51,7 @@ export const submitPlanHandler = async (req: Request, res: Response, next: NextF
 
 export const reviewPlanHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const plan = await weeklyPlansService.reviewPlan(req.params.id, req.body.approved, req.body.comments, req.user!.id);
+    const plan = await weeklyPlansService.reviewPlan(asString(req.params.id), req.body.approved, req.body.comments, req.user!.id);
     return sendSuccess(res, { plan });
   } catch (err) {
     next(err);

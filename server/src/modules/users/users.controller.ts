@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as usersService from './users.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
+import { asString } from '../../common/utils/requestParams.util';
 
 export const listKamsHandler = async (_req: Request, res: Response, next: NextFunction) => {
   try {
@@ -35,7 +36,7 @@ export const createUserHandler = async (req: Request, res: Response, next: NextF
 
 export const updateUserHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const user = await usersService.updateUser(req.params.id, req.body, req.user!.id);
+    const user = await usersService.updateUser(asString(req.params.id), req.body, req.user!.id);
     return sendSuccess(res, { user });
   } catch (err) {
     next(err);

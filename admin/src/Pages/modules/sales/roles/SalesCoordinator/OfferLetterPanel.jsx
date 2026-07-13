@@ -24,7 +24,8 @@ const OfferLetterPanel = ({ customer }) => {
       </h3>
       <p className="text-[11px] text-slate-500">
         Customer is now a Provisional Account. Once sent, the KAM will record the customer's
-        Accept/Reject feedback before document upload unlocks.
+        Accept/Reject feedback. If accepted, you'll then send the Agreement before document
+        upload unlocks.
       </p>
       <textarea
         className="w-full text-xs font-mono border border-slate-300 p-3 rounded-lg min-h-[220px] outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"

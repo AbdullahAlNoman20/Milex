@@ -1,0 +1,2 @@
+// server/src/types/qrcode.d.ts 
+declare module 'qrcode';

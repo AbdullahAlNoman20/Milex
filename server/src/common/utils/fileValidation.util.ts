@@ -1,5 +1,5 @@
-// server/src/common/utils/fileValidation.util.ts 
-import { fileTypeFromBuffer } from 'file-type';
+// server/src/common/utils/fileValidation.util.ts
+import { fromBuffer } from 'file-type';
 
 const BLOCKED_EXTENSIONS = ['.php', '.js', '.exe', '.sh', '.bat', '.cmd', '.com', '.msi', '.dll', '.jar', '.apk', '.vbs', '.ps1'];
 const BLOCKED_MIME_TYPES = [
@@ -31,7 +31,7 @@ export const validateUploadedFile = async (
   if (isExtensionBlocked(originalName)) {
     return { valid: false, reason: 'This file type is not allowed' };
   }
-  const detected = await fileTypeFromBuffer(buffer);
+  const detected = await fromBuffer(buffer);
   if (detected && BLOCKED_MIME_TYPES.includes(detected.mime)) {
     return { valid: false, reason: 'This file type is not allowed' };
   }

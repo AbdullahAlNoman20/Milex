@@ -49,6 +49,7 @@ router.post('/:id/approve-rate', requirePermission(PERMISSIONS.APPROVE_RATE), va
 router.post('/:id/reject-rate', requirePermission(PERMISSIONS.REJECT_RATE), controller.rejectRateHandler);
 router.post('/:id/draft-offer', requirePermission(PERMISSIONS.DRAFT_OFFER), controller.draftOfferHandler);
 router.post('/:id/finalize-offer', requirePermission(PERMISSIONS.FINALIZE_OFFER), validateBody(offerTextSchema), controller.finalizeOfferHandler);
+router.post('/:id/send-agreement', requirePermission(PERMISSIONS.FINALIZE_AGREEMENT), validateBody(agreementTextSchema), controller.sendAgreementHandler);
 router.post('/:id/client-feedback', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(clientFeedbackSchema), controller.clientFeedbackHandler);
 router.post('/:id/revise-rate', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION), controller.reviseRateHandler);
 router.post('/:id/draft-agreement', requirePermission(PERMISSIONS.DRAFT_AGREEMENT), controller.draftAgreementHandler);

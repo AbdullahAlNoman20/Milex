@@ -16,6 +16,7 @@ import Countdown from '../../../../Components/Shared/Countdown';
 import RateApprovalPanel from '../roles/LineManager/RateApprovalPanel';
 import CustomerInfoApprovalPanel from '../roles/LineManager/CustomerInfoApprovalPanel';
 import OfferLetterPanel from '../roles/SalesCoordinator/OfferLetterPanel';
+import AgreementPanel from '../roles/SalesCoordinator/AgreementPanel';
 import InfoUpdateRequestPanel from '../roles/KAM/InfoUpdateRequestPanel';
 import ReviseRecommendationPanel from '../roles/KAM/ReviseRecommendationPanel';
 import DocumentUploadPanel from '../roles/KAM/DocumentUploadPanel';
@@ -100,7 +101,19 @@ const CustomerDetail = () => {
       return <RateApprovalPanel customer={customer} />;
     }
     if (customer.status === STATUS.PROVISIONAL_ACTIVE && role === ROLES.SALES_COORDINATOR) {
-      return <OfferLetterPanel customer={customer} />;
+      if (!customer.offerAccepted) {
+        return <OfferLetterPanel customer={customer} />;
+      }
+      if (!customer.agreementSent) {
+        return <AgreementPanel customer={customer} onSent={refreshCustomer} />;
+      }
+      return (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            Agreement sent — KAM is completing document onboarding
+          </p>
+        </div>
+      );
     }
     if (customer.status === STATUS.OFFER_REVIEW && role === ROLES.KAM) {
       return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
@@ -122,6 +135,15 @@ const CustomerDetail = () => {
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
               Waiting for the Sales Coordinator to send the offer letter
+            </p>
+          </div>
+        );
+      }
+      if (!customer.agreementSent) {
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+              Waiting for the Sales Coordinator to send the Agreement
             </p>
           </div>
         );
@@ -243,7 +265,8 @@ const CustomerDetail = () => {
       {customer.accountProfileType === 'PROVISIONAL' &&
         role === ROLES.KAM &&
         customer.status === STATUS.PROVISIONAL_ACTIVE &&
-        customer.offerAccepted && (
+        customer.offerAccepted &&
+        customer.agreementSent && (
           <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />
         )}
     </div>

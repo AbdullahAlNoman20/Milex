@@ -116,6 +116,7 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
       provisionalExtensionDays: 0,
       rateRef: existing.rateRef || generateRateRef(),
       offerAccepted: false,
+      agreementSent: false,
     },
     historyAction: 'RATE APPROVED BY LM — PROVISIONAL CUSTOMER CREATED',
     historySubText: 'Document upload window started (21 days)',
@@ -155,6 +156,34 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
   });
 };
 
+export const sendAgreement = async (customerId: string, agreementText: string, scId: string) => {
+  const clean = sanitizeAndEscape({ agreementText });
+  const updated = await prisma.customer.update({
+    where: { id: customerId },
+    data: { agreementText: clean.agreementText, agreementSent: true },
+  });
+  await prisma.customerHistoryEntry.updateMany({
+    where: { customerId, status: 'active' },
+    data: { status: 'completed' },
+  });
+  await prisma.customerHistoryEntry.create({
+    data: {
+      customerId,
+      action: 'AGREEMENT SENT TO CUSTOMER',
+      subText: 'Document upload unlocked for KAM',
+      status: 'active',
+    },
+  });
+  await logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: 'AGREEMENT_SENT',
+    actorId: scId,
+    afterState: { agreementSent: true },
+  });
+  return updated;
+};
+
 export const submitClientFeedback = async (
   customerId: string,
   data: { accepted: boolean; rejectReason?: string },
@@ -167,7 +196,7 @@ export const submitClientFeedback = async (
       actorId: kamId,
       extraUpdates: { offerAccepted: true },
       historyAction: 'OFFER ACCEPTED BY CUSTOMER',
-      historySubText: 'Document upload unlocked',
+      historySubText: 'Awaiting Sales Coordinator to send the Agreement',
     });
   }
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
