@@ -5,6 +5,7 @@ import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { deriveFollowUps } from '../../services/followUpService';
 import { isValidDateString } from '../../../../../Components/utils/validators';
+import { humanizeStatus } from '../../../../../Components/utils/format';
 
 const FollowUpReminderPanel = () => {
   const { customers, updateCustomerMeta } = useSales();
@@ -52,7 +53,7 @@ const FollowUpReminderPanel = () => {
                 <div>
                   <p className="font-bold text-slate-800">{item.accountName}</p>
                   <p className="text-xs text-slate-500 font-mono">{item.barcode}</p>
-                  <p className="text-xs font-bold text-amber-600 mt-1">{item.status}</p>
+                  <p className="text-xs font-bold text-amber-600 mt-1">{humanizeStatus(item.status)}</p>
                 </div>
                 {item.isOverdue && (
                   <span className="text-[10px] font-bold uppercase bg-red-50 text-red-700 border border-red-200 px-2 py-1 rounded">

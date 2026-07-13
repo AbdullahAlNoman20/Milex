@@ -14,16 +14,25 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
   const [rejectReason, setRejectReason] = useState('');
 
   if (mode === 'offer-feedback') {
-    const handleAccept = () =>
-      updateStatus(customer.id, STATUS.PENDING_AGREEMENT, {}, 'OFFER ACCEPTED BY CUSTOMER', 'Proceed to SLA generation');
-    const handleReject = () => {
+    const [isSubmitting, setIsSubmittingLocal] = useState(false);
+
+    const handleAccept = async () => {
+      if (isSubmitting) return;
+      setIsSubmittingLocal(true);
+      await updateStatus(customer.id, customer.status, {}, 'OFFER ACCEPTED BY CUSTOMER', 'Proceed to document upload');
+      setIsSubmittingLocal(false);
+    };
+    const handleReject = async () => {
+      if (isSubmitting) return;
       if (!isRequired(rejectReason)) return showToast('Provide a reason for rejection', 'warning');
-      updateStatus(
+      setIsSubmittingLocal(true);
+      await updateStatus(
         customer.id,
         STATUS.OFFER_REJECTED,
         { rejectReason: sanitizeText(rejectReason, { maxLength: 500 }), revision: (customer.revision || 0) + 1 },
         'OFFER REJECTED BY CUSTOMER'
       );
+      setIsSubmittingLocal(false);
     };
 
     return (
@@ -32,8 +41,9 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
         <div className="flex gap-3">
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={handleAccept}
-            className="flex-1 bg-emerald-600 text-white text-xs font-bold py-3 rounded-lg shadow hover:bg-emerald-700 transition"
+            className="flex-1 bg-emerald-600 text-white text-xs font-bold py-3 rounded-lg shadow hover:bg-emerald-700 transition disabled:opacity-50"
           >
             Accept
           </button>
@@ -47,8 +57,9 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
         />
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={handleReject}
-          className="w-full bg-red-600 text-white text-xs font-bold py-3 rounded-lg shadow-md hover:bg-red-700 transition"
+          className="w-full bg-red-600 text-white text-xs font-bold py-3 rounded-lg shadow-md hover:bg-red-700 transition disabled:opacity-50"
         >
           Submit Rejection
         </button>

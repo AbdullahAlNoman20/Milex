@@ -6,7 +6,9 @@ import { STATUS } from '../../constants/salesStatus';
 
 const CustomerInfoApprovalPanel = ({ customer }) => {
   const { updateStatus } = useSales();
-  const request = customer.pendingInfoUpdate;
+  const request = customer.pendingInfoUpdateField
+    ? { field: customer.pendingInfoUpdateField, newValue: customer.pendingInfoUpdateValue }
+    : null;
 
   const handleApprove = () => {
     if (!request) return;

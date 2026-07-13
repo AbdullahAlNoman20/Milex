@@ -41,6 +41,15 @@ export const buildEmptyShippingRow = () => ({
   provider: '',
 });
 
+export const DOCUMENT_TYPE_OPTIONS = Object.freeze([
+  'Trade License',
+  'LC (Letter of Credit)',
+  'TIN Certificate',
+  'BIN Certificate',
+  'NID / Passport',
+  'Other',
+]);
+
 export const SIGNATURE_LIBRARY = Object.freeze({
   LM: '\n\n___________________________\nLine Manager\n[DIGITAL SIGNATURE: AUTH-LM-7738]\nMilex Logistics Auth. Signatory',
   SALES: '\n\n___________________________\nSales Coordinator\n[DIGITAL SIGNATURE: AUTH-SC-9912]\nMilex Logistics',

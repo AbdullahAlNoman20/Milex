@@ -13,6 +13,7 @@ import WeeklySalesPlan from './roles/KAM/WeeklySalesPlan';
 import DailyVisitingReport from './roles/KAM/DailyVisitingReport';
 import WeeklyPlanReviewList from './roles/LineManager/WeeklyPlanReviewList';
 import FollowUpReminderPanel from './roles/LineManager/FollowUpReminderPanel';
+import TeamReportsPage from './pages/TeamReportsPage';
 import AdminOverview from './roles/Admin/AdminOverview';
 import SuperAdminOverview from './roles/SuperAdmin/SuperAdminOverview';
 
@@ -58,6 +59,14 @@ const SalesRoutes = [
     element: (
       <RoleRoute allowedRoles={[ROLES.LINE_MANAGER]}>
         <FollowUpReminderPanel />
+      </RoleRoute>
+    ),
+  },
+  {
+    path: 'team-reports',
+    element: (
+      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.SUPER_ADMIN]}>
+        <TeamReportsPage />
       </RoleRoute>
     ),
   },

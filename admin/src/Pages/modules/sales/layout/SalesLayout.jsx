@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom';
 import { SalesProvider } from '../context/SalesContext';
 import SalesSidebar from './SalesSidebar';
 import Toast from '../../../../Components/Shared/Toast';
+import ErrorBoundary from '../../../../Components/Shared/ErrorBoundary';
 import BarcodeSearchBar from '../components/BarcodeSearchBar';
 import PrintTemplate from '../components/PrintTemplate';
 import { useAuth } from '../../../../Components/hooks/useAuth';
@@ -47,7 +48,9 @@ const SalesLayoutInner = () => {
           </header>
           <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 relative">
             <Toast />
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </main>
         </div>
       </div>

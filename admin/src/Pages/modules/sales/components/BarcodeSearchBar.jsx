@@ -19,14 +19,14 @@ const BarcodeSearchBar = () => {
   }, []);
 
   const handleSubmit = useCallback(
-    (e) => {
+    async (e) => {
       e.preventDefault();
       const query = search.trim();
       if (!query || !isValidBarcode(query)) {
         showToast('Enter a valid barcode', 'warning');
         return;
       }
-      const found = findByBarcode(query);
+      const found = await findByBarcode(query);
       if (!found) {
         showToast('Customer not found', 'error');
         return;

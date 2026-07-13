@@ -14,10 +14,12 @@ const RateApprovalPanel = ({ customer }) => {
   const [lmNote, setLmNote] = useState('');
   const [authorizeExtension, setAuthorizeExtension] = useState(false);
   const [creditPeriod, setCreditPeriod] = useState(customer.creditPeriodDays || String(CREDIT_RULES.DEFAULT_PERIOD_DAYS));
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isPreparingRate = customer.status === STATUS.PENDING_RATE;
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
+    if (isSubmitting) return;
     if (!isRequired(approvedRate)) return showToast('Approved rate is required', 'warning');
     if (!isValidCreditPeriod(creditPeriod, { extended: authorizeExtension })) {
       return showToast(
@@ -25,7 +27,8 @@ const RateApprovalPanel = ({ customer }) => {
         'warning'
       );
     }
-    updateStatus(
+    setIsSubmitting(true);
+    await updateStatus(
       customer.id,
       STATUS.APPROVED_PENDING_OFFER,
       {
@@ -37,16 +40,20 @@ const RateApprovalPanel = ({ customer }) => {
       'RATE APPROVED BY LM',
       'Waiting for SC Offer letter'
     );
+    setIsSubmitting(false);
   };
 
-  const handleReject = () => {
-    updateStatus(
+  const handleReject = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    await updateStatus(
       customer.id,
       STATUS.PENDING_RATE,
       { revision: (customer.revision || 0) + 1 },
       'RATE REJECTED BY LM',
       `Revision R-${(customer.revision || 0) + 1} requested`
     );
+    setIsSubmitting(false);
   };
 
   return (
@@ -102,15 +109,17 @@ const RateApprovalPanel = ({ customer }) => {
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={handleApprove}
-          className="bg-emerald-500 text-white font-bold py-3 rounded-xl flex justify-center items-center text-sm shadow hover:bg-emerald-600 transition"
+          className="bg-emerald-500 text-white font-bold py-3 rounded-xl flex justify-center items-center text-sm shadow hover:bg-emerald-600 transition disabled:opacity-50"
         >
           <CheckCircle size={16} className="mr-1.5" /> Approve
         </button>
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={handleReject}
-          className="bg-white border border-red-400 text-red-500 font-bold py-3 rounded-xl flex justify-center items-center text-sm hover:bg-red-50 transition"
+          className="bg-white border border-red-400 text-red-500 font-bold py-3 rounded-xl flex justify-center items-center text-sm hover:bg-red-50 transition disabled:opacity-50"
         >
           <XCircle size={16} className="mr-1.5" /> {isPreparingRate ? 'Send Back' : 'Revision'}
         </button>

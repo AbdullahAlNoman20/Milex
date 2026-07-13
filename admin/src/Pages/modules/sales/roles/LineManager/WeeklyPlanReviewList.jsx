@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { listPlansForReview, reviewPlan } from '../../services/weeklyPlanService';
+import { humanizeStatus } from '../../../../../Components/utils/format';
 
 const WeeklyPlanReviewList = () => {
   const { showToast } = useToast();
@@ -10,19 +11,26 @@ const WeeklyPlanReviewList = () => {
   const [expandedId, setExpandedId] = useState(null);
   const [comments, setComments] = useState({});
 
-  const refresh = useCallback(() => setPlans(listPlansForReview()), []);
+  const refresh = useCallback(async () => {
+    try {
+      const items = await listPlansForReview();
+      setPlans(items);
+    } catch (err) {
+      showToast(err?.message || 'Failed to load plans', 'error');
+    }
+  }, [showToast]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const handleReview = (id, approved) => {
-    const result = reviewPlan(id, { approved, comments: comments[id] || '' });
-    if (result) {
+  const handleReview = async (id, approved) => {
+    try {
+      await reviewPlan(id, { approved, comments: comments[id] || '' });
       showToast(approved ? 'Plan approved' : 'Feedback sent to KAM for revision', 'success');
       refresh();
-    } else {
-      showToast('Failed to update plan', 'error');
+    } catch (err) {
+      showToast(err?.message || 'Failed to update plan', 'error');
     }
   };
 
@@ -46,7 +54,7 @@ const WeeklyPlanReviewList = () => {
                 <p className="font-bold text-slate-800">{p.kamName}</p>
                 <p className="text-xs text-slate-500">Week of {p.weekStartDate}</p>
               </div>
-              <span className="text-xs font-bold text-amber-600">{p.status}</span>
+              <span className="text-xs font-bold text-amber-600">{humanizeStatus(p.status)}</span>
             </button>
             {expandedId === p.id && (
               <div className="p-5 border-t border-slate-100 space-y-5">
@@ -55,13 +63,27 @@ const WeeklyPlanReviewList = () => {
                   {p.existingVisits.length === 0 ? (
                     <p className="text-xs text-slate-400">None planned.</p>
                   ) : (
-                    <div className="space-y-1 text-xs">
-                      {p.existingVisits.map((v) => (
-                        <div key={v.id} className="flex gap-3 bg-slate-50 p-2 rounded">
-                          <span className="font-bold w-20 shrink-0">{v.day}</span>
-                          <span className="flex-1">{v.customerName} — {v.purpose}</span>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse min-w-[520px]">
+                        <thead>
+                          <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                            <th className="py-2 pr-3">Day</th>
+                            <th className="py-2 pr-3">Customer Name</th>
+                            <th className="py-2 pr-3">Purpose</th>
+                            <th className="py-2">Outcome / Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {p.existingVisits.map((v) => (
+                            <tr key={v.id} className="text-xs align-top">
+                              <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
+                              <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
+                              <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
+                              <td className="py-2.5 text-slate-500">{v.outcomeNotes || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -70,13 +92,27 @@ const WeeklyPlanReviewList = () => {
                   {p.prospectVisits.length === 0 ? (
                     <p className="text-xs text-slate-400">None planned.</p>
                   ) : (
-                    <div className="space-y-1 text-xs">
-                      {p.prospectVisits.map((v) => (
-                        <div key={v.id} className="flex gap-3 bg-slate-50 p-2 rounded">
-                          <span className="font-bold w-20 shrink-0">{v.day}</span>
-                          <span className="flex-1">{v.customerName} — {v.purpose}</span>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse min-w-[520px]">
+                        <thead>
+                          <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                            <th className="py-2 pr-3">Day</th>
+                            <th className="py-2 pr-3">Customer Name</th>
+                            <th className="py-2 pr-3">Purpose</th>
+                            <th className="py-2">Outcome / Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {p.prospectVisits.map((v) => (
+                            <tr key={v.id} className="text-xs align-top">
+                              <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
+                              <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
+                              <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
+                              <td className="py-2.5 text-slate-500">{v.outcomeNotes || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>

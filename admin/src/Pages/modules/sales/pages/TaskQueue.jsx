@@ -1,10 +1,11 @@
-// src/Pages/modules/sales/pages/TaskQueue.jsx
+// admin/src/Pages/modules/sales/pages/TaskQueue.jsx 
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
+import { formatRevision } from '../../../../Components/utils/format';
 
 const TaskQueue = () => {
   const { customers, isLoading, loadError, setSelectedCustomer } = useSales();
@@ -27,12 +28,13 @@ const TaskQueue = () => {
     <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Task Queue & In-Progress Workflows</h2>
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[640px]">
+        <table className="w-full text-left border-collapse min-w-[720px]">
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500 font-semibold bg-slate-50">
-              <th className="p-4 pl-6">CUSTOMER CODE</th>
+              <th className="p-4 pl-6">IDENTIFIER</th>
               <th className="p-4">ACCOUNT NAME</th>
-              <th className="p-4">WORKFLOW STATUS</th>
+              <th className="p-4">CURRENT STATUS</th>
+              <th className="p-4">REVISION</th>
               <th className="p-4">ASSIGNED KAM</th>
               <th className="p-4 pr-6 text-right">ACTION</th>
             </tr>
@@ -40,7 +42,7 @@ const TaskQueue = () => {
           <tbody className="divide-y divide-slate-100 text-sm">
             {pendingCustomers.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-slate-400">
+                <td colSpan={6} className="p-8 text-center text-slate-400">
                   No active tasks.
                 </td>
               </tr>
@@ -52,7 +54,8 @@ const TaskQueue = () => {
                   <td className="p-4">
                     <StatusBadge status={c.status} size="sm" />
                   </td>
-                  <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy}</td>
+                  <td className="p-4 text-xs font-bold text-slate-500">{formatRevision(c.revision)}</td>
+                  <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>
                   <td className="p-4 pr-6 text-right">
                     <button
                       type="button"

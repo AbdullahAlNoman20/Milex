@@ -1,19 +1,33 @@
-// src/Pages/modules/sales/pages/CustomersList.jsx
-import React, { useMemo } from 'react';
+// admin/src/Pages/modules/sales/pages/CustomersList.jsx — REPLACE ENTIRE FILE
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
+import Countdown from '../../../../Components/Shared/Countdown';
 import Loader from '../../../../Components/Shared/Loader';
+
+const TABS = [
+  { key: 'pending', label: 'Pending' },
+  { key: 'provisional', label: 'Provisional' },
+  { key: 'customer', label: 'Customer' },
+];
 
 const CustomersList = () => {
   const { customers, isLoading, loadError, setSelectedCustomer } = useSales();
+  const [activeTab, setActiveTab] = useState('pending');
   const navigate = useNavigate();
 
-  const activeCustomers = useMemo(
-    () => customers.filter((c) => c.status === STATUS.ACTIVE),
+  const grouped = useMemo(
+    () => ({
+      pending: customers.filter((c) => [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(c.status)),
+      provisional: customers.filter((c) => c.accountProfileType === 'PROVISIONAL' && c.status !== STATUS.ACTIVE),
+      customer: customers.filter((c) => c.status === STATUS.ACTIVE),
+    }),
     [customers]
   );
+
+  const rows = grouped[activeTab] || [];
 
   const openCustomer = (c) => {
     setSelectedCustomer(c);
@@ -25,44 +39,60 @@ const CustomersList = () => {
 
   return (
     <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">Fully Onboarded Customers</h2>
+      <h2 className="text-2xl font-bold text-slate-800 mb-4">Customers</h2>
+
+      <div className="flex gap-2 mb-6 border-b border-slate-200">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setActiveTab(t.key)}
+            className={`px-5 py-2.5 text-sm font-bold border-b-2 transition ${
+              activeTab === t.key
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            {t.label} <span className="ml-1 text-xs font-normal">({grouped[t.key].length})</span>
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[640px]">
+        <table className="w-full text-left border-collapse min-w-[720px]">
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500 font-semibold bg-slate-50">
               <th className="p-4 pl-6">CUSTOMER CODE</th>
               <th className="p-4">ACCOUNT NAME</th>
               <th className="p-4">STATUS</th>
-              <th className="p-4">PROFILE TYPE</th>
+              {activeTab === 'provisional' && <th className="p-4">DOC WINDOW REMAINING</th>}
               <th className="p-4 pr-6 text-right">ACTION</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
-            {activeCustomers.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-slate-400">
-                  No onboarded customers yet.
+                <td colSpan={activeTab === 'provisional' ? 5 : 4} className="p-8 text-center text-slate-400">
+                  No customers in this category.
                 </td>
               </tr>
             ) : (
-              activeCustomers.map((c) => (
+              rows.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
                   <td className="p-4">
                     <StatusBadge status={c.status} size="sm" />
                   </td>
-                  <td className="p-4 text-xs font-bold text-slate-500">
-                    <span
-                      className={`px-2 py-0.5 rounded ${
-                        c.accountProfileType === 'PROVISIONAL'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {c.accountProfileType || 'REGULAR'}
-                    </span>
-                  </td>
+                  {activeTab === 'provisional' && (
+                    <td className="p-4">
+                      {c.status === STATUS.PROVISIONAL_ACTIVE ? (
+                        <Countdown expiryDate={c.provisionalExpiryDate} />
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                  )}
                   <td className="p-4 pr-6 text-right">
                     <button
                       type="button"

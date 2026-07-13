@@ -17,7 +17,7 @@ const AuditTrail = ({ history = [] }) => {
         ) : (
           <div className="space-y-8 relative before:absolute before:inset-0 before:ml-[11px] before:h-full before:w-[2px] before:bg-slate-200">
             {safeHistory.map((h, i) => (
-              <div key={`${h.date}-${i}`} className="relative flex items-start">
+              <div key={h.id || `${h.action}-${i}`} className="relative flex items-start">
                 <div
                   className={`flex items-center justify-center w-6 h-6 rounded-full border-4 border-white shrink-0 z-10 ${
                     h.status === 'active'
@@ -35,7 +35,7 @@ const AuditTrail = ({ history = [] }) => {
                   </p>
                   {h.subText && <p className="text-[11px] text-slate-600 mb-1">{h.subText}</p>}
                   <p className="text-[10px] text-slate-400 font-mono">
-                    {h.status === 'active' ? 'Waiting for next step' : h.date}
+                    {h.status === 'active' ? 'Waiting for next step' : (h.createdAt ? new Date(h.createdAt).toLocaleString() : '')}
                   </p>
                 </div>
               </div>
