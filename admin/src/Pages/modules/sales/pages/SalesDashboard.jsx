@@ -13,18 +13,16 @@ const roleQueueFilter = (role) => (c) => {
   if (c.status === STATUS.ACTIVE) return false;
   switch (role) {
     case ROLES.SALES_COORDINATOR:
-      return [
-        STATUS.PENDING_RATE,
-        STATUS.APPROVED_PENDING_OFFER,
-        STATUS.OFFER_DRAFTING,
-        STATUS.OFFER_REJECTED,
-        STATUS.PENDING_AGREEMENT,
-        STATUS.AGREEMENT_DRAFTING,
-      ].includes(c.status);
+      return c.status === STATUS.PROVISIONAL_ACTIVE && (!c.offerSent || (c.offerAccepted && !c.agreementSent));
     case ROLES.LINE_MANAGER:
-      return [STATUS.PENDING_APPROVAL, STATUS.INFO_UPDATE_PENDING].includes(c.status);
+      return [
+        STATUS.PENDING_APPROVAL,
+        STATUS.INFO_UPDATE_PENDING,
+        STATUS.PROVISIONAL_EXTENSION_REQUESTED,
+        STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+      ].includes(c.status);
     case ROLES.KAM:
-      return [STATUS.OFFER_REVIEW, STATUS.AGREEMENT_REVIEW, STATUS.PENDING_PROFILE].includes(c.status);
+      return c.status === STATUS.PROVISIONAL_ACTIVE && c.offerSent && !c.offerAccepted;
     default:
       return false;
   }

@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/pages/CustomerDetail.jsx
+// admin/src/Pages/modules/sales/pages/CustomerDetail.jsx — REPLACE ENTIRE FILE
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building, Printer, Timer } from 'lucide-react';
@@ -18,17 +18,21 @@ import CustomerInfoApprovalPanel from '../roles/LineManager/CustomerInfoApproval
 import OfferLetterPanel from '../roles/SalesCoordinator/OfferLetterPanel';
 import AgreementPanel from '../roles/SalesCoordinator/AgreementPanel';
 import InfoUpdateRequestPanel from '../roles/KAM/InfoUpdateRequestPanel';
-import ReviseRecommendationPanel from '../roles/KAM/ReviseRecommendationPanel';
 import DocumentUploadPanel from '../roles/KAM/DocumentUploadPanel';
 import TimeExtensionRequestPanel from '../roles/KAM/TimeExtensionRequestPanel';
 import FinalOnboardingReviewPanel from '../roles/LineManager/FinalOnboardingReviewPanel';
 
 const PROVISIONAL_COUNTDOWN_STATUSES = [
   STATUS.PROVISIONAL_ACTIVE,
-  STATUS.OFFER_REVIEW,
   STATUS.PROVISIONAL_EXTENSION_REQUESTED,
   STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
 ];
+
+const Waiting = ({ children }) => (
+  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{children}</p>
+  </div>
+);
 
 const CustomerDetail = () => {
   const { barcode } = useParams();
@@ -81,6 +85,8 @@ const CustomerDetail = () => {
   }
 
   const role = currentUser?.role;
+  const isProvisionalActive = customer.accountProfileType === 'PROVISIONAL' && customer.status === STATUS.PROVISIONAL_ACTIVE;
+  const canUploadDocs = isProvisionalActive && customer.offerAccepted && customer.agreementSent;
 
   const renderActionPanel = () => {
     if (customer.status === STATUS.ACTIVE) return null;
@@ -88,36 +94,25 @@ const CustomerDetail = () => {
     if (customer.status === STATUS.INFO_UPDATE_PENDING && role === ROLES.LINE_MANAGER) {
       return <CustomerInfoApprovalPanel customer={customer} />;
     }
-    if (
-      [STATUS.PENDING_RATE, STATUS.OFFER_REJECTED].includes(customer.status) &&
-      role === ROLES.KAM
-    ) {
-      return <ReviseRecommendationPanel customer={customer} />;
-    }
-    if (
-      [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(customer.status) &&
-      role === ROLES.LINE_MANAGER
-    ) {
+    if ([STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(customer.status) && role === ROLES.LINE_MANAGER) {
       return <RateApprovalPanel customer={customer} />;
     }
-    if (customer.status === STATUS.PROVISIONAL_ACTIVE && role === ROLES.SALES_COORDINATOR) {
-      if (!customer.offerAccepted) {
-        return <OfferLetterPanel customer={customer} />;
+
+    if (isProvisionalActive) {
+      if (role === ROLES.SALES_COORDINATOR) {
+        if (!customer.offerSent) return <OfferLetterPanel customer={customer} />;
+        if (!customer.offerAccepted) return <Waiting>Awaiting customer feedback via KAM</Waiting>;
+        if (!customer.agreementSent) return <AgreementPanel customer={customer} onSent={refreshCustomer} />;
+        return <Waiting>Agreement sent — completing document onboarding</Waiting>;
       }
-      if (!customer.agreementSent) {
-        return <AgreementPanel customer={customer} onSent={refreshCustomer} />;
+      if (role === ROLES.KAM) {
+        if (!customer.offerSent) return <Waiting>Waiting for the Sales Coordinator to send the offer letter</Waiting>;
+        if (!customer.offerAccepted) return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
+        if (!customer.agreementSent) return <Waiting>Waiting for the Sales Coordinator to send the Agreement</Waiting>;
+        return <TimeExtensionRequestPanel customer={customer} onUpdated={refreshCustomer} />;
       }
-      return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            Agreement sent — KAM is completing document onboarding
-          </p>
-        </div>
-      );
     }
-    if (customer.status === STATUS.OFFER_REVIEW && role === ROLES.KAM) {
-      return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
-    }
+
     if (
       customer.accountProfileType === 'PROVISIONAL' &&
       role === ROLES.LINE_MANAGER &&
@@ -125,38 +120,8 @@ const CustomerDetail = () => {
     ) {
       return <FinalOnboardingReviewPanel customer={customer} onUpdated={refreshCustomer} />;
     }
-    if (
-      customer.accountProfileType === 'PROVISIONAL' &&
-      role === ROLES.KAM &&
-      customer.status === STATUS.PROVISIONAL_ACTIVE
-    ) {
-      if (!customer.offerAccepted) {
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              Waiting for the Sales Coordinator to send the offer letter
-            </p>
-          </div>
-        );
-      }
-      if (!customer.agreementSent) {
-        return (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-              Waiting for the Sales Coordinator to send the Agreement
-            </p>
-          </div>
-        );
-      }
-      return <TimeExtensionRequestPanel customer={customer} onUpdated={refreshCustomer} />;
-    }
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-          Waiting for other department
-        </p>
-      </div>
-    );
+
+    return <Waiting>Waiting for other department</Waiting>;
   };
 
   return (
@@ -174,9 +139,7 @@ const CustomerDetail = () => {
           <h2 className="text-3xl font-black text-slate-800 mb-2">{customer.accountName}</h2>
           <div className="flex items-center gap-3 flex-wrap">
             <BarcodeBadge value={customer.barcode} />
-            {customer.rateRef && (
-              <BarcodeBadge value={`REF-${customer.rateRef}`} variant="blue" />
-            )}
+            {customer.rateRef && <BarcodeBadge value={`REF-${customer.rateRef}`} variant="blue" />}
           </div>
         </div>
         <StatusBadge status={customer.status} />
@@ -187,9 +150,7 @@ const CustomerDetail = () => {
           <div className="flex items-center">
             <Timer size={18} className="text-purple-500 mr-3 shrink-0" />
             <div>
-              <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mb-1">
-                Document Upload Window
-              </p>
+              <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mb-1">Document Upload Window</p>
               <p className="text-xs text-purple-700">Time remaining in the 21-day provisional period</p>
             </div>
           </div>
@@ -214,42 +175,28 @@ const CustomerDetail = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-8 text-sm mb-8">
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">
-                  ADDRESS
-                </span>
+                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">ADDRESS</span>
                 <span className="font-medium text-slate-700 leading-relaxed block">{customer.address}</span>
               </div>
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">
-                  BUSINESS TYPE
-                </span>
+                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">BUSINESS TYPE</span>
                 <span className="font-medium text-slate-700">{customer.businessType}</span>
               </div>
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">
-                  MOBILE / EMAIL
-                </span>
+                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">MOBILE / EMAIL</span>
                 <span className="font-medium text-slate-700 block mb-0.5">{customer.mobile}</span>
                 <span className="text-slate-500 text-xs">{customer.email}</span>
               </div>
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">
-                  CREDIT LIMIT / PERIOD
-                </span>
-                <span className="font-medium text-slate-700">
-                  TK {customer.creditLimitTk} ({customer.creditPeriodDays} Days)
-                </span>
+                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">CREDIT LIMIT / PERIOD</span>
+                <span className="font-medium text-slate-700">TK {customer.creditLimitTk} ({customer.creditPeriodDays} Days)</span>
               </div>
             </div>
-            <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-2">
-              PRIMARY CONTACTS
-            </span>
+            <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-2">PRIMARY CONTACTS</span>
             <CustomerContactsCard contacts={customer.contacts} />
             {customer.recNote && (
               <div className="p-5 bg-[#FFFBF0] rounded-xl border border-[#FDE68A] mt-6">
-                <span className="block text-amber-700 text-[10px] uppercase font-bold tracking-widest mb-2">
-                  KAM RECOMMENDATION NOTE
-                </span>
+                <span className="block text-amber-700 text-[10px] uppercase font-bold tracking-widest mb-2">KAM RECOMMENDATION NOTE</span>
                 <p className="italic text-amber-900 font-bold text-sm leading-relaxed">{customer.recNote}</p>
               </div>
             )}
@@ -262,13 +209,9 @@ const CustomerDetail = () => {
         </div>
       </div>
 
-      {customer.accountProfileType === 'PROVISIONAL' &&
-        role === ROLES.KAM &&
-        customer.status === STATUS.PROVISIONAL_ACTIVE &&
-        customer.offerAccepted &&
-        customer.agreementSent && (
-          <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />
-        )}
+      {canUploadDocs && (role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && (
+        <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />
+      )}
     </div>
   );
 };

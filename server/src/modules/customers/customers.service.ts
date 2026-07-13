@@ -115,6 +115,7 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
       provisionalExpiryDate: expiry,
       provisionalExtensionDays: 0,
       rateRef: existing.rateRef || generateRateRef(),
+      offerSent: false,
       offerAccepted: false,
       agreementSent: false,
     },
@@ -145,15 +146,24 @@ export const draftOffer = async (customerId: string, scId: string) =>
   });
 
 export const finalizeOffer = async (customerId: string, offerText: string, scId: string) => {
+  // Offer send/accept/reject is a sub-loop that happens entirely while the
+  // customer stays PROVISIONAL_ACTIVE — no CustomerStatus transition needed,
+  // so it can be resent as many times as the customer requires (per 2.1.3.1)
+  // without ever routing back through Line Manager.
   const clean = sanitizeAndEscape({ offerText });
-  return transitionCustomerStatus({
-    customerId,
-    toStatus: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
-    actorId: scId,
-    extraUpdates: { offerText: clean.offerText },
-    historyAction: 'OFFER LETTER SENT',
-    historySubText: 'Awaiting customer feedback via KAM',
+  const updated = await prisma.customer.update({
+    where: { id: customerId },
+    data: { offerText: clean.offerText, offerSent: true, offerAccepted: false },
   });
+  await prisma.customerHistoryEntry.updateMany({
+    where: { customerId, status: 'active' },
+    data: { status: 'completed' },
+  });
+  await prisma.customerHistoryEntry.create({
+    data: { customerId, action: 'OFFER LETTER SENT', subText: 'Awaiting customer feedback via KAM', status: 'active' },
+  });
+  await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_LETTER_SENT', actorId: scId, afterState: { offerSent: true } });
+  return updated;
 };
 
 export const sendAgreement = async (customerId: string, agreementText: string, scId: string) => {
@@ -190,26 +200,29 @@ export const submitClientFeedback = async (
   kamId: string
 ) => {
   if (data.accepted) {
-    return transitionCustomerStatus({
-      customerId,
-      toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
-      actorId: kamId,
-      extraUpdates: { offerAccepted: true },
-      historyAction: 'OFFER ACCEPTED BY CUSTOMER',
-      historySubText: 'Awaiting Sales Coordinator to send the Agreement',
+    const updated = await prisma.customer.update({ where: { id: customerId }, data: { offerAccepted: true } });
+    await prisma.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
+    await prisma.customerHistoryEntry.create({
+      data: { customerId, action: 'OFFER ACCEPTED BY CUSTOMER', subText: 'Awaiting Sales Coordinator to send the Agreement', status: 'active' },
     });
+    await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_ACCEPTED', actorId: kamId, afterState: { offerAccepted: true } });
+    return updated;
   }
+
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
-  return transitionCustomerStatus({
-    customerId,
-    toStatus: CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
-    actorId: kamId,
-    extraUpdates: {
-      rejectReason: sanitizeAndEscape({ r: data.rejectReason || '' }).r,
-      revision: customer.revision + 1,
-    },
-    historyAction: 'OFFER REJECTED BY CUSTOMER',
+  const clean = sanitizeAndEscape({ r: data.rejectReason || '' });
+  // Reject re-opens the offer step for the SC to revise and resend — it does
+  // NOT go back through Line Manager, matching 2.1.3.1's direct loop to 2.1.4.
+  const updated = await prisma.customer.update({
+    where: { id: customerId },
+    data: { offerSent: false, offerAccepted: false, rejectReason: clean.r, revision: customer.revision + 1 },
   });
+  await prisma.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
+  await prisma.customerHistoryEntry.create({
+    data: { customerId, action: 'OFFER REJECTED BY CUSTOMER', subText: clean.r, status: 'active' },
+  });
+  await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_REJECTED', actorId: kamId, afterState: { rejectReason: clean.r } });
+  return updated;
 };
 
 export const reviseRateAfterRejection = async (customerId: string, proposedRate: string, kamId: string) => {
