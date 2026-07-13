@@ -35,7 +35,10 @@ export const env = Object.freeze({
   JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET'),
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-  CORS_ORIGIN: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim()),
+  CORS_ORIGIN: (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean),
   FIELD_ENCRYPTION_KEY: required('FIELD_ENCRYPTION_KEY'),
   COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || 'localhost',
   IS_PRODUCTION: process.env.NODE_ENV === 'production',

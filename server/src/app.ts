@@ -47,7 +47,8 @@ export const buildApp = () => {
         if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {
-          callback(new Error('Not allowed by CORS'));
+          logger.warn({ origin }, 'Blocked by CORS');
+          callback(null, false);
         }
       },
       credentials: true,
