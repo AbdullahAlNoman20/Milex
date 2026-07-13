@@ -11,9 +11,8 @@ const ACCESS_COOKIE_NAME = 'access_token';
 const setAuthCookies = (res: Response, accessToken: string, refreshToken: string) => {
   const cookieOpts = {
     httpOnly: true,
-    secure: env.IS_PRODUCTION,
-    sameSite: 'strict' as const,
-    domain: env.COOKIE_DOMAIN,
+    secure: true,
+    sameSite: 'none' as const,
   };
   res.cookie(ACCESS_COOKIE_NAME, accessToken, { ...cookieOpts, maxAge: 15 * 60 * 1000 });
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, { ...cookieOpts, maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -51,8 +50,8 @@ export const logoutHandler = async (req: Request, res: Response, next: NextFunct
   try {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (req.user) await authService.logout(refreshToken, req.user.id);
-    res.clearCookie(ACCESS_COOKIE_NAME);
-    res.clearCookie(REFRESH_COOKIE_NAME);
+    res.clearCookie(ACCESS_COOKIE_NAME, { httpOnly: true, secure: true, sameSite: 'none' });
+    res.clearCookie(REFRESH_COOKIE_NAME, { httpOnly: true, secure: true, sameSite: 'none' });
     return sendSuccess(res, { loggedOut: true });
   } catch (err) {
     next(err);
