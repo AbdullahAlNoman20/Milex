@@ -19,6 +19,7 @@ import OfferLetterPanel from '../roles/SalesCoordinator/OfferLetterPanel';
 import AgreementPanel from '../roles/SalesCoordinator/AgreementPanel';
 import InfoUpdateRequestPanel from '../roles/KAM/InfoUpdateRequestPanel';
 import DocumentUploadPanel from '../roles/KAM/DocumentUploadPanel';
+import DocumentsList from '../components/DocumentsList';
 import TimeExtensionRequestPanel from '../roles/KAM/TimeExtensionRequestPanel';
 import FinalOnboardingReviewPanel from '../roles/LineManager/FinalOnboardingReviewPanel';
 
@@ -212,6 +213,8 @@ const CustomerDetail = () => {
       {canUploadDocs && (role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && (
         <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />
       )}
+
+      {!canUploadDocs && <DocumentsList documents={customer.documents} />}
     </div>
   );
 };

@@ -156,3 +156,8 @@ export const decideFinalOnboarding = async (customerId, approve, comments) => {
 };
 
 export const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
+
+export const getDocumentSignedUrl = async (storageKey) => {
+  const { data } = await request(`/files/${encodeURIComponent(storageKey)}/signed-url`);
+  return data.url;
+};

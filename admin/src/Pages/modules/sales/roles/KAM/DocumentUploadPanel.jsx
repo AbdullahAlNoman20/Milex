@@ -1,8 +1,8 @@
 // admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx
 import React, { useState, useCallback } from 'react';
-import { FileCheck2, Loader2, UploadCloud, Printer } from 'lucide-react';
+import { Loader2, UploadCloud, Printer, Eye } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { uploadOnboardingDocument } from '../../services/customerService';
+import { uploadOnboardingDocument, getDocumentSignedUrl } from '../../services/customerService';
 import { useSales } from '../../hooks/useSales';
 import { humanizeStatus } from '../../../../../Components/utils/format';
 
@@ -19,9 +19,27 @@ const DOCUMENT_CATEGORIES = [
 ];
 
 const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
+  const { showToast } = useToast();
   const [number, setNumber] = useState(doc?.documentNumber || '');
   const [expiry, setExpiry] = useState(doc?.expiryDate ? doc.expiryDate.slice(0, 10) : '');
+  const [isOpening, setIsOpening] = useState(false);
   const inputId = `doc-upload-${category.key}`;
+
+  const handleView = async () => {
+    if (!doc) return;
+    if (doc.scanStatus !== 'CLEAN') {
+      return showToast('This file is still being scanned — try again shortly', 'warning');
+    }
+    setIsOpening(true);
+    try {
+      const url = await getDocumentSignedUrl(doc.storageKey);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      showToast(err?.message || 'Could not open file', 'error');
+    } finally {
+      setIsOpening(false);
+    }
+  };
 
   const handleFile = (e) => {
     const file = e.target.files?.[0];
@@ -38,9 +56,7 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
     <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white">
       <div>
         <p className="text-sm font-bold text-slate-800">{category.label}</p>
-        <p className="text-[10px] text-slate-400 mt-0.5">
-          {doc ? `Uploaded — ${humanizeStatus(doc.scanStatus)}` : 'Pending upload'}
-        </p>
+        <p className="text-[10px] text-slate-400 mt-0.5">{doc ? 'Uploaded' : 'Pending upload'}</p>
       </div>
 
       <label
@@ -60,10 +76,15 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
       </label>
 
       {doc && (
-        <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
-          <FileCheck2 size={12} className={doc.scanStatus === 'CLEAN' ? 'text-emerald-600' : 'text-amber-500'} />
-          {doc.originalName}
-        </p>
+        <button
+          type="button"
+          onClick={handleView}
+          disabled={isOpening}
+          className="w-full flex items-center justify-between gap-1.5 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 transition disabled:opacity-50"
+        >
+          <span className="truncate">{doc.originalName}</span>
+          {isOpening ? <Loader2 size={12} className="animate-spin shrink-0" /> : <Eye size={12} className="shrink-0 text-emerald-600" />}
+        </button>
       )}
 
       {category.hasMeta && (

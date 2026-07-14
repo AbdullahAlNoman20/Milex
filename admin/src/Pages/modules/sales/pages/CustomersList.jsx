@@ -6,6 +6,7 @@ import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Countdown from '../../../../Components/Shared/Countdown';
 import Loader from '../../../../Components/Shared/Loader';
+import { formatRevision } from '../../../../Components/utils/format';
 
 const TABS = [
   { key: 'pending', label: 'Pending' },
@@ -28,6 +29,7 @@ const CustomersList = () => {
   );
 
   const rows = grouped[activeTab] || [];
+  const columnCount = activeTab === 'provisional' ? 6 : 5;
 
   const openCustomer = (c) => {
     setSelectedCustomer(c);
@@ -59,12 +61,14 @@ const CustomersList = () => {
       </div>
 
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[720px]">
+        <table className="w-full text-left border-collapse min-w-[820px]">
           <thead>
             <tr className="border-b border-slate-200 text-xs text-slate-500 font-semibold bg-slate-50">
               <th className="p-4 pl-6">CUSTOMER CODE</th>
               <th className="p-4">ACCOUNT NAME</th>
               <th className="p-4">STATUS</th>
+              <th className="p-4">REVISION</th>
+              <th className="p-4">ASSIGNED KAM</th>
               {activeTab === 'provisional' && <th className="p-4">DOC WINDOW REMAINING</th>}
               <th className="p-4 pr-6 text-right">ACTION</th>
             </tr>
@@ -72,7 +76,7 @@ const CustomersList = () => {
           <tbody className="divide-y divide-slate-100 text-sm">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={activeTab === 'provisional' ? 5 : 4} className="p-8 text-center text-slate-400">
+                <td colSpan={columnCount} className="p-8 text-center text-slate-400">
                   No customers in this category.
                 </td>
               </tr>
@@ -84,6 +88,8 @@ const CustomersList = () => {
                   <td className="p-4">
                     <StatusBadge status={c.status} size="sm" />
                   </td>
+                  <td className="p-4 text-xs font-bold text-slate-500">{formatRevision(c.revision)}</td>
+                  <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>
                   {activeTab === 'provisional' && (
                     <td className="p-4">
                       {c.status === STATUS.PROVISIONAL_ACTIVE ? (

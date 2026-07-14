@@ -48,7 +48,7 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       contacts: true,
       shippingDetails: true,
       history: { orderBy: { createdAt: 'desc' } },
-      documents: true,
+      documents: { orderBy: { createdAt: 'desc' } },
       extensionRequests: true,
       handledBy: { select: { name: true } },
     },
