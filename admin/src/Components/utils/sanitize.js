@@ -30,6 +30,15 @@ export const sanitizeObjectStrings = (obj, { maxLength = 1000 } = {}) => {
 
 export const stripNonNumeric = (value) => (typeof value === 'string' ? value.replace(/[^0-9]/g, '') : '');
 
+export const sanitizePhoneInput = (value) => {
+  if (typeof value !== 'string') return '';
+  let cleaned = value.replace(/[^\d+]/g, '');
+  cleaned = cleaned.replace(/(?!^)\+/g, '');
+  return cleaned;
+};
+
+export const sanitizeEmailInput = (value) => (typeof value === 'string' ? value.replace(/\s/g, '') : '');
+
 export const sanitizeFileName = (name) => {
   if (typeof name !== 'string') return '';
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 255);

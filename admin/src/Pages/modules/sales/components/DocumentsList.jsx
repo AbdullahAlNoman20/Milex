@@ -5,7 +5,7 @@ import { getDocumentSignedUrl } from '../services/customerService';
 import { useToast } from '../../../../Components/hooks/useToast';
 
 const CATEGORY_LABELS = {
-  OFFER_LETTER: 'Offer Letter',
+  SIGNED_OFFER_LETTER: 'Signed Offer Letter (Customer Copy)',
   OFFER_RATE_RECEIPT: 'Signed Offer & Rate Receipt (Hard Copy Scan)',
   SIGNED_AGREEMENT: 'Signed Agreement',
   CUSTOMER_TIN: 'Customer TIN',

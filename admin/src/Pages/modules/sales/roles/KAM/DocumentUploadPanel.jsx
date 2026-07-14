@@ -1,15 +1,14 @@
-// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx
+// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx 
 import React, { useState, useCallback } from 'react';
-import { Loader2, UploadCloud, Printer, Eye } from 'lucide-react';
+import { Loader2, UploadCloud, Printer, Eye, Send, FileCheck } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { uploadOnboardingDocument, getDocumentSignedUrl } from '../../services/customerService';
+import { uploadOnboardingDocument, getDocumentSignedUrl, submitFinalOnboarding } from '../../services/customerService';
 import { useSales } from '../../hooks/useSales';
-import { humanizeStatus } from '../../../../../Components/utils/format';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 const DOCUMENT_CATEGORIES = [
-  { key: 'OFFER_LETTER', label: 'Offer Letter', hasMeta: false },
+  { key: 'SIGNED_OFFER_LETTER', label: 'Signed Offer Letter (Customer Copy)', hasMeta: false },
   { key: 'OFFER_RATE_RECEIPT', label: 'Signed Offer & Rate Receipt (Hard Copy Scan)', hasMeta: false },
   { key: 'SIGNED_AGREEMENT', label: 'Signed Agreement', hasMeta: false },
   { key: 'CUSTOMER_TIN', label: 'Customer TIN', hasMeta: true },
@@ -27,9 +26,7 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
 
   const handleView = async () => {
     if (!doc) return;
-    if (doc.scanStatus !== 'CLEAN') {
-      return showToast('This file is still being scanned — try again shortly', 'warning');
-    }
+    if (doc.scanStatus !== 'CLEAN') return showToast('This file is still being scanned — try again shortly', 'warning');
     setIsOpening(true);
     try {
       const url = await getDocumentSignedUrl(doc.storageKey);
@@ -46,7 +43,7 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
     if (!file) return;
     if (file.size > MAX_FILE_SIZE_BYTES) {
       e.target.value = '';
-      return;
+      return showToast('File exceeds 10MB limit', 'warning');
     }
     onUpload(category.key, file, number, expiry);
     e.target.value = '';
@@ -113,10 +110,40 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
   );
 };
 
+const OfferLetterAutoCard = ({ customer }) => {
+  const { setPrintData } = useSales();
+  return (
+    <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white">
+      <div>
+        <p className="text-sm font-bold text-slate-800">Offer Letter</p>
+        <p className="text-[10px] text-slate-400 mt-0.5">
+          {customer.offerText ? 'Auto-added from the Offer Letter sent by Sales Coordinator' : 'Pending — offer letter not sent yet'}
+        </p>
+      </div>
+      {customer.offerText ? (
+        <button
+          type="button"
+          onClick={() => setPrintData({ type: 'offer', customer })}
+          className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg py-2.5 hover:bg-emerald-100 transition"
+        >
+          <Eye size={13} /> View Offer Letter
+        </button>
+      ) : (
+        <div className="border-2 border-dashed border-slate-200 rounded-lg py-4 text-center text-xs text-slate-400">
+          Not available yet
+        </div>
+      )}
+    </div>
+  );
+};
+
+const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'SIGNED_AGREEMENT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
+
 const DocumentUploadPanel = ({ customer, onUploaded }) => {
   const { showToast } = useToast();
   const { setPrintData } = useSales();
   const [uploadingKey, setUploadingKey] = useState(null);
+  const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
 
   const docsByType = (customer.documents || []).reduce((acc, d) => {
     acc[d.documentType] = d;
@@ -139,6 +166,23 @@ const DocumentUploadPanel = ({ customer, onUploaded }) => {
     [customer.id, showToast, onUploaded]
   );
 
+  const missingRequired = REQUIRED_DOC_TYPES.filter((key) => !docsByType[key]);
+  const hasAnyDocs = (customer.documents || []).length > 0;
+
+  const handleSubmitFinal = async () => {
+    if (isSubmittingFinal) return;
+    setIsSubmittingFinal(true);
+    try {
+      await submitFinalOnboarding(customer.id);
+      showToast('Submitted for Final Onboarding — awaiting Line Manager verification', 'success');
+      onUploaded?.();
+    } catch (err) {
+      showToast(err?.message || 'Submission failed', 'error');
+    } finally {
+      setIsSubmittingFinal(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-4">
       <div className="flex justify-between items-start gap-3">
@@ -158,6 +202,7 @@ const DocumentUploadPanel = ({ customer, onUploaded }) => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <OfferLetterAutoCard customer={customer} />
         {DOCUMENT_CATEGORIES.map((cat) => (
           <CategoryCard
             key={cat.key}
@@ -167,6 +212,23 @@ const DocumentUploadPanel = ({ customer, onUploaded }) => {
             isUploading={uploadingKey === cat.key}
           />
         ))}
+      </div>
+
+      <div className="pt-4 border-t border-slate-100 space-y-2">
+        {missingRequired.length > 0 && (
+          <p className="text-[11px] text-amber-600 font-semibold">
+            Still needed: {missingRequired.map((k) => k.replace(/_/g, ' ')).join(', ')}
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={!hasAnyDocs || isSubmittingFinal}
+          onClick={handleSubmitFinal}
+          className="w-full bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          {isSubmittingFinal ? <Loader2 size={16} className="mr-2 animate-spin" /> : <FileCheck size={16} className="mr-2" />}
+          Submit for Final Onboarding
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx — REPLACE ENTIRE FILE
+// admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx 
 import React, { useState } from 'react';
 import { Mail, Printer, PenTool } from 'lucide-react';
 import { sendAgreement } from '../../services/customerService';
@@ -20,7 +20,7 @@ const AgreementPanel = ({ customer, onSent }) => {
     setIsSubmitting(true);
     try {
       await sendAgreement(customer.id, agreementText);
-      showToast('Agreement sent to customer', 'success');
+      showToast('Agreement sent to customer via email', 'success');
       onSent?.();
     } catch (err) {
       showToast(err?.message || 'Failed to send agreement', 'error');
@@ -35,8 +35,9 @@ const AgreementPanel = ({ customer, onSent }) => {
         <PenTool size={16} className="mr-2 text-blue-600" /> Agreement
       </h3>
       <p className="text-[11px] text-slate-500">
-        Customer accepted the offer. Send the Service Level Agreement — this unlocks document
-        upload for the KAM.
+        Customer accepted the offer. Send the Agreement to the customer via email below — a signed
+        hard copy will then be collected and uploaded separately under "Signed Agreement" once
+        received, which unlocks the rest of document upload.
       </p>
       <textarea
         className="w-full text-xs font-mono border border-slate-300 p-3 rounded-lg min-h-[220px] outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed"
@@ -58,7 +59,7 @@ const AgreementPanel = ({ customer, onSent }) => {
           onClick={handleSend}
           className="flex-[2] bg-blue-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-800 transition flex items-center justify-center disabled:opacity-50"
         >
-          <Mail size={14} className="mr-1.5" /> Send Agreement
+          <Mail size={14} className="mr-1.5" /> Send Agreement via Email
         </button>
       </div>
     </div>

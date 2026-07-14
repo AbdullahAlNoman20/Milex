@@ -40,6 +40,9 @@ export const validateRecommendationStep1 = (form) => {
 export const validateShippingRow = (row) => {
   const errors = {};
   if (!Array.isArray(row.shipmentType) || row.shipmentType.length === 0) errors.shipmentType = 'Select at least one shipment type';
+  if ((row.shipmentType || []).includes('Others') && !isRequired(row.shipmentTypeOther)) {
+    errors.shipmentTypeOther = 'Specify the other shipment type';
+  }
   if (!isRequired(row.rateFor) || row.rateFor === 'Select Import or Export') errors.rateFor = 'Rate direction is required';
   if (!isRequired(row.country) || row.country === 'Select country') errors.country = 'Country is required';
   if (!isPositiveNumber(row.volume)) errors.volume = 'Valid volume is required';
