@@ -39,6 +39,31 @@ export const PROVISIONAL_RULES = Object.freeze({
   LM_EXTENSION_DAYS: 5,
 });
 
+export const getWorkflowStageLabel = (customer) => {
+  if (!customer) return '';
+  switch (customer.status) {
+    case STATUS.PENDING_RATE:
+      return 'Waiting for KAM to Submit / Revise Rate';
+    case STATUS.PENDING_APPROVAL:
+      return 'Waiting for Line Manager Approval';
+    case STATUS.INFO_UPDATE_PENDING:
+      return 'Waiting for Line Manager Approval (Info Update)';
+    case STATUS.PROVISIONAL_EXTENSION_REQUESTED:
+      return 'Waiting for Line Manager to Decide on Extension Request';
+    case STATUS.PROVISIONAL_FINAL_REVIEW_PENDING:
+      return 'Waiting for Line Manager Final Verification';
+    case STATUS.PROVISIONAL_ACTIVE:
+      if (!customer.offerSent) return 'Waiting for Sales Coordinator to Send Offer Letter';
+      if (!customer.offerAccepted) return "Waiting for Customer's Feedback (via KAM)";
+      if (!customer.agreementSent) return 'Waiting for Sales Coordinator to Collect Agreement';
+      return 'Waiting for Document Upload & Final Onboarding';
+    case STATUS.ACTIVE:
+      return 'Completed — Active Customer';
+    default:
+      return 'In Progress';
+  }
+};
+
 export const CREDIT_RULES = Object.freeze({
   DEFAULT_PERIOD_DAYS: 15,
   MAX_EXTENDED_PERIOD_DAYS: 19,

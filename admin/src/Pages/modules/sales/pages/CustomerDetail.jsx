@@ -1,11 +1,11 @@
-// admin/src/Pages/modules/sales/pages/CustomerDetail.jsx — REPLACE ENTIRE FILE
+// admin/src/Pages/modules/sales/pages/CustomerDetail.jsx 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building, Printer, Timer } from 'lucide-react';
 import { useSales } from '../hooks/useSales';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { ROLES } from '../../../../Components/constants/roles';
-import { STATUS } from '../constants/salesStatus';
+import { STATUS, getWorkflowStageLabel } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import BarcodeBadge from '../../../../Components/Shared/BarcodeBadge';
 import CustomerContactsCard from '../components/CustomerContactsCard';
@@ -74,11 +74,7 @@ const CustomerDetail = () => {
     return (
       <div className="max-w-xl mx-auto text-center py-16">
         <p className="text-slate-500 font-semibold mb-4">Customer record not found.</p>
-        <button
-          type="button"
-          onClick={() => navigate('/app/customers')}
-          className="text-emerald-600 font-bold text-sm hover:underline"
-        >
+        <button type="button" onClick={() => navigate('/app/customers')} className="text-emerald-600 font-bold text-sm hover:underline">
           Back to Customers
         </button>
       </div>
@@ -86,6 +82,7 @@ const CustomerDetail = () => {
   }
 
   const role = currentUser?.role;
+  const isDocHandler = role === ROLES.KAM || role === ROLES.SALES_COORDINATOR;
   const isProvisionalActive = customer.accountProfileType === 'PROVISIONAL' && customer.status === STATUS.PROVISIONAL_ACTIVE;
   const canUploadDocs = isProvisionalActive && customer.offerAccepted && customer.agreementSent;
 
@@ -104,12 +101,12 @@ const CustomerDetail = () => {
         if (!customer.offerSent) return <OfferLetterPanel customer={customer} />;
         if (!customer.offerAccepted) return <Waiting>Awaiting customer feedback via KAM</Waiting>;
         if (!customer.agreementSent) return <AgreementPanel customer={customer} onSent={refreshCustomer} />;
-        return <Waiting>Agreement sent — completing document onboarding</Waiting>;
+        return <TimeExtensionRequestPanel customer={customer} onUpdated={refreshCustomer} />;
       }
       if (role === ROLES.KAM) {
         if (!customer.offerSent) return <Waiting>Waiting for the Sales Coordinator to send the offer letter</Waiting>;
         if (!customer.offerAccepted) return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
-        if (!customer.agreementSent) return <Waiting>Waiting for the Sales Coordinator to send the Agreement</Waiting>;
+        if (!customer.agreementSent) return <Waiting>Waiting for the Sales Coordinator to collect the Agreement</Waiting>;
         return <TimeExtensionRequestPanel customer={customer} onUpdated={refreshCustomer} />;
       }
     }
@@ -127,11 +124,7 @@ const CustomerDetail = () => {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center mb-2 transition"
-      >
+      <button type="button" onClick={() => navigate(-1)} className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center mb-2 transition">
         <ArrowLeft size={14} className="mr-1.5" /> Back
       </button>
 
@@ -206,14 +199,11 @@ const CustomerDetail = () => {
 
         <div className="w-full lg:w-[380px] shrink-0 space-y-6">
           {renderActionPanel()}
-          <AuditTrail history={customer.history} />
+          <AuditTrail history={customer.history} activeStepLabel={getWorkflowStageLabel(customer)} />
         </div>
       </div>
 
-      {canUploadDocs && (role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && (
-        <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />
-      )}
-
+      {canUploadDocs && isDocHandler && <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />}
       {!canUploadDocs && <DocumentsList documents={customer.documents} />}
     </div>
   );

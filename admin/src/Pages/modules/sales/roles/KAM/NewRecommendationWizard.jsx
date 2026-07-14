@@ -17,7 +17,7 @@ import {
   buildEmptyShippingRow,
 } from '../../constants/formOptions';
 import { CREDIT_RULES } from '../../constants/salesStatus';
-import { sanitizeText } from '../../../../../Components/utils/sanitize';
+import { sanitizeText, sanitizePhoneInput, sanitizeEmailInput } from '../../../../../Components/utils/sanitize';
 import {
   isValidEmail,
   isValidMobile,
@@ -89,10 +89,14 @@ const NewRecommendationWizard = () => {
 
   const { form, contacts, sameAsKey, shipping } = state;
 
+  // No trim/sanitize on every keystroke here — trimming per keystroke was
+  // silently eating spaces as they were typed (e.g. mid-sentence in the
+  // recommendation note). Raw value is kept; length is capped by each
+  // input's maxLength, and the server sanitizes/trims on submit.
   const setField = useCallback((key, value) => {
     setState((prev) => ({
       ...prev,
-      form: { ...prev.form, [key]: typeof value === 'string' ? sanitizeText(value, { maxLength: 500 }) : value },
+      form: { ...prev.form, [key]: value },
     }));
   }, []);
 
@@ -162,6 +166,10 @@ const NewRecommendationWizard = () => {
 
     if (!isRequired(contacts.key.name) || !isValidMobile(contacts.key.mobile)) {
       showToast('Key Contact name and mobile are mandatory', 'warning');
+      return false;
+    }
+    if (!isValidEmail(contacts.key.email)) {
+      showToast('A valid email is required for the Key Contact Person', 'warning');
       return false;
     }
     if (!sameAsKey && (!isRequired(contacts.financial.name) || !isValidMobile(contacts.financial.mobile))) {
@@ -288,7 +296,8 @@ const handleSubmit = async () => {
                       className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                       value={form.phone}
                       maxLength={16}
-                      onChange={(e) => setField('phone', e.target.value)}
+                      placeholder="+8801XXXXXXXXX"
+                      onChange={(e) => setField('phone', sanitizePhoneInput(e.target.value))}
                     />
                   </FormField>
                   <FormField label="Email" required>
@@ -297,7 +306,7 @@ const handleSubmit = async () => {
                       className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                       value={form.email}
                       maxLength={254}
-                      onChange={(e) => setField('email', e.target.value)}
+                      onChange={(e) => setField('email', sanitizeEmailInput(e.target.value))}
                     />
                   </FormField>
                   <FormField label="Business Type" required>
@@ -361,7 +370,7 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.mobile}
                         maxLength={16}
-                        onChange={(e) => setContactField('senior', 'mobile', e.target.value)}
+                        onChange={(e) => setContactField('senior', 'mobile', sanitizePhoneInput(e.target.value))}
                       />
                     </FormField>
                     <FormField label="Email" optional>
@@ -370,7 +379,7 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.email}
                         maxLength={254}
-                        onChange={(e) => setContactField('senior', 'email', e.target.value)}
+                        onChange={(e) => setContactField('senior', 'email', sanitizeEmailInput(e.target.value))}
                       />
                     </FormField>
                   </div>
@@ -400,16 +409,16 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.mobile}
                         maxLength={16}
-                        onChange={(e) => setContactField('key', 'mobile', e.target.value)}
+                        onChange={(e) => setContactField('key', 'mobile', sanitizePhoneInput(e.target.value))}
                       />
                     </FormField>
-                    <FormField label="Email" optional>
+                    <FormField label="Email" required>
                       <input
                         type="email"
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.email}
                         maxLength={254}
-                        onChange={(e) => setContactField('key', 'email', e.target.value)}
+                        onChange={(e) => setContactField('key', 'email', sanitizeEmailInput(e.target.value))}
                       />
                     </FormField>
                   </div>
@@ -441,7 +450,16 @@ const handleSubmit = async () => {
                           className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                           value={contacts.financial.mobile}
                           maxLength={16}
-                          onChange={(e) => setContactField('financial', 'mobile', e.target.value)}
+                          onChange={(e) => setContactField('financial', 'mobile', sanitizePhoneInput(e.target.value))}
+                        />
+                      </FormField>
+                      <FormField label="Email" optional>
+                        <input
+                          type="email"
+                          className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                          value={contacts.financial.email}
+                          maxLength={254}
+                          onChange={(e) => setContactField('financial', 'email', sanitizeEmailInput(e.target.value))}
                         />
                       </FormField>
                     </div>
@@ -537,6 +555,16 @@ const handleSubmit = async () => {
                         ))}
                       </div>
                     </FormField>
+                    {(row.shipmentType || []).includes('Others') && (
+                      <FormField label="Specify Other Shipment Type" required>
+                        <input
+                          className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                          value={row.shipmentTypeOther || ''}
+                          maxLength={150}
+                          onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, shipmentTypeOther: e.target.value } : r)))}
+                        />
+                      </FormField>
+                    )}
                     <FormField label="Rate For" required>
                       <select
                         className="w-full border border-slate-200 p-2.5 rounded text-sm bg-white outline-none focus:border-emerald-500"

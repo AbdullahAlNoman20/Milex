@@ -1,6 +1,6 @@
-// admin/src/Pages/modules/sales/pages/CustomersList.jsx — REPLACE ENTIRE FILE
-import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+// admin/src/Pages/modules/sales/pages/CustomersList.jsx 
+import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
@@ -9,15 +9,21 @@ import Loader from '../../../../Components/Shared/Loader';
 import { formatRevision } from '../../../../Components/utils/format';
 
 const TABS = [
+  { key: 'customer', label: 'Active Customer' },
+  { key: 'provisional', label: 'Provisional Customer' },
   { key: 'pending', label: 'Pending' },
-  { key: 'provisional', label: 'Provisional' },
-  { key: 'customer', label: 'Customer' },
 ];
 
 const CustomersList = () => {
   const { customers, isLoading, loadError, setSelectedCustomer } = useSales();
-  const [activeTab, setActiveTab] = useState('pending');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(TABS.some((t) => t.key === tabParam) ? tabParam : 'customer');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (tabParam && TABS.some((t) => t.key === tabParam)) setActiveTab(tabParam);
+  }, [tabParam]);
 
   const grouped = useMemo(
     () => ({
@@ -50,9 +56,7 @@ const CustomersList = () => {
             type="button"
             onClick={() => setActiveTab(t.key)}
             className={`px-5 py-2.5 text-sm font-bold border-b-2 transition ${
-              activeTab === t.key
-                ? 'border-emerald-600 text-emerald-700'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
+              activeTab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
           >
             {t.label} <span className="ml-1 text-xs font-normal">({grouped[t.key].length})</span>
@@ -76,27 +80,19 @@ const CustomersList = () => {
           <tbody className="divide-y divide-slate-100 text-sm">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={columnCount} className="p-8 text-center text-slate-400">
-                  No customers in this category.
-                </td>
+                <td colSpan={columnCount} className="p-8 text-center text-slate-400">No customers in this category.</td>
               </tr>
             ) : (
               rows.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
-                  <td className="p-4">
-                    <StatusBadge status={c.status} size="sm" />
-                  </td>
+                  <td className="p-4"><StatusBadge status={c.status} size="sm" /></td>
                   <td className="p-4 text-xs font-bold text-slate-500">{formatRevision(c.revision)}</td>
                   <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>
                   {activeTab === 'provisional' && (
                     <td className="p-4">
-                      {c.status === STATUS.PROVISIONAL_ACTIVE ? (
-                        <Countdown expiryDate={c.provisionalExpiryDate} />
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
+                      {c.status === STATUS.PROVISIONAL_ACTIVE ? <Countdown expiryDate={c.provisionalExpiryDate} /> : <span className="text-xs text-slate-400">—</span>}
                     </td>
                   )}
                   <td className="p-4 pr-6 text-right">

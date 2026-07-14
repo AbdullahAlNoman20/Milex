@@ -1,10 +1,11 @@
 // src/Pages/modules/sales/pages/SalesDashboard.jsx
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, ShieldCheck, Target, Clock } from 'lucide-react';
+import { LayoutDashboard, FileText, ShieldCheck, Target, Clock, Plus } from 'lucide-react';
 import { useSales } from '../hooks/useSales';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { ROLES } from '../../../../Components/constants/roles';
+import { hasPermission, PERMISSIONS } from '../../../../Components/constants/permissions';
 import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
@@ -51,33 +52,56 @@ const SalesDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-800">Overview</h2>
-        <p className="text-sm text-slate-500 mt-1">Key Account Performance & Activity</p>
+      <div className="mb-6 flex flex-wrap justify-between items-end gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Overview</h2>
+          <p className="text-sm text-slate-500 mt-1">Key Account Performance & Activity</p>
+        </div>
+        {hasPermission(currentUser?.role, PERMISSIONS.CREATE_RECOMMENDATION) && (
+          <button
+            type="button"
+            onClick={() => navigate('/app/recommendations/new')}
+            className="bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition flex items-center"
+          >
+            <Plus size={16} className="mr-2" /> New Recommendation
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+        <button
+          type="button"
+          onClick={() => navigate('/app/customers?tab=customer')}
+          className="text-left bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-200 transition"
+        >
           <div className="w-8 h-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
             <LayoutDashboard size={16} />
           </div>
           <p className="text-xs text-slate-500 font-medium mb-1">Active Accounts</p>
           <p className="text-2xl font-bold text-slate-800">{activeCount}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/app/tasks')}
+          className="text-left bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-indigo-200 transition"
+        >
           <div className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
             <FileText size={16} />
           </div>
           <p className="text-xs text-slate-500 font-medium mb-1">Pipeline Accounts</p>
           <p className="text-2xl font-bold text-slate-800">{pipelineCount}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/app/tasks')}
+          className="text-left bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md hover:border-emerald-200 transition"
+        >
           <div className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
             <ShieldCheck size={16} />
           </div>
           <p className="text-xs text-slate-500 font-medium mb-1">Your Queue</p>
           <p className="text-2xl font-bold text-slate-800">{pendingTasks.length}</p>
-        </div>
+        </button>
         <div className="bg-gradient-to-br from-emerald-800 to-slate-900 p-5 rounded-xl border border-emerald-900 text-white">
           <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center mb-3">
             <Target size={16} />

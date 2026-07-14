@@ -33,6 +33,7 @@ export const RATE_FOR_OPTIONS = Object.freeze(['Import', 'Export', 'Both']);
 
 export const buildEmptyShippingRow = () => ({
   shipmentType: [],
+  shipmentTypeOther: '',
   rateFor: '',
   country: '',
   volume: '',
