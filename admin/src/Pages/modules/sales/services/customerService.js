@@ -161,3 +161,8 @@ export const getDocumentSignedUrl = async (storageKey) => {
   const { data } = await request(`/files/${encodeURIComponent(storageKey)}/signed-url`);
   return data.url;
 };
+
+export const updateFinalProfile = async (id, payload) => {
+  const { data } = await request(`/customers/${id}/final-profile`, { method: 'PATCH', body: payload });
+  return data.customer;
+};

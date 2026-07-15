@@ -12,14 +12,18 @@ const CustomerContactsCard = ({ contacts = [] }) => {
   return (
     <div className="bg-slate-50 rounded-xl border border-slate-200 text-xs divide-y divide-slate-200">
       {safeContacts.map((contact, i) => (
-        <div key={`${contact.type}-${i}`} className="flex flex-wrap gap-2 p-4 items-center hover:bg-white transition">
-          <span className="font-bold text-slate-800 w-full sm:w-1/3 text-xs">{humanizeStatus(contact.type)}</span>
-          <span className="w-full sm:w-1/3 text-slate-600">
+        <div key={`${contact.type}-${i}`} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 p-4 hover:bg-white transition">
+          <span className="font-bold text-slate-700 w-full sm:w-1/3 text-xs">{humanizeStatus(contact.type)}</span>
+          <span className="w-full sm:w-1/3 text-slate-400">
             {contact.name} {contact.designation && `(${contact.designation})`}
           </span>
-          <span className="w-full sm:w-1/3 sm:text-right text-slate-400 font-medium">
+          <span className="w-full sm:w-1/3 sm:text-right text-slate-400 text-xs leading-relaxed">
             {contact.mobile}
-            {contact.email ? ` | ${contact.email}` : ''}
+            {contact.email && (
+              <>
+                {' '}|<br className="hidden sm:block" /> {contact.email}
+              </>
+            )}
           </span>
         </div>
       ))}

@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/pages/CustomerDetail.jsx 
+// admin/src/Pages/modules/sales/pages/CustomerDetail.jsx — REPLACE ENTIRE FILE
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building, Printer, Timer } from 'lucide-react';
@@ -6,6 +6,7 @@ import { useSales } from '../hooks/useSales';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { ROLES } from '../../../../Components/constants/roles';
 import { STATUS, getWorkflowStageLabel } from '../constants/salesStatus';
+import { formatRateRef } from '../../../../Components/utils/format';
 import StatusBadge from '../components/StatusBadge';
 import BarcodeBadge from '../../../../Components/Shared/BarcodeBadge';
 import CustomerContactsCard from '../components/CustomerContactsCard';
@@ -20,6 +21,8 @@ import AgreementPanel from '../roles/SalesCoordinator/AgreementPanel';
 import InfoUpdateRequestPanel from '../roles/KAM/InfoUpdateRequestPanel';
 import DocumentUploadPanel from '../roles/KAM/DocumentUploadPanel';
 import DocumentsList from '../components/DocumentsList';
+import FinalAccountProfilePanel from '../roles/KAM/FinalAccountProfilePanel';
+import FinalAccountProfileView from '../components/FinalAccountProfileView';
 import TimeExtensionRequestPanel from '../roles/KAM/TimeExtensionRequestPanel';
 import FinalOnboardingReviewPanel from '../roles/LineManager/FinalOnboardingReviewPanel';
 
@@ -85,6 +88,7 @@ const CustomerDetail = () => {
   const isDocHandler = role === ROLES.KAM || role === ROLES.SALES_COORDINATOR;
   const isProvisionalActive = customer.accountProfileType === 'PROVISIONAL' && customer.status === STATUS.PROVISIONAL_ACTIVE;
   const canUploadDocs = isProvisionalActive && customer.offerAccepted && customer.agreementSent;
+ const isEditingProfile = canUploadDocs && isDocHandler && !customer.provisionalReason;
 
   const renderActionPanel = () => {
     if (customer.status === STATUS.ACTIVE) return null;
@@ -133,7 +137,7 @@ const CustomerDetail = () => {
           <h2 className="text-3xl font-black text-slate-800 mb-2">{customer.accountName}</h2>
           <div className="flex items-center gap-3 flex-wrap">
             <BarcodeBadge value={customer.barcode} />
-            {customer.rateRef && <BarcodeBadge value={`REF-${customer.rateRef}`} variant="blue" />}
+            {customer.rateRef && <BarcodeBadge value={formatRateRef(customer)} variant="blue" />}
           </div>
         </div>
         <StatusBadge status={customer.status} />
@@ -167,34 +171,37 @@ const CustomerDetail = () => {
                 <Printer size={14} className="mr-1.5" /> Print Form
               </button>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-8 text-sm mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-7 gap-x-10 text-sm mb-8">
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">ADDRESS</span>
-                <span className="font-medium text-slate-700 leading-relaxed block">{customer.address}</span>
+                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">ADDRESS</span>
+                <span className="font-semibold text-slate-800 leading-relaxed block">{customer.address}</span>
               </div>
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">BUSINESS TYPE</span>
-                <span className="font-medium text-slate-700">{customer.businessType}</span>
+                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">BUSINESS TYPE</span>
+                <span className="font-semibold text-slate-800">{customer.businessType}</span>
               </div>
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">MOBILE / EMAIL</span>
-                <span className="font-medium text-slate-700 block mb-0.5">{customer.mobile}</span>
-                <span className="text-slate-500 text-xs">{customer.email}</span>
+                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">MOBILE / EMAIL</span>
+                <span className="font-semibold text-slate-800 block mb-0.5">{customer.mobile}</span>
+                <span className="text-slate-500 text-sm">{customer.email}</span>
               </div>
               <div>
-                <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1.5">CREDIT LIMIT / PERIOD</span>
-                <span className="font-medium text-slate-700">TK {customer.creditLimitTk} ({customer.creditPeriodDays} Days)</span>
+                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">CREDIT LIMIT / PERIOD</span>
+                <span className="font-semibold text-slate-800">TK {customer.creditLimitTk} ({customer.creditPeriodDays} Days)</span>
               </div>
             </div>
-            <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-2">PRIMARY CONTACTS</span>
+            <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">PRIMARY CONTACTS</span>
             <CustomerContactsCard contacts={customer.contacts} />
             {customer.recNote && (
-              <div className="p-5 bg-[#FFFBF0] rounded-xl border border-[#FDE68A] mt-6">
-                <span className="block text-amber-700 text-[10px] uppercase font-bold tracking-widest mb-2">KAM RECOMMENDATION NOTE</span>
-                <p className="italic text-amber-900 font-bold text-sm leading-relaxed">{customer.recNote}</p>
+              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 mt-6">
+                <span className="block text-amber-600 text-[11px] uppercase font-bold tracking-widest mb-2">KAM RECOMMENDATION NOTE</span>
+                <p className="italic text-amber-700 font-bold text-sm leading-relaxed">{customer.recNote}</p>
               </div>
             )}
           </div>
+
+          {isEditingProfile && <FinalAccountProfilePanel customer={customer} onSaved={refreshCustomer} />}
+          {!isEditingProfile && <FinalAccountProfileView customer={customer} />}
         </div>
 
         <div className="w-full lg:w-[380px] shrink-0 space-y-6">
