@@ -361,3 +361,19 @@ export const deriveFollowUps = async () => {
     }))
     .sort((a, b) => (b.isOverdue === a.isOverdue ? 0 : b.isOverdue ? 1 : -1));
 };
+
+export const updateFinalProfile = async (customerId: string, data: any, actorId: string) => {
+  const clean = sanitizeAndEscape(data);
+  const updated = await prisma.customer.update({
+    where: { id: customerId },
+    data: { ...clean, finalProfileCompleted: true },
+  });
+  await logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: 'FINAL_ACCOUNT_PROFILE_SAVED',
+    actorId,
+    afterState: clean,
+  });
+  return updated;
+};

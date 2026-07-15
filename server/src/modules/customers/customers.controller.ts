@@ -1,4 +1,4 @@
-// server/src/modules/customers/customers.controller.ts 
+// server/src/modules/customers/customers.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import * as customersService from './customers.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
@@ -80,6 +80,7 @@ export const decideInfoUpdateHandler = wrap((req) =>
   customersService.decideInfoUpdate(asString(req.params.id), req.body.approve, req.user!.id)
 );
 export const updateFollowUpHandler = wrap((req) => customersService.updateFollowUp(asString(req.params.id), req.body, req.user!.id));
+export const updateFinalProfileHandler = wrap((req) => customersService.updateFinalProfile(asString(req.params.id), req.body, req.user!.id));
 
 export const listFollowUpsHandler = async (_req: Request, res: Response, next: NextFunction) => {
   try {

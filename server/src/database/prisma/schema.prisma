@@ -165,6 +165,22 @@ model Customer {
   offerAccepted            Boolean            @default(false)
   agreementText            String?
   agreementSent            Boolean            @default(false)
+
+  // Final Account Profile Data (filled by KAM/SC once Agreement is signed)
+  finalProfileCompleted    Boolean            @default(false)
+  provisionalReason        String?
+  managingPartnerName      String?
+  binNumber                String?
+  tinNumber                String?
+  destinations             String?
+  preferredCarrier         String?
+  natureOfBusiness         String?
+  gainType                 String?
+  financeMode              String?
+  area                     String?
+  zone                     String?
+  specialInstructions      String?
+
   revision                 Int                @default(0)
   status                   CustomerStatus     @default(PENDING_RATE_PREPARATION)
   accountProfileType       AccountProfileType @default(REGULAR)
@@ -213,10 +229,11 @@ model Contact {
 }
 
 model ShippingDetail {
-  id           String   @id @default(uuid())
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  shipmentType String[]
+  id                String   @id @default(uuid())
+  customerId        String
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  shipmentType      String[]
+  shipmentTypeOther String?
   rateFor      String
   country      String
   volume       String

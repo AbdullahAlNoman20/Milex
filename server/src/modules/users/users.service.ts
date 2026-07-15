@@ -93,3 +93,41 @@ export const updateUser = async (
   });
   return toSafeUser(user);
 };
+
+export const listStaffDirectory = async () => {
+  const staff = await prisma.user.findMany({
+    where: { role: { name: { in: ['KAM', 'SALES_COORDINATOR'] } }, isActive: true },
+    select: { id: true, name: true, email: true, role: { select: { name: true } } },
+    orderBy: [{ name: 'asc' }],
+  });
+  return staff.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role.name }));
+};
+
+// Combines two existing, already-populated tables — LoginLog (from every
+// login attempt) and AuditLog (from every logAudit() call across the app,
+// which is already wired into rate approvals, offers, agreements, document
+// uploads, weekly plans, etc.) — into one timeline. No new logging pipeline
+// needed; this just reads what's already being recorded.
+export const getUserActivity = async (userId: string) => {
+  const [logins, actions] = await Promise.all([
+    prisma.loginLog.findMany({ where: { userId, success: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.auditLog.findMany({ where: { actorId: userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+  ]);
+  const merged = [
+    ...logins.map((l) => ({
+      type: 'LOGIN' as const,
+      action: 'LOGGED IN',
+      entity: null as string | null,
+      createdAt: l.createdAt,
+      ip: l.ip,
+    })),
+    ...actions.map((a) => ({
+      type: 'ACTION' as const,
+      action: a.action,
+      entity: a.entity,
+      createdAt: a.createdAt,
+      ip: a.ip,
+    })),
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return merged.slice(0, 150);
+};

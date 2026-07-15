@@ -14,6 +14,7 @@ const contactSchema = z
 const shippingDetailSchema = z
   .object({
     shipmentType: z.array(z.enum(['Document', 'Non-Document', 'Others'])).min(1),
+    shipmentTypeOther: z.string().max(150).optional(),
     rateFor: z.enum(['Import', 'Export', 'Both']),
     country: z.string().min(1).max(80),
     volume: z.string().min(1),
@@ -78,6 +79,23 @@ export const followUpUpdateSchema = z
   .object({
     followUpDate: z.string().datetime().nullable().optional(),
     followUpNote: z.string().max(500).optional(),
+  })
+  .strict();
+
+export const finalProfileSchema = z
+  .object({
+    provisionalReason: z.string().min(1).max(500),
+    managingPartnerName: z.string().max(150).optional(),
+    binNumber: z.string().max(50).optional(),
+    tinNumber: z.string().max(50).optional(),
+    destinations: z.string().max(500).optional(),
+    preferredCarrier: z.string().max(150).optional(),
+    natureOfBusiness: z.string().max(150).optional(),
+    gainType: z.enum(['NEW_GAIN', 'REGAIN', 'AC_UPDATE']).optional(),
+    financeMode: z.enum(['EX', 'FR']).optional(),
+    area: z.string().max(100).optional(),
+    zone: z.string().max(100).optional(),
+    specialInstructions: z.string().max(500).optional(),
   })
   .strict();
 
