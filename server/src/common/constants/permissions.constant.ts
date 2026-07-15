@@ -1,4 +1,4 @@
-// src/common/constants/permissions.constant.ts
+// server/src/common/constants/permissions.constant.ts  
 export const PERMISSIONS = Object.freeze({
   CREATE_RECOMMENDATION: 'CREATE_RECOMMENDATION',
   REVISE_RECOMMENDATION: 'REVISE_RECOMMENDATION',
@@ -29,6 +29,7 @@ export const PERMISSIONS = Object.freeze({
   FINALIZE_ONBOARDING: 'FINALIZE_ONBOARDING',
   VIEW_AUDIT_LOG: 'VIEW_AUDIT_LOG',
   EXPORT_DATA: 'EXPORT_DATA',
+  VIEW_ACTIVITY_LOG: 'VIEW_ACTIVITY_LOG',
 });
 
 export type PermissionKey = keyof typeof PERMISSIONS;

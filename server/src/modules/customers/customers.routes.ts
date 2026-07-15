@@ -16,6 +16,7 @@ import {
   requestInfoUpdateSchema,
   decideInfoUpdateSchema,
   followUpUpdateSchema,
+  finalProfileSchema,
   listCustomersQuerySchema,
 } from './customers.schema';
 
@@ -59,5 +60,6 @@ router.post('/:id/activate-direct', requirePermission(PERMISSIONS.ACTIVATE_PROFI
 router.post('/:id/request-info-update', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(requestInfoUpdateSchema), controller.requestInfoUpdateHandler);
 router.post('/:id/decide-info-update', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), validateBody(decideInfoUpdateSchema), controller.decideInfoUpdateHandler);
 router.patch('/:id/follow-up', requirePermission(PERMISSIONS.VIEW_FOLLOWUP_REMINDERS), validateBody(followUpUpdateSchema), controller.updateFollowUpHandler);
+router.patch('/:id/final-profile', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), validateBody(finalProfileSchema), controller.updateFinalProfileHandler);
 
 export default router;

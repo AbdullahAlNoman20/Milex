@@ -1,4 +1,4 @@
-// src/modules/users/users.controller.ts
+// server/src/modules/users/users.controller.ts 
 import { Request, Response, NextFunction } from 'express';
 import * as usersService from './users.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
@@ -38,6 +38,33 @@ export const updateUserHandler = async (req: Request, res: Response, next: NextF
   try {
     const user = await usersService.updateUser(asString(req.params.id), req.body, req.user!.id);
     return sendSuccess(res, { user });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listDirectoryHandler = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const staff = await usersService.listStaffDirectory();
+    return sendSuccess(res, { staff });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getMyActivityHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await usersService.getUserActivity(req.user!.id);
+    return sendSuccess(res, { items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getUserActivityHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await usersService.getUserActivity(asString(req.params.id));
+    return sendSuccess(res, { items });
   } catch (err) {
     next(err);
   }
