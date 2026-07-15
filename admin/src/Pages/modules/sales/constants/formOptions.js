@@ -51,6 +51,17 @@ export const DOCUMENT_TYPE_OPTIONS = Object.freeze([
   'Other',
 ]);
 
+export const GAIN_TYPE_OPTIONS = Object.freeze([
+  { value: 'NEW_GAIN', label: 'N. Gain' },
+  { value: 'REGAIN', label: 'R. Gain' },
+  { value: 'AC_UPDATE', label: 'A/C Update' },
+]);
+
+export const FINANCE_MODE_OPTIONS = Object.freeze([
+  { value: 'EX', label: 'Ex' },
+  { value: 'FR', label: 'FR' },
+]);
+
 export const SIGNATURE_LIBRARY = Object.freeze({
   LM: '\n\n___________________________\nLine Manager\n[DIGITAL SIGNATURE: AUTH-LM-7738]\nMilex Logistics Auth. Signatory',
   SALES: '\n\n___________________________\nSales Coordinator\n[DIGITAL SIGNATURE: AUTH-SC-9912]\nMilex Logistics',

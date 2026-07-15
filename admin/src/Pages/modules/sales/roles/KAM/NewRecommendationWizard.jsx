@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/KAM/NewRecommendationWizard.jsx — REPLACE ENTIRE FILE
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, ArrowLeft, ArrowRight, Plus, Trash2, Save } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
@@ -60,6 +60,74 @@ const buildInitialState = (currentUser) => ({
   shipping: [buildEmptyShippingRow()],
 });
 
+const CountrySelect = ({ value, onChange, countries }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || '');
+  const blurTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    setQuery(value || '');
+  }, [value]);
+
+  useEffect(() => () => clearTimeout(blurTimeoutRef.current), []);
+
+  const filtered = (query
+    ? countries.filter((c) => c.toLowerCase().includes(query.trim().toLowerCase()))
+    : countries
+  ).slice(0, 50);
+
+  const handleSelect = (name) => {
+    clearTimeout(blurTimeoutRef.current);
+    onChange(name);
+    setQuery(name);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <input
+        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+        value={query}
+        maxLength={80}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        placeholder="Search country..."
+        onChange={(e) => {
+          setQuery(e.target.value);
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => {
+          blurTimeoutRef.current = setTimeout(() => setOpen(false), 150);
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg text-sm">
+          {filtered.map((c) => (
+            <li
+              key={c}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleSelect(c);
+              }}
+              className="px-3 py-2 hover:bg-emerald-50 cursor-pointer"
+            >
+              {c}
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && query && filtered.length === 0 && (
+        <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg text-sm">
+          <li className="px-3 py-2 text-slate-400">No matching country</li>
+        </ul>
+      )}
+    </div>
+  );
+};
+
 const NewRecommendationWizard = () => {
   const { addCustomer } = useSales();
   const { currentUser } = useAuth();
@@ -84,8 +152,35 @@ const NewRecommendationWizard = () => {
     } catch {
       /* corrupted draft — ignore silently */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const [countries, setCountries] = useState([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch('https://countriesnow.space/api/v0.1/countries', {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error('Failed to fetch countries');
+        const json = await res.json();
+        if (json?.error === false && Array.isArray(json.data)) {
+          const names = json.data
+            .map((c) => (typeof c?.country === 'string' ? c.country.trim() : ''))
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+          setCountries(names);
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          showToast('Could not load country list', 'error');
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [showToast]);
 
   const { form, contacts, sameAsKey, shipping } = state;
 
@@ -578,11 +673,10 @@ const handleSubmit = async () => {
                       </select>
                     </FormField>
                     <FormField label="Destination Country" required>
-                      <input
-                        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                      <CountrySelect
                         value={row.country}
-                        maxLength={80}
-                        onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, country: e.target.value } : r)))}
+                        countries={countries}
+                        onChange={(v) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, country: v } : r)))}
                       />
                     </FormField>
                     <FormField label="Avg Monthly Volume" required>
