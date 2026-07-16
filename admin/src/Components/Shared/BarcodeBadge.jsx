@@ -2,14 +2,15 @@
 import React, { useMemo } from 'react';
 import { FileDigit } from 'lucide-react';
 
-const BARCODE_PATTERN = /^[A-Z0-9]{5,20}$/;
+const BARCODE_PATTERN = /^(REF-)?[A-Z0-9]{5,20}(-R[0-9]+)?$/;
 
 const BarcodeBadge = ({ value, variant = 'default', className = '' }) => {
   const isValid = useMemo(() => typeof value === 'string' && BARCODE_PATTERN.test(value), [value]);
   const bars = useMemo(() => {
     if (!isValid) return [];
     let seed = 0;
-    for (let i = 0; i < value.length; i++) seed = (seed * 31 + value.charCodeAt(i)) >>> 0;
+    const base = value.replace(/^REF-/, '').split('-R')[0];
+    for (let i = 0; i < base.length; i++) seed = (seed * 31 + base.charCodeAt(i)) >>> 0;
     return Array.from({ length: 32 }, (_, i) => {
       seed = (seed * 1103515245 + 12345) >>> 0;
       return (seed % 100) > 50 ? 2 : 4;
