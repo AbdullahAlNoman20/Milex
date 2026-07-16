@@ -137,7 +137,7 @@ const CustomerDetail = () => {
           <h2 className="text-3xl font-black text-slate-800 mb-2">{customer.accountName}</h2>
           <div className="flex items-center gap-3 flex-wrap">
             <BarcodeBadge value={customer.barcode} />
-            {customer.rateRef && <BarcodeBadge value={formatRateRef(customer)} variant="blue" />}
+             {customer.rateRef && <BarcodeBadge value={formatRateRef(customer)} variant="blue" showBars={false} />}
           </div>
         </div>
         <StatusBadge status={customer.status} />
