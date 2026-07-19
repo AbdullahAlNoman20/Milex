@@ -4,6 +4,9 @@ import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
 import { transitionCustomerStatus } from '../../common/utils/stateMachine.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from './sanitize.helper';
+import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
+import { runFileScan } from '../../jobs/file-scan.job';
+import { humanizeStatus } from '../../common/utils/humanize.util';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
 const generateRateRef = () => `MLX${Math.floor(1000000 + Math.random() * 9000000)}`;
@@ -377,3 +380,256 @@ export const updateFinalProfile = async (customerId: string, data: any, actorId:
   });
   return updated;
 };
+
+export const setAccountConfigMode = async (customerId: string, mode: 'REGULAR' | 'PROVISIONAL', actorId: string) => {
+  const updated = await prisma.customer.update({ where: { id: customerId }, data: { accountConfigMode: mode } });
+  await logAudit({ entity: 'Customer', entityId: customerId, action: 'ACCOUNT_CONFIG_MODE_SET', actorId, afterState: { accountConfigMode: mode } });
+  return updated;
+};
+
+// Regular-mode final onboarding: no document window, no LM re-review — the
+// only Line Manager approval in this revised workflow is the original rate
+// approval. Saving the final profile directly activates the account.
+export const submitFinalOnboardingRegular = async (customerId: string, actorId: string) => {
+  return transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.ACTIVE_ACCOUNT,
+    actorId,
+    extraUpdates: { accountProfileType: 'REGULAR' },
+    historyAction: 'FINAL ONBOARDING COMPLETED (REGULAR ACCOUNT) — ACCOUNT ACTIVATED',
+  });
+};
+
+export type EditFieldType = 'text' | 'textarea' | 'number' | 'select' | 'document';
+
+export interface EditFieldDef {
+  label: string;
+  type: EditFieldType;
+  options?: { value: string; label: string }[];
+}
+
+export const EDITABLE_FIELDS: Record<string, EditFieldDef> = {
+  accountName: { label: 'Account Name', type: 'text' },
+  address: { label: 'Address', type: 'textarea' },
+  phone: { label: 'Phone', type: 'text' },
+  email: { label: 'Email', type: 'text' },
+  businessType: {
+    label: 'Business Type', type: 'select',
+    options: ['Leather', 'Garments', 'Textile', 'Electronics', 'Pharmaceuticals'].map((v) => ({ value: v, label: v })),
+  },
+  serviceRequired: {
+    label: 'Service Required', type: 'select',
+    options: [{ value: 'IB', label: 'IB' }, { value: 'OB', label: 'OB' }, { value: 'BOTH', label: 'BOTH' }],
+  },
+  accountMode: {
+    label: 'Account Mode', type: 'select',
+    options: [{ value: 'Express', label: 'Express' }, { value: 'Fair', label: 'Fair' }],
+  },
+  accountType: {
+    label: 'Account Type', type: 'select',
+    options: [{ value: 'CREDIT CUSTOMER', label: 'Credit Customer' }, { value: 'CASH', label: 'Cash' }],
+  },
+  creditLimitTk: { label: 'Credit Limit (TK)', type: 'number' },
+  creditPeriodDays: { label: 'Credit Period (Days)', type: 'number' },
+  managingPartnerName: { label: 'Managing Partner', type: 'text' },
+  binNumber: { label: 'BIN Number', type: 'text' },
+  tinNumber: { label: 'TIN Number', type: 'text' },
+  destinations: { label: 'Destinations', type: 'textarea' },
+  preferredCarrier: { label: 'Preferred Carrier', type: 'text' },
+  natureOfBusiness: { label: 'Nature of Business', type: 'text' },
+  gainType: {
+    label: 'Type', type: 'select',
+    options: [{ value: 'NEW_GAIN', label: 'N. Gain' }, { value: 'REGAIN', label: 'R. Gain' }, { value: 'AC_UPDATE', label: 'A/C Update' }],
+  },
+  financeMode: {
+    label: 'Mode', type: 'select',
+    options: [{ value: 'EX', label: 'Ex' }, { value: 'FR', label: 'FR' }],
+  },
+  area: { label: 'Area', type: 'text' },
+  zone: { label: 'Zone', type: 'text' },
+  specialInstructions: { label: 'Special Instructions', type: 'textarea' },
+};
+
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  SIGNED_OFFER_LETTER: 'Signed Offer Letter', OFFER_RATE_RECEIPT: 'Offer & Rate Receipt',
+  SIGNED_AGREEMENT: 'Signed Agreement', CUSTOMER_TIN: 'Customer TIN', CUSTOMER_BIN: 'Customer BIN',
+  TRADE_LICENSE: 'Trade License', OTHERS: 'Other Document',
+};
+
+const CONTACT_COLUMNS: Record<string, string> = { name: 'Name', designation: 'Designation', mobile: 'Mobile', email: 'Email' };
+const CONTACT_KEY_RE = /^contact:([a-zA-Z0-9-]{10,50}):(name|designation|mobile|email)$/;
+
+const parseContactKey = (fieldKey: string) => {
+  const m = CONTACT_KEY_RE.exec(fieldKey);
+  return m ? { contactId: m[1], column: m[2] } : null;
+};
+
+const resolveFieldLabelAndOldValue = async (customerId: string, fieldKey: string) => {
+  const contactRef = parseContactKey(fieldKey);
+  if (contactRef) {
+    const contact = await prisma.contact.findFirst({ where: { id: contactRef.contactId, customerId } });
+    if (!contact) return null;
+    return {
+      label: `${humanizeStatus(contact.type)} — ${CONTACT_COLUMNS[contactRef.column]}`,
+      oldValue: (contact as any)[contactRef.column] ?? null,
+    };
+  }
+  const def = EDITABLE_FIELDS[fieldKey];
+  if (!def) return null;
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  return { label: def.label, oldValue: (customer as any)?.[fieldKey]?.toString() ?? null };
+};
+
+export const requestFieldChange = async (
+  customerId: string,
+  fieldKey: string | undefined,
+  newValue: string | undefined,
+  reason: string | undefined,
+  documentType: string | undefined,
+  requesterId: string
+) => {
+  const isDocRequest = !!documentType;
+  let label: string | undefined;
+  let oldValue: string | null = null;
+
+  if (isDocRequest) {
+    label = DOCUMENT_TYPE_LABELS[documentType!];
+  } else {
+    if (!fieldKey) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'fieldKey is required' };
+    const resolved = await resolveFieldLabelAndOldValue(customerId, fieldKey);
+    if (!resolved) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be requested for edit' };
+    label = resolved.label;
+    oldValue = resolved.oldValue;
+  }
+  if (!label) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be requested for edit' };
+  if (!isDocRequest && !newValue?.trim()) throw { statusCode: 400, code: 'MISSING_VALUE', message: 'A new value is required' };
+
+  const clean = sanitizeAndEscape({ v: newValue || '', r: reason || '' });
+  const request = await prisma.fieldChangeRequest.create({
+    data: {
+      customerId,
+      fieldKey: isDocRequest ? `document:${documentType}` : fieldKey!,
+      fieldLabel: label,
+      oldValue: isDocRequest ? null : oldValue,
+      newValue: isDocRequest ? null : clean.v,
+      reason: clean.r || null,
+      documentType: documentType || null,
+      requestedById: requesterId,
+    },
+  });
+  await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_CHANGE_REQUESTED', actorId: requesterId, afterState: { fieldKey, documentType } });
+  return request;
+};
+
+export const requestDocumentChange = async (
+  customerId: string,
+  documentType: string,
+  reason: string | undefined,
+  fileBuffer: Buffer,
+  originalName: string,
+  requesterId: string
+) => {
+  const label = DOCUMENT_TYPE_LABELS[documentType];
+  if (!label) throw { statusCode: 400, code: 'INVALID_DOCUMENT_TYPE', message: 'Unknown document category' };
+
+  const { storageKey, mimeType, sizeBytes } = await uploadFileToSupabase(fileBuffer, originalName);
+  const clean = sanitizeAndEscape({ r: reason || '', n: originalName });
+
+  const request = await prisma.fieldChangeRequest.create({
+    data: {
+      customerId,
+      fieldKey: `document:${documentType}`,
+      fieldLabel: label,
+      reason: clean.r || null,
+      documentType,
+      pendingFileStorageKey: storageKey,
+      pendingFileName: clean.n,
+      pendingFileMime: mimeType,
+      pendingFileSize: sizeBytes,
+      requestedById: requesterId,
+    },
+  });
+  await logAudit({ entity: 'Customer', entityId: customerId, action: 'DOCUMENT_REUPLOAD_REQUESTED', actorId: requesterId, afterState: { documentType } });
+  return request;
+};
+
+export const listFieldChangeRequests = async (customerId: string) =>
+  prisma.fieldChangeRequest.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' } });
+
+export const decideFieldChangeRequest = async (requestId: string, approve: boolean, lmId: string) => {
+  const request = await prisma.fieldChangeRequest.findUniqueOrThrow({ where: { id: requestId } });
+  await prisma.fieldChangeRequest.update({
+    where: { id: requestId },
+    data: { approved: approve, decidedById: lmId, decidedAt: new Date() },
+  });
+
+  if (approve && request.documentType && request.pendingFileStorageKey) {
+    const existing = await prisma.onboardingDocument.findFirst({
+      where: { customerId: request.customerId, documentType: request.documentType },
+    });
+    const doc = existing
+      ? await prisma.onboardingDocument.update({
+          where: { id: existing.id },
+          data: {
+            originalName: request.pendingFileName!,
+            storageKey: request.pendingFileStorageKey,
+            mimeType: request.pendingFileMime!,
+            sizeBytes: request.pendingFileSize!,
+            uploadedById: request.requestedById,
+            scanStatus: 'PENDING',
+          },
+        })
+      : await prisma.onboardingDocument.create({
+          data: {
+            customerId: request.customerId,
+            documentType: request.documentType,
+            originalName: request.pendingFileName!,
+            storageKey: request.pendingFileStorageKey,
+            mimeType: request.pendingFileMime!,
+            sizeBytes: request.pendingFileSize!,
+            uploadedById: request.requestedById,
+            scanStatus: 'PENDING',
+          },
+        });
+    await runFileScan(doc.id);
+    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'DOCUMENT_REUPLOAD_APPROVED', actorId: lmId, afterState: { documentType: request.documentType } });
+  } else if (approve && request.documentType) {
+    // Approved a re-upload slot request that has no file attached yet
+    // (e.g. requested via the old checkbox-only flow) — no-op besides the log.
+    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'DOCUMENT_REUPLOAD_APPROVED', actorId: lmId, afterState: { documentType: request.documentType } });
+  } else if (approve) {
+    const contactRef = parseContactKey(request.fieldKey);
+    if (contactRef) {
+      await prisma.contact.update({ where: { id: contactRef.contactId }, data: { [contactRef.column]: request.newValue } });
+    } else {
+      await prisma.customer.update({ where: { id: request.customerId }, data: { [request.fieldKey]: request.newValue } });
+    }
+    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'FIELD_CHANGE_APPROVED', actorId: lmId, afterState: { [request.fieldKey]: request.newValue } });
+  } else {
+    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'FIELD_CHANGE_REJECTED', actorId: lmId });
+  }
+  return prisma.customer.findUniqueOrThrow({ where: { id: request.customerId } });
+};
+
+// Line Manager can also just edit any field (including contact sub-fields)
+// directly, bypassing the request flow entirely.
+export const directFieldEdit = async (customerId: string, fieldKey: string, newValue: string, lmId: string) => {
+  const contactRef = parseContactKey(fieldKey);
+  const clean = sanitizeAndEscape({ v: newValue });
+
+  if (contactRef) {
+    const contact = await prisma.contact.findFirst({ where: { id: contactRef.contactId, customerId } });
+    if (!contact) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'Contact not found on this customer' };
+    await prisma.contact.update({ where: { id: contactRef.contactId }, data: { [contactRef.column]: clean.v } });
+    await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_DIRECTLY_EDITED_BY_LM', actorId: lmId, afterState: { fieldKey, value: clean.v } });
+    return prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+  }
+
+  if (!EDITABLE_FIELDS[fieldKey]) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be edited' };
+  const updated = await prisma.customer.update({ where: { id: customerId }, data: { [fieldKey]: clean.v } });
+  await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_DIRECTLY_EDITED_BY_LM', actorId: lmId, afterState: { [fieldKey]: clean.v } });
+  return updated;
+};
+
+export const getEditableFieldDefs = () =>
+  Object.entries(EDITABLE_FIELDS).map(([key, def]) => ({ key, ...def }));

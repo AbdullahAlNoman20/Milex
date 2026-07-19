@@ -1,14 +1,33 @@
-// src/Components/Shared/NotificationBell.jsx
-import React, { useState, useRef, useEffect } from 'react';
+// admin/src/Components/Shared/NotificationBell.jsx
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
-import { useNotifications } from '../hooks/useNotifications';
+import { listNotifications, markNotificationRead } from '../services/notificationService';
+
+const REFRESH_MS = 15000;
+const BELL_LIMIT = 8;
 
 const NotificationBell = () => {
-  const { notifications, count } = useNotifications();
+  const [items, setItems] = useState([]);
+  const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
+
+  const refresh = useCallback(() => {
+    listNotifications(BELL_LIMIT)
+      .then((data) => {
+        setItems(data.items || []);
+        setCount(data.count || 0);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, REFRESH_MS);
+    return () => clearInterval(id);
+  }, [refresh]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -17,6 +36,16 @@ const NotificationBell = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleSelect = async (n) => {
+    setOpen(false);
+    if (!n.isRead) {
+      setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, isRead: true } : i)));
+      setCount((c) => Math.max(0, c - 1));
+      markNotificationRead(n.id).catch(() => {});
+    }
+    navigate(n.link);
+  };
 
   return (
     <div className="relative" ref={ref}>
@@ -36,23 +65,32 @@ const NotificationBell = () => {
       {open && (
         <div className="absolute right-0 mt-3 w-72 bg-white border border-slate-200 rounded-lg shadow-xl py-2 z-50 max-h-80 overflow-y-auto">
           <div className="px-4 py-2 border-b border-slate-100 font-bold text-slate-800 text-sm">Notifications</div>
-          {notifications.length === 0 ? (
+          {items.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-slate-500">No new notifications.</div>
           ) : (
-            notifications.map((n) => (
+            items.map((n) => (
               <button
                 key={n.id}
                 type="button"
-                onClick={() => {
-                  setOpen(false);
-                  navigate(n.link);
-                }}
-                className="w-full text-left px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 transition border-b border-slate-50 last:border-0"
+                onClick={() => handleSelect(n)}
+                className={`w-full text-left px-4 py-2.5 text-xs hover:bg-slate-50 transition border-b border-slate-50 last:border-0 ${
+                  n.isOverdue ? 'text-red-600 font-bold' : n.isRead ? 'text-slate-400' : 'text-slate-800 font-semibold'
+                }`}
               >
-                {n.label}
+                {n.isOverdue && '⚠ '}{n.label}
               </button>
             ))
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              navigate('/app/notifications');
+            }}
+            className="w-full text-center px-4 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition"
+          >
+            View All
+          </button>
         </div>
       )}
     </div>

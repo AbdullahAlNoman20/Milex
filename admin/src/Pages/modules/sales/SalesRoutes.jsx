@@ -16,6 +16,7 @@ import FollowUpReminderPanel from './roles/LineManager/FollowUpReminderPanel';
 import TeamReportsPage from './pages/TeamReportsPage';
 import MyActivityPage from './pages/MyActivityPage';
 import TeamActivityPage from './pages/TeamActivityPage';
+import NotificationsPage from './pages/NotificationsPage';
 import AdminOverview from './roles/Admin/AdminOverview';
 import SuperAdminOverview from './roles/SuperAdmin/SuperAdminOverview';
 
@@ -73,6 +74,7 @@ const SalesRoutes = [
     ),
   },
   { path: 'my-activity', element: <MyActivityPage /> },
+  { path: 'notifications', element: <NotificationsPage /> },
   {
     path: 'team-activity',
     element: (

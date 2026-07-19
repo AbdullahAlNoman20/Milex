@@ -1,34 +1,40 @@
-// admin/src/Pages/modules/sales/roles/KAM/TimeExtensionRequestPanel.jsx — REPLACE ENTIRE FILE
-import React, { useState } from 'react';
-import { Clock3 } from 'lucide-react';
-import { useToast } from '../../../../../Components/hooks/useToast';
-import { requestTimeExtension } from '../../services/customerService';
-import { isRequired } from '../../../../../Components/utils/validators';
+// admin/src/Pages/modules/sales/roles/KAM/TimeExtensionRequestPanel.jsx
+import React, { useState } from "react";
+import { Clock3 } from "lucide-react";
+import { useToast } from "../../../../../Components/hooks/useToast";
+import { requestTimeExtension } from "../../services/customerService";
+import { isRequired } from "../../../../../Components/utils/validators";
 
 const MAX_REQUESTABLE_DAYS = 90;
 
 const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
   const { showToast } = useToast();
-  const [requestedDays, setRequestedDays] = useState('5');
-  const [reason, setReason] = useState('');
+  const [requestedDays, setRequestedDays] = useState("5");
+  const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRequestExtension = async () => {
     if (isSubmitting) return;
     const days = Number(requestedDays);
     if (!Number.isFinite(days) || days < 1 || days > MAX_REQUESTABLE_DAYS) {
-      return showToast(`Requested days must be between 1 and ${MAX_REQUESTABLE_DAYS}`, 'warning');
+      return showToast(
+        `Requested days must be between 1 and ${MAX_REQUESTABLE_DAYS}`,
+        "warning",
+      );
     }
-    if (!isRequired(reason)) return showToast('Reason is required', 'warning');
+    if (!isRequired(reason)) return showToast("Reason is required", "warning");
 
     setIsSubmitting(true);
     try {
       const updated = await requestTimeExtension(customer.id, days, reason);
-      showToast('Time extension requested — awaiting Line Manager decision', 'success');
+      showToast(
+        "Time extension requested — awaiting Line Manager decision",
+        "success",
+      );
       onUpdated?.(updated);
-      setReason('');
+      setReason("");
     } catch (err) {
-      showToast(err?.message || 'Request failed', 'error');
+      showToast(err?.message || "Request failed", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -37,9 +43,12 @@ const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-3">
       <h3 className="font-bold text-slate-900 text-base flex items-center">
-        <Clock3 size={18} className="mr-2 text-purple-600" /> Request Time Extension
+        <Clock3 size={18} className="mr-2 text-purple-600" /> Request Time
+        Extension
       </h3>
-      <p className="text-xs text-slate-500">Default 5 days — Line Manager may grant more if needed.</p>
+      <p className="text-xs text-slate-500">
+        Default 5 days — Line Manager may grant more if needed.
+      </p>
       <input
         type="number"
         min="1"

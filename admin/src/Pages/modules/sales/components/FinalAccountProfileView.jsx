@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/components/FinalAccountProfileView.jsx 
+// admin/src/Pages/modules/sales/components/FinalAccountProfileView.jsx
 import React from 'react';
 import { ClipboardCheck } from 'lucide-react';
 import { GAIN_TYPE_OPTIONS, FINANCE_MODE_OPTIONS } from '../constants/formOptions';
@@ -20,12 +20,7 @@ const FinalAccountProfileView = ({ customer }) => {
       <h3 className="font-bold text-slate-900 text-base flex items-center">
         <ClipboardCheck size={18} className="mr-2 text-purple-600" /> Final Account Profile Data
       </h3>
-      {customer.provisionalReason && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <span className="block text-amber-600 text-[10px] uppercase font-bold tracking-widest mb-1">Reason for Provisional</span>
-          <p className="text-sm text-amber-800">{customer.provisionalReason}</p>
-        </div>
-      )}
+      
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Field label="Managing Partner" value={customer.managingPartnerName} />
         <Field label="BIN Number" value={customer.binNumber} />

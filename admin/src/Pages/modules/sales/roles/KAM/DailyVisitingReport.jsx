@@ -1,27 +1,26 @@
-// admin/src/Pages/modules/sales/roles/KAM/DailyVisitingReport.jsx — REPLACE ENTIRE FILE
-import React, { useState, useCallback, useEffect } from 'react';
-import { Plus, Trash2, Send, History, ChevronDown, ChevronUp } from 'lucide-react';
+// admin/src/Pages/modules/sales/roles/KAM/DailyVisitingReport.jsx 
+import { useState, useCallback, useEffect } from 'react';
+import { Plus, Trash2, CheckCircle2, XCircle, History, ChevronDown, ChevronUp, Loader2, Lock } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { getReportByDate, saveReport, listMyReports } from '../../services/dailyReportService';
-import { isRequired } from '../../../../../Components/utils/validators';
-import Loader from '../../../../../Components/Shared/Loader';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 const buildEmptyEntry = () => ({
   id: `e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   customerName: '',
-  completed: true,
+  completed: null,
   reasonIfNotCompleted: '',
   outcomeNotes: '',
+  sourceVisitId: null,
 });
 
 const DailyVisitingReport = () => {
   const { showToast } = useToast();
   const [date, setDate] = useState(todayISO());
-  const [visits, setVisits] = useState([buildEmptyEntry()]);
-  const [submitted, setSubmitted] = useState(false);
+  const [visits, setVisits] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
   const [history, setHistory] = useState([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [expandedReportId, setExpandedReportId] = useState(null);
@@ -32,19 +31,17 @@ const DailyVisitingReport = () => {
       .catch(() => setHistory([]));
   }, []);
 
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
-
   const loadForDate = useCallback(async (targetDate) => {
     setIsLoading(true);
     try {
       const existing = await getReportByDate(targetDate);
-      setVisits(existing?.visits?.length ? existing.visits : [buildEmptyEntry()]);
-      setSubmitted(!!existing);
+      setVisits(
+        existing?.visits?.length
+          ? existing.visits.map((v) => ({ ...v, reasonIfNotCompleted: v.reasonIfNotCompleted || '', outcomeNotes: v.outcomeNotes || '' }))
+          : [buildEmptyEntry()]
+      );
     } catch {
       setVisits([buildEmptyEntry()]);
-      setSubmitted(false);
     } finally {
       setIsLoading(false);
     }
@@ -52,41 +49,55 @@ const DailyVisitingReport = () => {
 
   useEffect(() => {
     loadForDate(date);
+    loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [date]);
 
-  const handleDateChange = (newDate) => {
-    setDate(newDate);
-    loadForDate(newDate);
-  };
+  const handleDateChange = (newDate) => setDate(newDate);
 
-  const updateVisit = (id, updated) => setVisits((prev) => prev.map((v) => (v.id === id ? updated : v)));
-  const removeVisit = (id) => setVisits((prev) => prev.filter((v) => v.id !== id));
+  const updateLocal = (id, updated) => setVisits((prev) => prev.map((v) => (v.id === id ? updated : v)));
   const addVisit = () => setVisits((prev) => [...prev, buildEmptyEntry()]);
+  const removeVisit = (id) => setVisits((prev) => prev.filter((v) => v.id !== id));
 
-  const handleSubmit = async () => {
-    if (visits.length === 0) return showToast('Add at least one visit entry', 'warning');
-    const invalid = visits.find(
-      (v) => !isRequired(v.customerName) || (!v.completed && !isRequired(v.reasonIfNotCompleted))
-    );
-    if (invalid) {
-      return showToast(
-        'Every visit needs a customer name; incomplete visits require a reason before submission',
-        'warning'
-      );
-    }
-    try {
-      const saved = await saveReport({ date, visits });
-      setVisits(saved.visits);
-      setSubmitted(true);
-      showToast('Daily visiting report submitted', 'success');
-      loadHistory();
-    } catch (err) {
-      showToast(err?.message || 'Failed to submit report', 'error');
-    }
+  const persist = useCallback(
+    async (nextVisits, id) => {
+      setSavingId(id);
+      try {
+        const saved = await saveReport({ date, visits: nextVisits });
+        setVisits(saved.visits.map((v) => ({ ...v, reasonIfNotCompleted: v.reasonIfNotCompleted || '', outcomeNotes: v.outcomeNotes || '' })));
+        loadHistory();
+      } catch (err) {
+        showToast(err?.message || 'Failed to save', 'error');
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [date, showToast, loadHistory]
+  );
+
+  const handleDone = (v) => {
+    if (!v.customerName.trim()) return showToast('Enter a customer name first', 'warning');
+    const updated = { ...v, completed: true, reasonIfNotCompleted: '' };
+    updateLocal(v.id, updated);
+    persist(visits.map((r) => (r.id === v.id ? updated : r)), v.id);
   };
 
-  if (isLoading) return <Loader fullScreen label="Loading report..." />;
+  const handleSkip = (v) => {
+    if (!v.customerName.trim()) return showToast('Enter a customer name first', 'warning');
+    updateLocal(v.id, { ...v, completed: false });
+  };
+
+  const handleReasonBlur = (v) => {
+    if (v.completed !== false || !v.reasonIfNotCompleted?.trim()) return;
+    persist(visits.map((r) => (r.id === v.id ? v : r)), v.id);
+  };
+
+  const handleOutcomeBlur = (v) => {
+    if (v.completed === null || !v.customerName.trim()) return;
+    persist(visits.map((r) => (r.id === v.id ? v : r)), v.id);
+  };
+
+  if (isLoading) return <div className="text-center py-16 text-sm text-slate-400">Loading report...</div>;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -101,75 +112,103 @@ const DailyVisitingReport = () => {
         />
       </div>
 
-      {submitted && (
-        <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-xs text-emerald-700 font-semibold">
-          A report for this date has already been submitted. Edits here will update it.
-        </div>
-      )}
-
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-        {visits.map((v) => (
-          <div key={v.id} className="border border-slate-200 rounded-lg p-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <input
-                className="border border-slate-200 p-2.5 rounded text-sm outline-none focus:border-emerald-500"
-                placeholder="Customer name"
-                value={v.customerName}
-                maxLength={200}
-                onChange={(e) => updateVisit(v.id, { ...v, customerName: e.target.value })}
-              />
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={v.completed}
-                  onChange={(e) => updateVisit(v.id, { ...v, completed: e.target.checked, reasonIfNotCompleted: e.target.checked ? '' : v.reasonIfNotCompleted })}
-                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                Visit completed
-              </label>
+        {visits.map((v) => {
+          const fromPlan = !!v.sourceVisitId;
+          return (
+            <div key={v.id} className="border border-slate-200 rounded-lg p-4 space-y-3 relative">
+              {savingId === v.id && (
+                <span className="absolute top-3 right-3 text-slate-400"><Loader2 size={14} className="animate-spin" /></span>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Customer Name {fromPlan && <Lock size={10} />}
+                  </label>
+                  <input
+                    disabled={fromPlan}
+                    className={`w-full border p-2.5 rounded text-sm outline-none focus:border-emerald-500 ${fromPlan ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200'}`}
+                    placeholder="Customer name"
+                    value={v.customerName}
+                    maxLength={200}
+                    onChange={(e) => updateLocal(v.id, { ...v, customerName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Purpose {fromPlan && <Lock size={10} />}
+                  </label>
+                  <input
+                    disabled={fromPlan}
+                    className={`w-full border p-2.5 rounded text-sm outline-none ${fromPlan ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200'}`}
+                    value={fromPlan ? v.purpose : ''}
+                    readOnly
+                    placeholder={fromPlan ? '' : 'Set from Weekly Plan'}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDone(v)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${v.completed === true ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                  <CheckCircle2 size={14} /> Done
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSkip(v)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${v.completed === false ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                >
+                  <XCircle size={14} /> Skip
+                </button>
+              </div>
+
+              {v.completed === false && (
+                <div>
+                  <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Reason for Skip</label>
+                  <textarea
+                    className="w-full border border-red-200 p-2.5 rounded text-sm outline-none focus:border-red-500 min-h-[60px]"
+                    placeholder="Reason visit was not completed"
+                    value={v.reasonIfNotCompleted}
+                    maxLength={500}
+                    onChange={(e) => updateLocal(v.id, { ...v, reasonIfNotCompleted: e.target.value })}
+                    onBlur={() => handleReasonBlur(visits.find((r) => r.id === v.id))}
+                  />
+                </div>
+              )}
+
+              {v.completed === true && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Visit Outcome / Notes</label>
+                  <textarea
+                    className="w-full border border-slate-200 p-2.5 rounded text-sm outline-none focus:border-emerald-500 min-h-[60px]"
+                    placeholder="Visit outcome / notes"
+                    value={v.outcomeNotes}
+                    maxLength={500}
+                    onChange={(e) => updateLocal(v.id, { ...v, outcomeNotes: e.target.value })}
+                    onBlur={() => handleOutcomeBlur(visits.find((r) => r.id === v.id))}
+                  />
+                </div>
+              )}
+
+              {!fromPlan && (
+                <button type="button" onClick={() => removeVisit(v.id)} className="text-xs text-red-500 font-bold flex items-center hover:text-red-700">
+                  <Trash2 size={14} className="mr-1" /> Remove
+                </button>
+              )}
             </div>
-            {!v.completed && (
-              <textarea
-                className="w-full border border-red-200 p-2.5 rounded text-sm outline-none focus:border-red-500 min-h-[60px]"
-                placeholder="Reason visit was not completed (required)"
-                value={v.reasonIfNotCompleted}
-                maxLength={500}
-                onChange={(e) => updateVisit(v.id, { ...v, reasonIfNotCompleted: e.target.value })}
-              />
-            )}
-            <textarea
-              className="w-full border border-slate-200 p-2.5 rounded text-sm outline-none focus:border-emerald-500 min-h-[60px]"
-              placeholder="Visit outcome / notes"
-              value={v.outcomeNotes}
-              maxLength={500}
-              onChange={(e) => updateVisit(v.id, { ...v, outcomeNotes: e.target.value })}
-            />
-            <button type="button" onClick={() => removeVisit(v.id)} className="text-xs text-red-500 font-bold flex items-center hover:text-red-700">
-              <Trash2 size={14} className="mr-1" /> Remove
-            </button>
-          </div>
-        ))}
+          );
+        })}
         <button type="button" onClick={addVisit} className="text-sm font-bold text-emerald-700 flex items-center hover:text-emerald-800 transition">
           <Plus size={16} className="mr-1" /> Add Visit Entry
         </button>
       </div>
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleSubmit}
-          className="px-6 py-2.5 bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center shadow-md hover:bg-emerald-800 transition"
-        >
-          <Send size={16} className="mr-2" /> {submitted ? 'Update Report' : 'Submit Report'}
-        </button>
-      </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <button
-          type="button"
-          onClick={() => setIsHistoryOpen((o) => !o)}
-          className="w-full flex justify-between items-center p-5 text-left"
-        >
+        <button type="button" onClick={() => setIsHistoryOpen((o) => !o)} className="w-full flex justify-between items-center p-5 text-left">
           <h3 className="font-bold text-slate-800 text-sm flex items-center">
             <History size={16} className="mr-2 text-slate-400" /> My Report History ({history.length})
           </h3>

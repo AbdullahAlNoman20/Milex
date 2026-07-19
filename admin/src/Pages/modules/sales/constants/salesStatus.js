@@ -66,5 +66,5 @@ export const getWorkflowStageLabel = (customer) => {
 
 export const CREDIT_RULES = Object.freeze({
   DEFAULT_PERIOD_DAYS: 15,
-  MAX_EXTENDED_PERIOD_DAYS: 19,
+  MAX_EXTENDED_PERIOD_DAYS: 90,
 });

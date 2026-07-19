@@ -1,6 +1,6 @@
-// admin/src/Components/Shared/ErrorBoundary.jsx (NEW FILE)
-import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+// admin/src/Components/Shared/ErrorBoundary.jsx
+import React from "react";
+import { AlertTriangle } from "lucide-react";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,7 +14,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     // eslint-disable-next-line no-console
-    console.error('Unhandled UI error:', error, info);
+    console.error("Unhandled UI error:", error, info);
   }
 
   handleReset = () => {
@@ -26,9 +26,12 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="min-h-[50vh] flex flex-col items-center justify-center text-center px-6">
           <AlertTriangle size={40} className="text-amber-500 mb-4" />
-          <h2 className="text-lg font-bold text-slate-800 mb-2">Something went wrong</h2>
+          <h2 className="text-lg font-bold text-slate-800 mb-2">
+            Something went wrong
+          </h2>
           <p className="text-sm text-slate-500 mb-6 max-w-sm">
-            This section hit an unexpected error. Your data is safe — try again below.
+            This section hit an unexpected error. Your data is safe — try again
+            below.
           </p>
           <button
             type="button"

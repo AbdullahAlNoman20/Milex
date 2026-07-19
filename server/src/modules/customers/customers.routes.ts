@@ -18,7 +18,10 @@ import {
   followUpUpdateSchema,
   finalProfileSchema,
   listCustomersQuerySchema,
+  fieldChangeRequestSchema,
+
 } from './customers.schema';
+import { uploadMiddleware } from '../../common/middlewares/upload.middleware';
 
 const router = Router();
 
@@ -32,6 +35,8 @@ router.get(
   requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL),
   controller.listCustomersHandler
 );
+
+router.get('/editable-fields', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE), controller.getEditableFieldDefsHandler);
 
 router.get(
   '/:barcode',
@@ -61,5 +66,12 @@ router.post('/:id/request-info-update', requirePermission(PERMISSIONS.REQUEST_IN
 router.post('/:id/decide-info-update', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), validateBody(decideInfoUpdateSchema), controller.decideInfoUpdateHandler);
 router.patch('/:id/follow-up', requirePermission(PERMISSIONS.VIEW_FOLLOWUP_REMINDERS), validateBody(followUpUpdateSchema), controller.updateFollowUpHandler);
 router.patch('/:id/final-profile', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), validateBody(finalProfileSchema), controller.updateFinalProfileHandler);
+router.post('/:id/account-config-mode', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), controller.setAccountConfigModeHandler);
+router.post('/:id/final-onboarding-regular', requirePermission(PERMISSIONS.SUBMIT_FINAL_ONBOARDING), controller.submitFinalOnboardingRegularHandler);
+router.post('/:id/field-change-request', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(fieldChangeRequestSchema), controller.requestFieldChangeHandler);
+router.post('/:id/field-change-request/document', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), uploadMiddleware.single('file'), controller.requestDocumentChangeHandler);
+router.get('/:id/field-change-request', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE), controller.listFieldChangeRequestsHandler);
+router.post('/field-change-request/:requestId/decision', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), controller.decideFieldChangeRequestHandler);
+router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), controller.directFieldEditHandler);
 
 export default router;

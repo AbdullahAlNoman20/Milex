@@ -1,4 +1,4 @@
-// src/Pages/modules/sales/services/weeklyPlanService.js — REPLACE ENTIRE FILE
+// src/Pages/modules/sales/services/weeklyPlanService.js
 import { request } from '../../../../Components/services/api';
 
 export const listPlansForKam = async () => {

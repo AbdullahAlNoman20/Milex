@@ -13,8 +13,9 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
   const [newValue, setNewValue] = useState('');
   const [rejectReason, setRejectReason] = useState('');
 
+  const [isSubmitting, setIsSubmittingLocal] = useState(false);
+
   if (mode === 'offer-feedback') {
-    const [isSubmitting, setIsSubmittingLocal] = useState(false);
 
     const handleAccept = async () => {
       if (isSubmitting) return;

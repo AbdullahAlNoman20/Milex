@@ -48,6 +48,8 @@ export const submitPlan = async (kamId: string, weekStartDate: string) => {
   const plan = await prisma.weeklyPlan.findUniqueOrThrow({
     where: { kamId_weekStartDate: { kamId, weekStartDate } },
   });
+  // No approval concept at all anymore — SUBMITTED is just a label for
+  // "finalized this session"; the plan stays fully editable afterward.
   return prisma.weeklyPlan.update({
     where: { id: plan.id },
     data: { status: 'SUBMITTED', lmComments: '' },

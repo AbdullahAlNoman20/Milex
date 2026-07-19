@@ -15,12 +15,19 @@ export const VISIT_SECTIONS = Object.freeze({
   PROSPECT: 'prospect',
 });
 
+// Work week runs Saturday → Friday.
 export const getWeekStart = (date = new Date()) => {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1) - day; // Monday as start
+  const day = d.getDay(); // 0=Sun ... 6=Sat
+  const diff = day === 6 ? 0 : -(day + 1);
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+};
+
+export const getWeekEnd = (weekStartDate) => {
+  const d = new Date(weekStartDate);
+  d.setDate(d.getDate() + 6);
   return d.toISOString().slice(0, 10);
 };
 
@@ -30,9 +37,14 @@ export const getNextWeekStart = (date = new Date()) => {
   return current.toISOString().slice(0, 10);
 };
 
-export const buildEmptyVisit = () => ({
+export const formatDateRange = (start, end) => {
+  const opts = { weekday: 'short', month: 'short', day: 'numeric' };
+  return `${new Date(start).toLocaleDateString(undefined, opts)} — ${new Date(end).toLocaleDateString(undefined, opts)}`;
+};
+
+export const buildEmptyVisit = (date = new Date().toISOString().slice(0, 10)) => ({
   id: `v_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-  day: DAYS_OF_WEEK[0],
+  day: date, // holds an ISO date string ("YYYY-MM-DD"), not a weekday name
   customerName: '',
   purpose: '',
   outcomeNotes: '',
