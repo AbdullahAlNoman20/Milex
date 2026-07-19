@@ -1,21 +1,27 @@
-// src/Components/context/AuthContext.jsx — REPLACE ENTIRE FILE
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { ALL_ROLES } from '../constants/roles';
-import { apiLogin, apiFetchMe } from '../services/api';
+// src/Components/context/AuthContext.jsx
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
+import { ALL_ROLES } from "../constants/roles";
+import { apiLogin, apiFetchMe } from "../services/api";
 
 export const AuthContext = createContext(null);
 
-const SESSION_KEY = 'milex_auth_session';
+const SESSION_KEY = "milex_auth_session";
 const SESSION_VERSION = 2;
 
 const isValidSessionShape = (obj) =>
   obj &&
-  typeof obj === 'object' &&
+  typeof obj === "object" &&
   obj.version === SESSION_VERSION &&
   obj.user &&
-  typeof obj.user.id !== 'undefined' &&
-  typeof obj.user.email === 'string' &&
-  typeof obj.user.role === 'string' &&
+  typeof obj.user.id !== "undefined" &&
+  typeof obj.user.email === "string" &&
+  typeof obj.user.role === "string" &&
   ALL_ROLES.includes(obj.user.role);
 
 const readSession = () => {
@@ -36,7 +42,10 @@ const readSession = () => {
 
 const writeSession = (user) => {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ version: SESSION_VERSION, user }));
+    sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({ version: SESSION_VERSION, user }),
+    );
   } catch {
     /* storage unavailable — fail silently */
   }
@@ -54,7 +63,7 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-useEffect(() => {
+  useEffect(() => {
     const restore = async () => {
       // No storage gate here — always ask the backend, since the httpOnly
       // refresh cookie (valid 7 days) is the real source of truth, and
@@ -74,8 +83,8 @@ useEffect(() => {
   }, []);
 
   const login = useCallback(async (email, password) => {
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      return { ok: false, error: 'Email and password are required' };
+    if (typeof email !== "string" || typeof password !== "string") {
+      return { ok: false, error: "Email and password are required" };
     }
     try {
       // Auth token lives in an httpOnly cookie set by the backend — never in
@@ -83,13 +92,13 @@ useEffect(() => {
       const { data } = await apiLogin(email.trim(), password);
       const { user } = data;
       if (!user || !ALL_ROLES.includes(user.role)) {
-        return { ok: false, error: 'Invalid login response' };
+        return { ok: false, error: "Invalid login response" };
       }
       setCurrentUser(user);
       writeSession(user);
       return { ok: true };
     } catch (err) {
-      return { ok: false, error: err?.message || 'Login failed' };
+      return { ok: false, error: err?.message || "Login failed" };
     }
   }, []);
 
@@ -99,8 +108,14 @@ useEffect(() => {
   }, []);
 
   const value = useMemo(
-    () => ({ currentUser, isAuthenticated: !!currentUser, isInitializing, login, logout }),
-    [currentUser, isInitializing, login, logout]
+    () => ({
+      currentUser,
+      isAuthenticated: !!currentUser,
+      isInitializing,
+      login,
+      logout,
+    }),
+    [currentUser, isInitializing, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -7,7 +7,7 @@ import { asString, asOptionalString } from '../../common/utils/requestParams.uti
 export const listCustomersHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    const pageSize = Math.min(300, Math.max(1, Number(req.query.pageSize) || 100));
     const result = await customersService.listCustomers(
       page,
       pageSize,
@@ -81,6 +81,67 @@ export const decideInfoUpdateHandler = wrap((req) =>
 );
 export const updateFollowUpHandler = wrap((req) => customersService.updateFollowUp(asString(req.params.id), req.body, req.user!.id));
 export const updateFinalProfileHandler = wrap((req) => customersService.updateFinalProfile(asString(req.params.id), req.body, req.user!.id));
+export const setAccountConfigModeHandler = wrap((req) => customersService.setAccountConfigMode(asString(req.params.id), req.body.mode, req.user!.id));
+export const submitFinalOnboardingRegularHandler = wrap((req) => customersService.submitFinalOnboardingRegular(asString(req.params.id), req.user!.id));
+
+export const requestFieldChangeHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const request = await customersService.requestFieldChange(
+      asString(req.params.id),
+      req.body.fieldKey,
+      req.body.newValue,
+      req.body.reason,
+      req.body.documentType,
+      req.user!.id
+    );
+    return sendSuccess(res, { request }, 201);
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const requestDocumentChangeHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const file = (req as any).file;
+    if (!file) return sendError(res, 400, 'MISSING_FILE', 'No file uploaded');
+    const documentType = asOptionalString(req.body?.documentType);
+    if (!documentType) return sendError(res, 400, 'MISSING_DOCUMENT_TYPE', 'Document type is required');
+    const reason = asOptionalString(req.body?.reason);
+    const request = await customersService.requestDocumentChange(
+      asString(req.params.id),
+      documentType,
+      reason,
+      file.buffer,
+      file.originalname,
+      req.user!.id
+    );
+    return sendSuccess(res, { request }, 201);
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const getEditableFieldDefsHandler = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    return sendSuccess(res, { fields: customersService.getEditableFieldDefs() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const listFieldChangeRequestsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await customersService.listFieldChangeRequests(asString(req.params.id));
+    return sendSuccess(res, { items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const decideFieldChangeRequestHandler = wrap((req) => customersService.decideFieldChangeRequest(asString(req.params.requestId), req.body.approve, req.user!.id));
+export const directFieldEditHandler = wrap((req) => customersService.directFieldEdit(asString(req.params.id), req.body.fieldKey, req.body.newValue, req.user!.id));
 
 export const listFollowUpsHandler = async (_req: Request, res: Response, next: NextFunction) => {
   try {

@@ -31,13 +31,7 @@ const NAV_ITEMS = [
     roles: [ROLES.KAM],
     permissions: null,
   },
-  {
-    to: '/app/weekly-plans/review',
-    label: 'Weekly Plan Review',
-    icon: CalendarDays,
-    roles: [ROLES.LINE_MANAGER],
-    permissions: null,
-  },
+
   {
     to: '/app/follow-ups',
     label: 'Follow-up Reminders',
@@ -56,6 +50,13 @@ const NAV_ITEMS = [
     to: '/app/my-activity',
     label: 'My Activity',
     icon: History,
+    roles: null,
+    permissions: null,
+  },
+  {
+    to: '/app/notifications',
+    label: 'Notifications',
+    icon: Eye,
     roles: null,
     permissions: null,
   },

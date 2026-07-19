@@ -84,20 +84,29 @@ export const followUpUpdateSchema = z
 
 export const finalProfileSchema = z
   .object({
-    provisionalReason: z.string().min(1).max(500),
-    managingPartnerName: z.string().max(150).optional(),
-    binNumber: z.string().max(50).optional(),
-    tinNumber: z.string().max(50).optional(),
-    destinations: z.string().max(500).optional(),
-    preferredCarrier: z.string().max(150).optional(),
-    natureOfBusiness: z.string().max(150).optional(),
-    gainType: z.enum(['NEW_GAIN', 'REGAIN', 'AC_UPDATE']).optional(),
-    financeMode: z.enum(['EX', 'FR']).optional(),
-    area: z.string().max(100).optional(),
-    zone: z.string().max(100).optional(),
-    specialInstructions: z.string().max(500).optional(),
+    managingPartnerName: z.string().max(150).optional().nullable(),
+    binNumber: z.string().max(50).optional().nullable(),
+    tinNumber: z.string().max(50).optional().nullable(),
+    destinations: z.string().max(500).optional().nullable(),
+    preferredCarrier: z.string().max(150).optional().nullable(),
+    natureOfBusiness: z.string().max(150).optional().nullable(),
+    gainType: z.enum(['NEW_GAIN', 'REGAIN', 'AC_UPDATE']).optional().nullable(),
+    financeMode: z.enum(['EX', 'FR']).optional().nullable(),
+    area: z.string().max(100).optional().nullable(),
+    zone: z.string().max(100).optional().nullable(),
+    specialInstructions: z.string().max(500).optional().nullable(),
   })
   .strict();
+
+export const fieldChangeRequestSchema = z
+  .object({
+    fieldKey: z.string().min(1).max(120).optional(),
+    newValue: z.string().max(2000).optional(),
+    reason: z.string().max(500).optional(),
+    documentType: z.string().min(1).max(60).optional(),
+  })
+  .strict()
+  .refine((v) => v.fieldKey || v.documentType, { message: 'Either fieldKey or documentType is required' });
 
 export const listCustomersQuerySchema = z
   .object({

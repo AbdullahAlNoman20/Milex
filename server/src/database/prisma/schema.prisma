@@ -168,7 +168,7 @@ model Customer {
 
   // Final Account Profile Data (filled by KAM/SC once Agreement is signed)
   finalProfileCompleted    Boolean            @default(false)
-  provisionalReason        String?
+  accountConfigMode        String             @default("PROVISIONAL")
   managingPartnerName      String?
   binNumber                String?
   tinNumber                String?
@@ -205,6 +205,7 @@ model Customer {
   shippingDetails ShippingDetail[]
   documents       OnboardingDocument[]
   extensionRequests TimeExtensionRequest[]
+  fieldChangeRequests FieldChangeRequest[]
   history         CustomerHistoryEntry[]
 
   createdAt DateTime @default(now())
@@ -242,6 +243,42 @@ model ShippingDetail {
   provider     String
 
   @@index([customerId])
+}
+
+model FieldChangeRequest {
+  id            String    @id @default(uuid())
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  fieldKey      String
+  fieldLabel    String
+  oldValue      String?
+  newValue      String?
+  reason        String?
+  // When set, this request is "please let me re-upload this document
+  // category" rather than a plain text-field change — newValue stays null
+  // until the KAM/SC actually uploads the replacement after approval.
+  documentType  String?
+  pendingFileStorageKey String?
+  pendingFileName       String?
+  pendingFileMime       String?
+  pendingFileSize       Int?
+  requestedById String
+  approved      Boolean?
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([customerId])
+}
+
+model NotificationRead {
+  id             String   @id @default(uuid())
+  userId         String
+  notificationId String
+  readAt         DateTime @default(now())
+
+  @@unique([userId, notificationId])
+  @@index([userId])
 }
 
 model CustomerHistoryEntry {
@@ -334,6 +371,7 @@ model ReportVisit {
   completed              Boolean     @default(true)
   reasonIfNotCompleted   String?
   outcomeNotes           String?
+  sourceVisitId          String?
   dailyReportId          String
   dailyReport            DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
 }

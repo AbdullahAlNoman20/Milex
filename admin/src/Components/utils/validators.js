@@ -24,7 +24,7 @@ export const isWithinRange = (value, min, max) => {
 export const isValidCreditPeriod = (days, { extended = false } = {}) => {
   const num = Number(days);
   if (!Number.isFinite(num)) return false;
-  return extended ? isWithinRange(num, 1, 19) : num === 15;
+  return extended ? isWithinRange(num, 1, 90) : num === 15;
 };
 
 export const validateRecommendationStep1 = (form) => {

@@ -1,12 +1,12 @@
-// src/Pages/modules/sales/roles/KAM/NewRecommendationWizard.jsx — REPLACE ENTIRE FILE
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Check, ArrowLeft, ArrowRight, Plus, Trash2, Save } from 'lucide-react';
-import { useSales } from '../../hooks/useSales';
-import { useAuth } from '../../../../../Components/hooks/useAuth';
-import { useToast } from '../../../../../Components/hooks/useToast';
-import FormField from '../../../../../Components/Shared/FormField';
-import SelectWithOther from '../../../../../Components/Shared/SelectWithOther';
+// src/Pages/modules/sales/roles/KAM/NewRecommendationWizard.jsx
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Check, ArrowLeft, ArrowRight, Plus, Trash2, Save } from "lucide-react";
+import { useSales } from "../../hooks/useSales";
+import { useAuth } from "../../../../../Components/hooks/useAuth";
+import { useToast } from "../../../../../Components/hooks/useToast";
+import FormField from "../../../../../Components/Shared/FormField";
+import SelectWithOther from "../../../../../Components/Shared/SelectWithOther";
 import {
   BUSINESS_TYPE_OPTIONS,
   ACCOUNT_MODE_OPTIONS,
@@ -15,46 +15,50 @@ import {
   SHIPMENT_TYPE_OPTIONS,
   RATE_FOR_OPTIONS,
   buildEmptyShippingRow,
-} from '../../constants/formOptions';
-import { CREDIT_RULES } from '../../constants/salesStatus';
-import { sanitizeText, sanitizePhoneInput, sanitizeEmailInput } from '../../../../../Components/utils/sanitize';
+} from "../../constants/formOptions";
+import { CREDIT_RULES } from "../../constants/salesStatus";
+import {
+  sanitizeText,
+  sanitizePhoneInput,
+  sanitizeEmailInput,
+} from "../../../../../Components/utils/sanitize";
 import {
   isValidEmail,
   isValidMobile,
   isRequired,
   validateShippingRow,
-} from '../../../../../Components/utils/validators';
+} from "../../../../../Components/utils/validators";
 
 const STEPS = [
-  { num: 1, title: 'Basic Information' },
-  { num: 2, title: 'Financial Terms' },
-  { num: 3, title: 'Shipping Details' },
-  { num: 4, title: 'Visit Outcome & Recommendation' },
+  { num: 1, title: "Basic Information" },
+  { num: 2, title: "Financial Terms" },
+  { num: 3, title: "Shipping Details" },
+  { num: 4, title: "Visit Outcome & Recommendation" },
 ];
 
-const DRAFT_KEY_PREFIX = 'milex_recommendation_draft_';
+const DRAFT_KEY_PREFIX = "milex_recommendation_draft_";
 const MAX_NOTE_LENGTH = 2000;
 
 const buildInitialState = (currentUser) => ({
   form: {
-    accountName: '',
-    address: '',
-    phone: '',
-    email: '',
-    businessType: '',
-    serviceRequired: '',
-    accountMode: '',
-    accountType: '',
-    creditLimitTk: '',
+    accountName: "",
+    address: "",
+    phone: "",
+    email: "",
+    businessType: "",
+    serviceRequired: "",
+    accountMode: "",
+    accountType: "",
+    creditLimitTk: "",
     creditPeriodDays: String(CREDIT_RULES.DEFAULT_PERIOD_DAYS),
     creditPeriodExtended: false,
-    proposedRate: '',
-    recNote: '',
+    proposedRate: "",
+    recNote: "",
   },
   contacts: {
-    senior: { name: '', designation: '', mobile: '', email: '' }, // mobile optional, designation required
-    key: { name: '', designation: '', mobile: '', email: '' }, // mandatory
-    financial: { name: '', designation: '', mobile: '', email: '' },
+    senior: { name: "", designation: "", mobile: "", email: "" }, // mobile optional, designation required
+    key: { name: "", designation: "", mobile: "", email: "" }, // mandatory
+    financial: { name: "", designation: "", mobile: "", email: "" },
   },
   sameAsKey: false,
   shipping: [buildEmptyShippingRow()],
@@ -62,18 +66,21 @@ const buildInitialState = (currentUser) => ({
 
 const CountrySelect = ({ value, onChange, countries }) => {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState(value || '');
+  const [query, setQuery] = useState(value || "");
   const blurTimeoutRef = useRef(null);
 
   useEffect(() => {
-    setQuery(value || '');
+    setQuery(value || "");
   }, [value]);
 
   useEffect(() => () => clearTimeout(blurTimeoutRef.current), []);
 
-  const filtered = (query
-    ? countries.filter((c) => c.toLowerCase().includes(query.trim().toLowerCase()))
-    : countries
+  const filtered = (
+    query
+      ? countries.filter((c) =>
+          c.toLowerCase().includes(query.trim().toLowerCase()),
+        )
+      : countries
   ).slice(0, 50);
 
   const handleSelect = (name) => {
@@ -134,25 +141,26 @@ const NewRecommendationWizard = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const draftKey = `${DRAFT_KEY_PREFIX}${currentUser?.id || 'anon'}`;
+  const draftKey = `${DRAFT_KEY_PREFIX}${currentUser?.id || "anon"}`;
 
   const [step, setStep] = useState(1);
   const [state, setState] = useState(() => buildInitialState(currentUser));
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(draftKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && parsed.form) {
+        if (parsed && typeof parsed === "object" && parsed.form) {
           setState(parsed);
-          showToast('Draft restored', 'info');
+          showToast("Draft restored", "info");
         }
       }
     } catch {
       /* corrupted draft — ignore silently */
     }
-   // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [countries, setCountries] = useState([]);
@@ -161,21 +169,26 @@ const NewRecommendationWizard = () => {
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await fetch('https://countriesnow.space/api/v0.1/countries', {
-          signal: controller.signal,
-        });
-        if (!res.ok) throw new Error('Failed to fetch countries');
+        const res = await fetch(
+          "https://countriesnow.space/api/v0.1/countries",
+          {
+            signal: controller.signal,
+          },
+        );
+        if (!res.ok) throw new Error("Failed to fetch countries");
         const json = await res.json();
         if (json?.error === false && Array.isArray(json.data)) {
           const names = json.data
-            .map((c) => (typeof c?.country === 'string' ? c.country.trim() : ''))
+            .map((c) =>
+              typeof c?.country === "string" ? c.country.trim() : "",
+            )
             .filter(Boolean)
             .sort((a, b) => a.localeCompare(b));
           setCountries(names);
         }
       } catch (err) {
-        if (err.name !== 'AbortError') {
-          showToast('Could not load country list', 'error');
+        if (err.name !== "AbortError") {
+          showToast("Could not load country list", "error");
         }
       }
     })();
@@ -198,7 +211,10 @@ const NewRecommendationWizard = () => {
   const setContactField = useCallback((group, key, value) => {
     setState((prev) => ({
       ...prev,
-      contacts: { ...prev.contacts, [group]: { ...prev.contacts[group], [key]: value } },
+      contacts: {
+        ...prev.contacts,
+        [group]: { ...prev.contacts[group], [key]: value },
+      },
     }));
   }, []);
 
@@ -207,7 +223,11 @@ const NewRecommendationWizard = () => {
   }, []);
 
   const setShipping = useCallback((updater) => {
-    setState((prev) => ({ ...prev, shipping: typeof updater === 'function' ? updater(prev.shipping) : updater }));
+    setState((prev) => ({
+      ...prev,
+      shipping:
+        typeof updater === "function" ? updater(prev.shipping) : updater,
+    }));
   }, []);
 
   const handleCheckbox = (index, type) => {
@@ -215,18 +235,20 @@ const NewRecommendationWizard = () => {
       prev.map((row, i) => {
         if (i !== index) return row;
         const current = row.shipmentType || [];
-        const nextTypes = current.includes(type) ? current.filter((t) => t !== type) : [...current, type];
+        const nextTypes = current.includes(type)
+          ? current.filter((t) => t !== type)
+          : [...current, type];
         return { ...row, shipmentType: nextTypes };
-      })
+      }),
     );
   };
 
   const handleSaveDraft = () => {
     try {
       localStorage.setItem(draftKey, JSON.stringify(state));
-      showToast('Draft saved locally', 'success');
+      showToast("Draft saved locally", "success");
     } catch {
-      showToast('Could not save draft (storage unavailable)', 'error');
+      showToast("Could not save draft (storage unavailable)", "error");
     }
   };
 
@@ -240,50 +262,76 @@ const NewRecommendationWizard = () => {
 
   const validateStep1 = () => {
     if (!isRequired(form.accountName) || !isRequired(form.address)) {
-      showToast('Account name and address are required', 'warning');
+      showToast("Account name and address are required", "warning");
       return false;
     }
     if (!isValidMobile(form.phone)) {
-      showToast('Valid phone number is required', 'warning');
+      showToast("Valid phone number is required", "warning");
       return false;
     }
     if (!isValidEmail(form.email)) {
-      showToast('Valid email is required', 'warning');
+      showToast("Valid email is required", "warning");
       return false;
     }
-    if (!isRequired(form.businessType)) return showToast('Business type is required', 'warning'), false;
-    if (!isRequired(form.serviceRequired)) return showToast('Service required is mandatory', 'warning'), false;
-    if (!isRequired(form.accountMode)) return showToast('Account mode is mandatory', 'warning'), false;
+    if (!isRequired(form.businessType))
+      return (showToast("Business type is required", "warning"), false);
+    if (!isRequired(form.serviceRequired))
+      return (showToast("Service required is mandatory", "warning"), false);
+    if (!isRequired(form.accountMode))
+      return (showToast("Account mode is mandatory", "warning"), false);
 
-    if (!isRequired(contacts.senior.name)) return showToast('Senior Management name is required', 'warning'), false;
-    if (!isRequired(contacts.senior.designation)) return showToast('Senior Management designation is required', 'warning'), false;
+    if (!isRequired(contacts.senior.name))
+      return (
+        showToast("Senior Management name is required", "warning"),
+        false
+      );
+    if (!isRequired(contacts.senior.designation))
+      return (
+        showToast("Senior Management designation is required", "warning"),
+        false
+      );
     // Senior Management mobile is intentionally OPTIONAL per spec
 
     if (!isRequired(contacts.key.name) || !isValidMobile(contacts.key.mobile)) {
-      showToast('Key Contact name and mobile are mandatory', 'warning');
+      showToast("Key Contact name and mobile are mandatory", "warning");
       return false;
     }
     if (!isValidEmail(contacts.key.email)) {
-      showToast('A valid email is required for the Key Contact Person', 'warning');
+      showToast(
+        "A valid email is required for the Key Contact Person",
+        "warning",
+      );
       return false;
     }
-    if (!sameAsKey && (!isRequired(contacts.financial.name) || !isValidMobile(contacts.financial.mobile))) {
-      showToast('Financial contact is mandatory (or check "Same as Key Contact")', 'warning');
+    if (
+      !sameAsKey &&
+      (!isRequired(contacts.financial.name) ||
+        !isValidMobile(contacts.financial.mobile))
+    ) {
+      showToast(
+        'Financial contact is mandatory (or check "Same as Key Contact")',
+        "warning",
+      );
       return false;
     }
     return true;
   };
 
   const validateStep2 = () => {
-    if (!isRequired(form.accountType)) return showToast('Select account type', 'warning'), false;
-    if (form.accountType === 'CREDIT CUSTOMER') {
-      if (!isRequired(form.creditLimitTk)) return showToast('Credit limit is required', 'warning'), false;
+    if (!isRequired(form.accountType))
+      return (showToast("Select account type", "warning"), false);
+    if (form.accountType === "CREDIT CUSTOMER") {
+      if (!isRequired(form.creditLimitTk))
+        return (showToast("Credit limit is required", "warning"), false);
       const period = Number(form.creditPeriodDays);
       const maxAllowed = form.creditPeriodExtended
         ? CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS
         : CREDIT_RULES.DEFAULT_PERIOD_DAYS;
       if (!Number.isFinite(period) || period < 1 || period > maxAllowed) {
-        showToast(`Credit period must be between 1 and ${maxAllowed} days`, 'warning');
+        showToast(
+          `Credit period must be between 1 and ${maxAllowed} days`,
+          "warning",
+        );
         return false;
       }
     }
@@ -293,20 +341,26 @@ const NewRecommendationWizard = () => {
   const validateStep3 = () => {
     const invalidRow = shipping.find((row) => !validateShippingRow(row).valid);
     if (invalidRow) {
-      showToast('Complete every mandatory field in each shipping row, including Current Service Provider', 'warning');
+      showToast(
+        "Complete every mandatory field in each shipping row, including Current Service Provider",
+        "warning",
+      );
       return false;
     }
     return true;
   };
 
   const validateStep4 = () => {
-    if (!isRequired(form.proposedRate)) return showToast('Proposed rate is required', 'warning'), false;
-    if (!isRequired(form.recNote)) return showToast('Recommendation note is required', 'warning'), false;
+    if (!isRequired(form.proposedRate))
+      return (showToast("Proposed rate is required", "warning"), false);
+    if (!isRequired(form.recNote))
+      return (showToast("Recommendation note is required", "warning"), false);
     // NOTE: minimum-word-count requirement intentionally removed per updated spec
     return true;
   };
 
   const handleNext = () => {
+    if (isSubmitting) return;
     if (step === 1 && !validateStep1()) return;
     if (step === 2 && !validateStep2()) return;
     if (step === 3 && !validateStep3()) return;
@@ -318,11 +372,16 @@ const NewRecommendationWizard = () => {
     setStep((s) => Math.min(s + 1, 4));
   };
 
-const handleSubmit = async () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     const flatContacts = [
-      { type: 'SENIOR_MANAGEMENT', ...contacts.senior },
-      { type: 'KEY_CONTACT_PERSON', ...contacts.key },
-      { type: 'FINANCIAL_CONTACT', ...(sameAsKey ? contacts.key : contacts.financial) },
+      { type: "SENIOR_MANAGEMENT", ...contacts.senior },
+      { type: "KEY_CONTACT_PERSON", ...contacts.key },
+      {
+        type: "FINANCIAL_CONTACT",
+        ...(sameAsKey ? contacts.key : contacts.financial),
+      },
     ];
 
     try {
@@ -335,30 +394,39 @@ const handleSubmit = async () => {
       navigate(`/app/customers/${encodeURIComponent(created.barcode)}`);
     } catch {
       /* toast already shown by addCustomer */
+    } finally {
+      setIsSubmitting(false);
     }
   };
   return (
     <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        <h2 className="text-2xl font-bold text-slate-800 mb-8">New Recommendation Form</h2>
+        <h2 className="text-2xl font-bold text-slate-800 mb-8">
+          New Recommendation Form
+        </h2>
 
         <div className="flex justify-between items-center mb-10 px-2 relative overflow-x-auto">
           <div className="absolute top-1/2 left-0 w-full h-[2px] bg-slate-200 -z-10 -translate-y-1/2" />
           {STEPS.map((s) => (
-            <div key={s.num} className="flex flex-col items-center bg-white px-2 shrink-0">
+            <div
+              key={s.num}
+              className="flex flex-col items-center bg-white px-2 shrink-0"
+            >
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm mb-2 border-2 ${
                   step === s.num
-                    ? 'border-emerald-600 text-emerald-600'
+                    ? "border-emerald-600 text-emerald-600"
                     : step > s.num
-                    ? 'bg-emerald-600 border-emerald-600 text-white'
-                    : 'border-slate-300 text-slate-400 bg-white'
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : "border-slate-300 text-slate-400 bg-white"
                 }`}
               >
                 {step > s.num ? <Check size={16} /> : s.num}
               </div>
-              <span className={`text-[10px] font-bold text-center max-w-[90px] ${step === s.num ? 'text-slate-800' : 'text-slate-400'}`}>
-                Step-{String(s.num).padStart(2, '0')}: {s.title}
+              <span
+                className={`text-[10px] font-bold text-center max-w-[90px] ${step === s.num ? "text-slate-800" : "text-slate-400"}`}
+              >
+                Step-{String(s.num).padStart(2, "0")}: {s.title}
               </span>
             </div>
           ))}
@@ -368,13 +436,15 @@ const handleSubmit = async () => {
           {step === 1 && (
             <>
               <div className="space-y-4">
-                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Basic Information</h3>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+                  Basic Information
+                </h3>
                 <FormField label="Account Name" required>
                   <input
                     className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                     value={form.accountName}
                     maxLength={200}
-                    onChange={(e) => setField('accountName', e.target.value)}
+                    onChange={(e) => setField("accountName", e.target.value)}
                   />
                 </FormField>
                 <FormField label="Primary Address" required>
@@ -382,7 +452,7 @@ const handleSubmit = async () => {
                     className="w-full border border-slate-200 p-2.5 rounded text-sm h-20 focus:border-emerald-500 outline-none"
                     value={form.address}
                     maxLength={500}
-                    onChange={(e) => setField('address', e.target.value)}
+                    onChange={(e) => setField("address", e.target.value)}
                   />
                 </FormField>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -392,7 +462,9 @@ const handleSubmit = async () => {
                       value={form.phone}
                       maxLength={16}
                       placeholder="+8801XXXXXXXXX"
-                      onChange={(e) => setField('phone', sanitizePhoneInput(e.target.value))}
+                      onChange={(e) =>
+                        setField("phone", sanitizePhoneInput(e.target.value))
+                      }
                     />
                   </FormField>
                   <FormField label="Email" required>
@@ -401,25 +473,31 @@ const handleSubmit = async () => {
                       className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                       value={form.email}
                       maxLength={254}
-                      onChange={(e) => setField('email', sanitizeEmailInput(e.target.value))}
+                      onChange={(e) =>
+                        setField("email", sanitizeEmailInput(e.target.value))
+                      }
                     />
                   </FormField>
                   <FormField label="Business Type" required>
                     <SelectWithOther
                       options={BUSINESS_TYPE_OPTIONS}
                       value={form.businessType}
-                      onChange={(v) => setField('businessType', v)}
+                      onChange={(v) => setField("businessType", v)}
                     />
                   </FormField>
                   <FormField label="Service Required" required>
                     <select
                       className="w-full border border-slate-200 p-2.5 rounded text-sm bg-white focus:border-emerald-500 outline-none"
                       value={form.serviceRequired}
-                      onChange={(e) => setField('serviceRequired', e.target.value)}
+                      onChange={(e) =>
+                        setField("serviceRequired", e.target.value)
+                      }
                     >
                       <option value="">Select...</option>
                       {SERVICE_REQUIRED_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
                       ))}
                     </select>
                   </FormField>
@@ -427,11 +505,13 @@ const handleSubmit = async () => {
                     <select
                       className="w-full border border-slate-200 p-2.5 rounded text-sm bg-white focus:border-emerald-500 outline-none"
                       value={form.accountMode}
-                      onChange={(e) => setField('accountMode', e.target.value)}
+                      onChange={(e) => setField("accountMode", e.target.value)}
                     >
                       <option value="">Select...</option>
                       {ACCOUNT_MODE_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
                       ))}
                     </select>
                   </FormField>
@@ -439,17 +519,23 @@ const handleSubmit = async () => {
               </div>
 
               <div className="pt-6 border-t border-slate-100 space-y-8">
-                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Customer Contact Information</h3>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+                  Customer Contact Information
+                </h3>
 
                 <div>
-                  <h4 className="font-bold text-slate-800 mb-3">Senior Management</h4>
+                  <h4 className="font-bold text-slate-800 mb-3">
+                    Senior Management
+                  </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField label="Name" required>
                       <input
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.name}
                         maxLength={150}
-                        onChange={(e) => setContactField('senior', 'name', e.target.value)}
+                        onChange={(e) =>
+                          setContactField("senior", "name", e.target.value)
+                        }
                       />
                     </FormField>
                     <FormField label="Designation" required>
@@ -457,7 +543,13 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.designation}
                         maxLength={100}
-                        onChange={(e) => setContactField('senior', 'designation', e.target.value)}
+                        onChange={(e) =>
+                          setContactField(
+                            "senior",
+                            "designation",
+                            e.target.value,
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Phone" optional>
@@ -465,7 +557,13 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.mobile}
                         maxLength={16}
-                        onChange={(e) => setContactField('senior', 'mobile', sanitizePhoneInput(e.target.value))}
+                        onChange={(e) =>
+                          setContactField(
+                            "senior",
+                            "mobile",
+                            sanitizePhoneInput(e.target.value),
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Email" optional>
@@ -474,21 +572,31 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.email}
                         maxLength={254}
-                        onChange={(e) => setContactField('senior', 'email', sanitizeEmailInput(e.target.value))}
+                        onChange={(e) =>
+                          setContactField(
+                            "senior",
+                            "email",
+                            sanitizeEmailInput(e.target.value),
+                          )
+                        }
                       />
                     </FormField>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-slate-800 mb-3">Key Contact Person</h4>
+                  <h4 className="font-bold text-slate-800 mb-3">
+                    Key Contact Person
+                  </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField label="Name" required>
                       <input
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.name}
                         maxLength={150}
-                        onChange={(e) => setContactField('key', 'name', e.target.value)}
+                        onChange={(e) =>
+                          setContactField("key", "name", e.target.value)
+                        }
                       />
                     </FormField>
                     <FormField label="Designation" optional>
@@ -496,7 +604,9 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.designation}
                         maxLength={100}
-                        onChange={(e) => setContactField('key', 'designation', e.target.value)}
+                        onChange={(e) =>
+                          setContactField("key", "designation", e.target.value)
+                        }
                       />
                     </FormField>
                     <FormField label="Phone" required>
@@ -504,7 +614,13 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.mobile}
                         maxLength={16}
-                        onChange={(e) => setContactField('key', 'mobile', sanitizePhoneInput(e.target.value))}
+                        onChange={(e) =>
+                          setContactField(
+                            "key",
+                            "mobile",
+                            sanitizePhoneInput(e.target.value),
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Email" required>
@@ -513,14 +629,22 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.email}
                         maxLength={254}
-                        onChange={(e) => setContactField('key', 'email', sanitizeEmailInput(e.target.value))}
+                        onChange={(e) =>
+                          setContactField(
+                            "key",
+                            "email",
+                            sanitizeEmailInput(e.target.value),
+                          )
+                        }
                       />
                     </FormField>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="font-bold text-slate-800 mb-3">Financial Contact</h4>
+                  <h4 className="font-bold text-slate-800 mb-3">
+                    Financial Contact
+                  </h4>
                   <label className="flex items-center gap-2 text-sm text-slate-700 mb-4 cursor-pointer font-bold">
                     <input
                       type="checkbox"
@@ -537,7 +661,9 @@ const handleSubmit = async () => {
                           className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                           value={contacts.financial.name}
                           maxLength={150}
-                          onChange={(e) => setContactField('financial', 'name', e.target.value)}
+                          onChange={(e) =>
+                            setContactField("financial", "name", e.target.value)
+                          }
                         />
                       </FormField>
                       <FormField label="Phone" required>
@@ -545,7 +671,13 @@ const handleSubmit = async () => {
                           className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                           value={contacts.financial.mobile}
                           maxLength={16}
-                          onChange={(e) => setContactField('financial', 'mobile', sanitizePhoneInput(e.target.value))}
+                          onChange={(e) =>
+                            setContactField(
+                              "financial",
+                              "mobile",
+                              sanitizePhoneInput(e.target.value),
+                            )
+                          }
                         />
                       </FormField>
                       <FormField label="Email" optional>
@@ -554,7 +686,13 @@ const handleSubmit = async () => {
                           className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                           value={contacts.financial.email}
                           maxLength={254}
-                          onChange={(e) => setContactField('financial', 'email', sanitizeEmailInput(e.target.value))}
+                          onChange={(e) =>
+                            setContactField(
+                              "financial",
+                              "email",
+                              sanitizeEmailInput(e.target.value),
+                            )
+                          }
                         />
                       </FormField>
                     </div>
@@ -570,15 +708,17 @@ const handleSubmit = async () => {
                 <select
                   className="w-full border border-slate-200 p-3 rounded text-sm bg-white focus:border-emerald-500 outline-none"
                   value={form.accountType}
-                  onChange={(e) => setField('accountType', e.target.value)}
+                  onChange={(e) => setField("accountType", e.target.value)}
                 >
                   <option value="">Select...</option>
                   {ACCOUNT_TYPE_OPTIONS.map((o) => (
-                    <option key={o} value={o}>{o}</option>
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
                   ))}
                 </select>
               </FormField>
-              {form.accountType === 'CREDIT CUSTOMER' && (
+              {form.accountType === "CREDIT CUSTOMER" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <FormField label="Credit Limit (TK)" required>
                     <input
@@ -586,7 +726,9 @@ const handleSubmit = async () => {
                       min="0"
                       className="w-full border border-slate-200 p-3 rounded text-sm focus:border-emerald-500 outline-none"
                       value={form.creditLimitTk}
-                      onChange={(e) => setField('creditLimitTk', e.target.value)}
+                      onChange={(e) =>
+                        setField("creditLimitTk", e.target.value)
+                      }
                     />
                   </FormField>
                   <FormField
@@ -601,20 +743,29 @@ const handleSubmit = async () => {
                     <input
                       type="number"
                       min="1"
-                      max={form.creditPeriodExtended ? CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS : CREDIT_RULES.DEFAULT_PERIOD_DAYS}
+                      max={
+                        form.creditPeriodExtended
+                          ? CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS
+                          : CREDIT_RULES.DEFAULT_PERIOD_DAYS
+                      }
                       className="w-full border border-slate-200 p-3 rounded text-sm focus:border-emerald-500 outline-none"
                       value={form.creditPeriodDays}
-                      onChange={(e) => setField('creditPeriodDays', e.target.value)}
+                      onChange={(e) =>
+                        setField("creditPeriodDays", e.target.value)
+                      }
                     />
                   </FormField>
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={form.creditPeriodExtended}
-                      onChange={(e) => setField('creditPeriodExtended', e.target.checked)}
+                      onChange={(e) =>
+                        setField("creditPeriodExtended", e.target.checked)
+                      }
                       className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
-                    Request LM-authorized extended credit period (up to {CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS} days)
+                    Request LM-authorized extended credit period (up to{" "}
+                    {CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS} days)
                   </label>
                 </div>
               )}
@@ -624,11 +775,18 @@ const handleSubmit = async () => {
           {step === 3 && (
             <div className="space-y-6">
               {shipping.map((row, i) => (
-                <div key={i} className="bg-white border border-slate-100 shadow-sm p-6 rounded-xl relative">
+                <div
+                  key={i}
+                  className="bg-white border border-slate-100 shadow-sm p-6 rounded-xl relative"
+                >
                   {shipping.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => setShipping((prev) => prev.filter((_, idx) => idx !== i))}
+                      onClick={() =>
+                        setShipping((prev) =>
+                          prev.filter((_, idx) => idx !== i),
+                        )
+                      }
                       className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition"
                     >
                       <Trash2 size={16} />
@@ -638,7 +796,10 @@ const handleSubmit = async () => {
                     <FormField label="Shipment Type" required>
                       <div className="flex gap-6 flex-wrap">
                         {SHIPMENT_TYPE_OPTIONS.map((type) => (
-                          <label key={type} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                          <label
+                            key={type}
+                            className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"
+                          >
                             <input
                               type="checkbox"
                               checked={(row.shipmentType || []).includes(type)}
@@ -650,13 +811,21 @@ const handleSubmit = async () => {
                         ))}
                       </div>
                     </FormField>
-                    {(row.shipmentType || []).includes('Others') && (
+                    {(row.shipmentType || []).includes("Others") && (
                       <FormField label="Specify Other Shipment Type" required>
                         <input
                           className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
-                          value={row.shipmentTypeOther || ''}
+                          value={row.shipmentTypeOther || ""}
                           maxLength={150}
-                          onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, shipmentTypeOther: e.target.value } : r)))}
+                          onChange={(e) =>
+                            setShipping((prev) =>
+                              prev.map((r, idx) =>
+                                idx === i
+                                  ? { ...r, shipmentTypeOther: e.target.value }
+                                  : r,
+                              ),
+                            )
+                          }
                         />
                       </FormField>
                     )}
@@ -664,11 +833,19 @@ const handleSubmit = async () => {
                       <select
                         className="w-full border border-slate-200 p-2.5 rounded text-sm bg-white outline-none focus:border-emerald-500"
                         value={row.rateFor}
-                        onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, rateFor: e.target.value } : r)))}
+                        onChange={(e) =>
+                          setShipping((prev) =>
+                            prev.map((r, idx) =>
+                              idx === i ? { ...r, rateFor: e.target.value } : r,
+                            ),
+                          )
+                        }
                       >
                         <option value="">Select...</option>
                         {RATE_FOR_OPTIONS.map((o) => (
-                          <option key={o} value={o}>{o}</option>
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
                         ))}
                       </select>
                     </FormField>
@@ -676,7 +853,13 @@ const handleSubmit = async () => {
                       <CountrySelect
                         value={row.country}
                         countries={countries}
-                        onChange={(v) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, country: v } : r)))}
+                        onChange={(v) =>
+                          setShipping((prev) =>
+                            prev.map((r, idx) =>
+                              idx === i ? { ...r, country: v } : r,
+                            ),
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Avg Monthly Volume" required>
@@ -685,7 +868,13 @@ const handleSubmit = async () => {
                         min="0"
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={row.volume}
-                        onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, volume: e.target.value } : r)))}
+                        onChange={(e) =>
+                          setShipping((prev) =>
+                            prev.map((r, idx) =>
+                              idx === i ? { ...r, volume: e.target.value } : r,
+                            ),
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Avg Monthly Weight (KG)" required>
@@ -694,7 +883,13 @@ const handleSubmit = async () => {
                         min="0"
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={row.weight}
-                        onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, weight: e.target.value } : r)))}
+                        onChange={(e) =>
+                          setShipping((prev) =>
+                            prev.map((r, idx) =>
+                              idx === i ? { ...r, weight: e.target.value } : r,
+                            ),
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Expected Monthly Revenue (USD)" required>
@@ -703,7 +898,13 @@ const handleSubmit = async () => {
                         min="0"
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={row.revenue}
-                        onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, revenue: e.target.value } : r)))}
+                        onChange={(e) =>
+                          setShipping((prev) =>
+                            prev.map((r, idx) =>
+                              idx === i ? { ...r, revenue: e.target.value } : r,
+                            ),
+                          )
+                        }
                       />
                     </FormField>
                     <FormField label="Current Service Provider" required>
@@ -711,7 +912,15 @@ const handleSubmit = async () => {
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={row.provider}
                         maxLength={150}
-                        onChange={(e) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, provider: e.target.value } : r)))}
+                        onChange={(e) =>
+                          setShipping((prev) =>
+                            prev.map((r, idx) =>
+                              idx === i
+                                ? { ...r, provider: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
                       />
                     </FormField>
                   </div>
@@ -719,7 +928,9 @@ const handleSubmit = async () => {
               ))}
               <button
                 type="button"
-                onClick={() => setShipping((prev) => [...prev, buildEmptyShippingRow()])}
+                onClick={() =>
+                  setShipping((prev) => [...prev, buildEmptyShippingRow()])
+                }
                 className="text-sm font-bold text-emerald-700 flex items-center hover:text-emerald-800 transition"
               >
                 <Plus size={16} className="mr-1" /> Add Route
@@ -740,7 +951,7 @@ const handleSubmit = async () => {
                   placeholder="e.g. 32 USD/Kg + 10 USD Custom"
                   value={form.proposedRate}
                   maxLength={300}
-                  onChange={(e) => setField('proposedRate', e.target.value)}
+                  onChange={(e) => setField("proposedRate", e.target.value)}
                 />
               </FormField>
               <FormField label="Visit Outcome / Recommendation Note" required>
@@ -748,7 +959,7 @@ const handleSubmit = async () => {
                   className="w-full border border-slate-200 p-4 rounded text-sm min-h-[150px] focus:border-emerald-500 outline-none"
                   value={form.recNote}
                   maxLength={MAX_NOTE_LENGTH}
-                  onChange={(e) => setField('recNote', e.target.value)}
+                  onChange={(e) => setField("recNote", e.target.value)}
                 />
               </FormField>
             </div>
@@ -777,10 +988,16 @@ const handleSubmit = async () => {
             </button>
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={handleNext}
-              className="px-6 py-2.5 bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center shadow-md hover:bg-emerald-800 transition"
+              className="px-6 py-2.5 bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center shadow-md hover:bg-emerald-800 transition disabled:opacity-50"
             >
-              {step < 4 ? 'Next Step' : 'Submit'} <ArrowRight size={16} className="ml-2" />
+              {step < 4
+                ? "Next Step"
+                : isSubmitting
+                  ? "Submitting..."
+                  : "Submit"}{" "}
+              <ArrowRight size={16} className="ml-2" />
             </button>
           </div>
         </div>

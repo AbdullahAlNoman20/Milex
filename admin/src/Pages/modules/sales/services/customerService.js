@@ -1,4 +1,4 @@
-// src/Pages/modules/sales/services/customerService.js — REPLACE ENTIRE FILE
+// src/Pages/modules/sales/services/customerService.js
 import { request } from '../../../../Components/services/api';
 
 export const fetchCustomers = async (params = {}) => {
@@ -164,5 +164,60 @@ export const getDocumentSignedUrl = async (storageKey) => {
 
 export const updateFinalProfile = async (id, payload) => {
   const { data } = await request(`/customers/${id}/final-profile`, { method: 'PATCH', body: payload });
+  return data.customer;
+};
+
+export const setAccountConfigMode = async (id, mode) => {
+  const { data } = await request(`/customers/${id}/account-config-mode`, { method: 'POST', body: { mode } });
+  return data.customer;
+};
+
+export const submitFinalOnboardingRegular = async (id) => {
+  const { data } = await request(`/customers/${id}/final-onboarding-regular`, { method: 'POST' });
+  return data.customer;
+};
+
+export const requestFieldChange = async (id, fieldKey, newValue, reason) => {
+  const { data } = await request(`/customers/${id}/field-change-request`, { method: 'POST', body: { fieldKey, newValue, reason } });
+  return data.request;
+};
+
+export const requestDocumentChange = async (id, documentType, reason, file) => {
+  const formData = new FormData();
+  formData.append('documentType', documentType);
+  if (reason) formData.append('reason', reason);
+  formData.append('file', file);
+  const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
+  const res = await fetch(
+    `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/customers/${id}/field-change-request/document`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {},
+      body: formData,
+    }
+  );
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
+  return json.data.request;
+};
+
+export const getEditableFields = async () => {
+  const { data } = await request('/customers/editable-fields');
+  return data.fields;
+};
+
+export const listFieldChangeRequests = async (id) => {
+  const { data } = await request(`/customers/${id}/field-change-request`);
+  return data.items;
+};
+
+export const decideFieldChangeRequest = async (requestId, approve) => {
+  const { data } = await request(`/customers/field-change-request/${requestId}/decision`, { method: 'POST', body: { approve } });
+  return data.customer;
+};
+
+export const directFieldEdit = async (id, fieldKey, newValue) => {
+  const { data } = await request(`/customers/${id}/direct-field-edit`, { method: 'PATCH', body: { fieldKey, newValue } });
   return data.customer;
 };

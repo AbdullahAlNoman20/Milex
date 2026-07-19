@@ -5,8 +5,9 @@ const visitEntrySchema = z
   .object({
     customerName: z.string().min(1).max(200),
     completed: z.boolean(),
-    reasonIfNotCompleted: z.string().max(500).optional(),
-    outcomeNotes: z.string().max(500).optional(),
+    reasonIfNotCompleted: z.string().max(500).optional().nullable(),
+    outcomeNotes: z.string().max(500).optional().nullable(),
+    sourceVisitId: z.string().max(100).optional().nullable(),
   })
   .strict()
   .refine((v) => v.completed || (v.reasonIfNotCompleted && v.reasonIfNotCompleted.length > 0), {

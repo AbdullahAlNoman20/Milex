@@ -1,4 +1,4 @@
-// admin/src/Components/utils/format.js (NEW FILE)
+// admin/src/Components/utils/format.js
 export const formatRevision = (revision) => (revision > 0 ? `R-${revision}` : 'New');
 
 export const formatRateRef = (customer) => {

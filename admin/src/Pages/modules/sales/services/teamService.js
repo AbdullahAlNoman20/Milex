@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/services/teamService.js (NEW FILE)
+// admin/src/Pages/modules/sales/services/teamService.js
 import { request } from '../../../../Components/services/api';
 
 export const listKams = async () => {

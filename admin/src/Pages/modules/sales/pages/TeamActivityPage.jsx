@@ -1,8 +1,9 @@
-// admin/src/Pages/modules/sales/pages/TeamActivityPage.jsx 
+// admin/src/Pages/modules/sales/pages/TeamActivityPage.jsx
 import React, { useEffect, useState } from 'react';
 import { Eye, X, Users2, LogIn, Activity } from 'lucide-react';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { listStaffDirectory, getUserActivity } from '../services/teamService';
+import { listReportsForKam } from '../services/dailyReportService';
 import { humanizeAction } from '../../../../Components/utils/format';
 import Loader from '../../../../Components/Shared/Loader';
 
@@ -19,6 +20,8 @@ const TeamActivityPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeUser, setActiveUser] = useState(null);
   const [activityItems, setActivityItems] = useState([]);
+  const [skippedItems, setSkippedItems] = useState([]);
+  const [detailTab, setDetailTab] = useState('activity');
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   useEffect(() => {
@@ -33,10 +36,12 @@ const TeamActivityPage = () => {
 
   const openUser = async (user) => {
     setActiveUser(user);
+    setDetailTab('activity');
     setIsDetailLoading(true);
     try {
-      const items = await getUserActivity(user.id);
+      const [items, reports] = await Promise.all([getUserActivity(user.id), listReportsForKam(user.id)]);
       setActivityItems(items);
+      setSkippedItems(reports.flatMap((r) => r.visits.filter((v) => !v.completed).map((v) => ({ ...v, date: r.date }))));
     } catch (err) {
       showToast(err?.message || 'Failed to load activity', 'error');
     } finally {
@@ -115,22 +120,37 @@ const TeamActivityPage = () => {
                 <X size={18} />
               </button>
             </div>
+            <div className="flex gap-2 px-5 pt-3 border-b border-slate-100">
+              <button type="button" onClick={() => setDetailTab('activity')} className={`px-3 py-1.5 text-xs font-bold border-b-2 transition ${detailTab === 'activity' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400'}`}>Activity</button>
+              <button type="button" onClick={() => setDetailTab('skipped')} className={`px-3 py-1.5 text-xs font-bold border-b-2 transition ${detailTab === 'skipped' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400'}`}>Skipped Visits ({skippedItems.length})</button>
+            </div>
             <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
               {isDetailLoading ? (
                 <Loader label="Loading..." />
-              ) : activityItems.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-10">No activity recorded yet.</p>
+              ) : detailTab === 'activity' ? (
+                activityItems.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-10">No activity recorded yet.</p>
+                ) : (
+                  activityItems.map((item, i) => (
+                    <div key={i} className="flex items-start gap-3 p-4">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.type === 'LOGIN' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                        {item.type === 'LOGIN' ? <LogIn size={14} /> : <Activity size={14} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-800">{item.type === 'LOGIN' ? 'Logged In' : humanizeAction(item.action)}</p>
+                        {item.entity && <p className="text-xs text-slate-400">on {item.entity}</p>}
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">{new Date(item.createdAt).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : skippedItems.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-10">No skipped visits.</p>
               ) : (
-                activityItems.map((item, i) => (
-                  <div key={i} className="flex items-start gap-3 p-4">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${item.type === 'LOGIN' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                      {item.type === 'LOGIN' ? <LogIn size={14} /> : <Activity size={14} />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-slate-800">{item.type === 'LOGIN' ? 'Logged In' : humanizeAction(item.action)}</p>
-                      {item.entity && <p className="text-xs text-slate-400">on {item.entity}</p>}
-                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">{new Date(item.createdAt).toLocaleString()}</p>
-                    </div>
+                skippedItems.map((v, i) => (
+                  <div key={i} className="p-4">
+                    <p className="text-sm font-bold text-slate-800">{v.customerName} <span className="text-xs font-normal text-slate-400">— {v.date}</span></p>
+                    <p className="text-xs text-red-600 mt-1">{v.reasonIfNotCompleted}</p>
                   </div>
                 ))
               )}

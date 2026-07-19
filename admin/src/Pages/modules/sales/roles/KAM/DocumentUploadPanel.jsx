@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx 
+// admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx
 import React, { useState, useCallback } from 'react';
 import { Loader2, UploadCloud, Printer, Eye, Send, FileCheck } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -110,6 +110,29 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
   );
 };
 
+const AutoTextCard = ({ title, text, printType, customer, emptyLabel }) => {
+  const { setPrintData } = useSales();
+  return (
+    <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-white">
+      <div>
+        <p className="text-sm font-bold text-slate-800">{title}</p>
+        <p className="text-[10px] text-slate-400 mt-0.5">{text ? 'Auto-added' : emptyLabel}</p>
+      </div>
+      {text ? (
+        <button
+          type="button"
+          onClick={() => setPrintData({ type: printType, customer })}
+          className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg py-2.5 hover:bg-emerald-100 transition"
+        >
+          <Eye size={13} /> View {title}
+        </button>
+      ) : (
+        <div className="border-2 border-dashed border-slate-200 rounded-lg py-4 text-center text-xs text-slate-400">Not available yet</div>
+      )}
+    </div>
+  );
+};
+
 const OfferLetterAutoCard = ({ customer }) => {
   const { setPrintData } = useSales();
   return (
@@ -139,7 +162,7 @@ const OfferLetterAutoCard = ({ customer }) => {
 
 const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'SIGNED_AGREEMENT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
 
-const DocumentUploadPanel = ({ customer, onUploaded }) => {
+const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
   const { showToast } = useToast();
   const { setPrintData } = useSales();
   const [uploadingKey, setUploadingKey] = useState(null);
@@ -184,7 +207,7 @@ const DocumentUploadPanel = ({ customer, onUploaded }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-4">
+    <div className={embedded ? 'space-y-4' : 'bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-4'}>
       <div className="flex justify-between items-start gap-3">
         <div>
           <h3 className="font-bold text-slate-900 text-base">Supporting Documentation & Profile</h3>
@@ -203,6 +226,7 @@ const DocumentUploadPanel = ({ customer, onUploaded }) => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <OfferLetterAutoCard customer={customer} />
+        <AutoTextCard title="Agreement" text={customer.agreementText} printType="agreement" customer={customer} emptyLabel="Pending — agreement not sent yet" />
         {DOCUMENT_CATEGORIES.map((cat) => (
           <CategoryCard
             key={cat.key}
@@ -214,22 +238,24 @@ const DocumentUploadPanel = ({ customer, onUploaded }) => {
         ))}
       </div>
 
-      <div className="pt-4 border-t border-slate-100 space-y-2">
-        {missingRequired.length > 0 && (
-          <p className="text-[11px] text-amber-600 font-semibold">
-            Still needed: {missingRequired.map((k) => k.replace(/_/g, ' ')).join(', ')}
-          </p>
-        )}
-        <button
-          type="button"
-          disabled={!hasAnyDocs || isSubmittingFinal}
-          onClick={handleSubmitFinal}
-          className="w-full bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-        >
-          {isSubmittingFinal ? <Loader2 size={16} className="mr-2 animate-spin" /> : <FileCheck size={16} className="mr-2" />}
-          Submit for Final Onboarding
-        </button>
-      </div>
+      {!embedded && (
+        <div className="pt-4 border-t border-slate-100 space-y-2">
+          {missingRequired.length > 0 && (
+            <p className="text-[11px] text-amber-600 font-semibold">
+              Still needed: {missingRequired.map((k) => k.replace(/_/g, ' ')).join(', ')}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!hasAnyDocs || isSubmittingFinal}
+            onClick={handleSubmitFinal}
+            className="w-full bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {isSubmittingFinal ? <Loader2 size={16} className="mr-2 animate-spin" /> : <FileCheck size={16} className="mr-2" />}
+            Submit for Final Onboarding
+          </button>
+        </div>
+      )}
     </div>
   );
 };

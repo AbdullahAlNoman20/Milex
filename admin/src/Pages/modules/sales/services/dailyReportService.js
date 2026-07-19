@@ -1,4 +1,4 @@
-// src/Pages/modules/sales/services/dailyReportService.js — REPLACE ENTIRE FILE
+// src/Pages/modules/sales/services/dailyReportService.js
 import { request } from '../../../../Components/services/api';
 
 export const getReportByDate = async (date) => {
