@@ -19,7 +19,6 @@ import CustomerInfoApprovalPanel from "../roles/LineManager/CustomerInfoApproval
 import OfferLetterPanel from "../roles/SalesCoordinator/OfferLetterPanel";
 import AgreementPanel from "../roles/SalesCoordinator/AgreementPanel";
 import InfoUpdateRequestPanel from "../roles/KAM/InfoUpdateRequestPanel";
-import DocumentUploadPanel from "../roles/KAM/DocumentUploadPanel";
 import DocumentsList from "../components/DocumentsList";
 import FinalAccountProfilePanel from "../roles/KAM/FinalAccountProfilePanel";
 import FinalAccountProfileView from "../components/FinalAccountProfileView";
@@ -264,10 +263,10 @@ const CustomerDetail = () => {
                 <Building size={18} className="mr-2 text-slate-400" /> Account
                 Info
               </h3>
-              <button
+               <button
                 type="button"
                 onClick={() =>
-                  setPrintData({ type: "recommendation", customer })
+                  setPrintData({ type: "profile", customer })
                 }
                 className="text-emerald-600 text-xs font-bold flex items-center bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-100 hover:bg-emerald-100 transition"
               >
@@ -397,9 +396,6 @@ const CustomerDetail = () => {
         </div>
       </div>
 
-      {canUploadDocs && isDocHandler && (
-        <DocumentUploadPanel customer={customer} onUploaded={refreshCustomer} />
-      )}
       {!canUploadDocs && <DocumentsList documents={customer.documents} />}
 
       {isEditModalOpen && (

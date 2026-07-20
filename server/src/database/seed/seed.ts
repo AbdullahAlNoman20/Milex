@@ -97,6 +97,11 @@ async function main() {
     console.log(`Seeded ${u.role}: ${u.email} / ${TEST_PASSWORD}`);
   }
 
+  const DEFAULT_CARRIERS = ['DHL', 'FedEx', 'UPS', 'Aramex', 'TNT Express'];
+  for (const name of DEFAULT_CARRIERS) {
+    await prisma.serviceProvider.upsert({ where: { name }, update: {}, create: { name } });
+  }
+
   console.log('Seed complete. Rotate all these passwords before real use.');
 }
 

@@ -98,7 +98,7 @@ export const listStaffDirectory = async () => {
   const staff = await prisma.user.findMany({
     where: { role: { name: { in: ['KAM', 'SALES_COORDINATOR'] } }, isActive: true },
     select: { id: true, name: true, email: true, role: { select: { name: true } } },
-    orderBy: [{ name: 'asc' }],
+    orderBy: { name: 'asc' },
   });
   return staff.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role.name }));
 };

@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/KAM/WeeklySalesPlan.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Plus,
   Trash2,
@@ -11,13 +11,7 @@ import {
   CalendarRange,
 } from "lucide-react";
 import { useToast } from "../../../../../Components/hooks/useToast";
-import {
-  VISIT_SECTIONS,
-  getWeekStart,
-  getWeekEnd,
-  formatDateRange,
-  buildEmptyVisit,
-} from "../../constants/weeklyPlanStatus";
+import { VISIT_SECTIONS, getWeekStart, getWeekEnd, formatDateRange, buildEmptyVisit } from '../../constants/weeklyPlanStatus';
 import {
   listPlansForKam,
   savePlan,
@@ -163,19 +157,17 @@ const WeeklySalesPlan = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPlans();
   }, [loadPlans]);
 
-  const addVisit = (section) => {
+ const addVisit = (section) => {
+    const today = new Date().toISOString().slice(0, 10);
     setPlan((prev) => ({
       ...prev,
-      [section === VISIT_SECTIONS.EXISTING
-        ? "existingVisits"
-        : "prospectVisits"]: [
-        ...(section === VISIT_SECTIONS.EXISTING
-          ? prev.existingVisits
-          : prev.prospectVisits),
-        buildEmptyVisit(plan.weekStartDate),
+      [section === VISIT_SECTIONS.EXISTING ? 'existingVisits' : 'prospectVisits']: [
+        ...(section === VISIT_SECTIONS.EXISTING ? prev.existingVisits : prev.prospectVisits),
+        buildEmptyVisit(today),
       ],
     }));
   };

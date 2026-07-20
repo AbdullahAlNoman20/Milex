@@ -6,20 +6,30 @@ import { humanizeStatus } from '../../common/utils/humanize.util';
 export const getNotificationsForUser = async (userId: string, role: string, limit = 8) => {
   const items: { id: string; label: string; link: string; isOverdue?: boolean }[] = [];
 
-  if (role === 'LINE_MANAGER') {
-    const pending = await prisma.customer.findMany({
-      where: {
-        status: {
-          in: [
-            CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
-            CUSTOMER_STATUS.INFO_UPDATE_PENDING_LM_APPROVAL,
-            CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED,
-            CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
-          ],
+ if (role === 'LINE_MANAGER') {
+    const [pending, pendingFieldRequests] = await Promise.all([
+      prisma.customer.findMany({
+        where: {
+          status: {
+            in: [
+              CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+              CUSTOMER_STATUS.INFO_UPDATE_PENDING_LM_APPROVAL,
+              CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED,
+              CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+            ],
+          },
         },
-      },
-      take: 20,
-    });
+        take: 20,
+      }),
+      // Field-edit requests from KAM/SC waiting on this Line Manager's decision.
+      prisma.fieldChangeRequest.findMany({
+        where: { approved: null },
+        include: { customer: { select: { accountName: true, barcode: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
     pending.forEach((c) => {
       const ageDays = (Date.now() - c.updatedAt.getTime()) / 86400000;
       items.push({
@@ -30,13 +40,6 @@ export const getNotificationsForUser = async (userId: string, role: string, limi
       });
     });
 
-    // Field-edit requests from KAM/SC waiting on this Line Manager's decision.
-    const pendingFieldRequests = await prisma.fieldChangeRequest.findMany({
-      where: { approved: null },
-      include: { customer: { select: { accountName: true, barcode: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
     pendingFieldRequests.forEach((r) => {
       const ageDays = (Date.now() - r.createdAt.getTime()) / 86400000;
       items.push({

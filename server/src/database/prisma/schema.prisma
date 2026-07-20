@@ -214,6 +214,8 @@ model Customer {
   @@index([status])
   @@index([recommendedById])
   @@index([handledById])
+  @@index([followUpDate])
+  @@index([status, provisionalExpiryDate])
 }
 
 model Contact {
@@ -245,6 +247,12 @@ model ShippingDetail {
   @@index([customerId])
 }
 
+model ServiceProvider {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
 model FieldChangeRequest {
   id            String    @id @default(uuid())
   customerId    String
@@ -269,6 +277,7 @@ model FieldChangeRequest {
   createdAt     DateTime  @default(now())
 
   @@index([customerId])
+  @@index([approved])
 }
 
 model NotificationRead {
@@ -368,7 +377,8 @@ model DailyReport {
 model ReportVisit {
   id                     String      @id @default(uuid())
   customerName           String
-  completed              Boolean     @default(true)
+  purpose                String?
+  completed              Boolean?
   reasonIfNotCompleted   String?
   outcomeNotes           String?
   sourceVisitId          String?

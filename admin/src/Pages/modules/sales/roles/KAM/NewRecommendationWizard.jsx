@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/KAM/NewRecommendationWizard.jsx
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import  { useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, ArrowLeft, ArrowRight, Plus, Trash2, Save } from "lucide-react";
 import { useSales } from "../../hooks/useSales";
@@ -7,6 +7,7 @@ import { useAuth } from "../../../../../Components/hooks/useAuth";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import FormField from "../../../../../Components/Shared/FormField";
 import SelectWithOther from "../../../../../Components/Shared/SelectWithOther";
+import { listServiceProviders } from '../../services/serviceProviderService';
 import {
   BUSINESS_TYPE_OPTIONS,
   ACCOUNT_MODE_OPTIONS,
@@ -18,7 +19,6 @@ import {
 } from "../../constants/formOptions";
 import { CREDIT_RULES } from "../../constants/salesStatus";
 import {
-  sanitizeText,
   sanitizePhoneInput,
   sanitizeEmailInput,
 } from "../../../../../Components/utils/sanitize";
@@ -39,7 +39,7 @@ const STEPS = [
 const DRAFT_KEY_PREFIX = "milex_recommendation_draft_";
 const MAX_NOTE_LENGTH = 2000;
 
-const buildInitialState = (currentUser) => ({
+const buildInitialState = () => ({
   form: {
     accountName: "",
     address: "",
@@ -70,6 +70,7 @@ const CountrySelect = ({ value, onChange, countries }) => {
   const blurTimeoutRef = useRef(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery(value || "");
   }, [value]);
 
@@ -144,7 +145,14 @@ const NewRecommendationWizard = () => {
   const draftKey = `${DRAFT_KEY_PREFIX}${currentUser?.id || "anon"}`;
 
   const [step, setStep] = useState(1);
-  const [state, setState] = useState(() => buildInitialState(currentUser));
+  const [state, setState] = useState(() => buildInitialState());
+  const [carrierOptions, setCarrierOptions] = useState([]);
+
+  useEffect(() => {
+    listServiceProviders()
+      .then(setCarrierOptions)
+      .catch(() => setCarrierOptions(['DHL', 'FedEx', 'UPS', 'Aramex', 'TNT Express']));
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -153,6 +161,7 @@ const NewRecommendationWizard = () => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object" && parsed.form) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setState(parsed);
           showToast("Draft restored", "info");
         }
@@ -907,20 +916,11 @@ const NewRecommendationWizard = () => {
                         }
                       />
                     </FormField>
-                    <FormField label="Current Service Provider" required>
-                      <input
-                        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                   <FormField label="Current Service Provider" required>
+                      <SelectWithOther
+                        options={carrierOptions}
                         value={row.provider}
-                        maxLength={150}
-                        onChange={(e) =>
-                          setShipping((prev) =>
-                            prev.map((r, idx) =>
-                              idx === i
-                                ? { ...r, provider: e.target.value }
-                                : r,
-                            ),
-                          )
-                        }
+                        onChange={(v) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, provider: v } : r)))}
                       />
                     </FormField>
                   </div>

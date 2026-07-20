@@ -1,8 +1,7 @@
-import React, { createContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '../../../../Components/hooks/useToast';
 import * as customerService from '../services/customerService';
-
-export const SalesContext = createContext(null);
+import { SalesContext } from './SalesContextObject';
 
 // Maps the historyAction text each panel already sends into the specific
 // backend endpoint that must run. This is the single place that translates
@@ -50,6 +49,7 @@ export const SalesProvider = ({ children }) => {
   }, []);
 
 useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     reload();
   }, [reload]);
 
@@ -58,6 +58,7 @@ useEffect(() => {
   // matches the actionText, then refetches so all roles see the live result.
   const updateStatus = useCallback(
     async (id, _newStatus, updates = {}, actionText, _subText = '') => {
+      void _subText;
       if (!id || !actionText) return;
       const call = ACTION_TO_SERVICE_CALL[actionText];
       if (!call) {

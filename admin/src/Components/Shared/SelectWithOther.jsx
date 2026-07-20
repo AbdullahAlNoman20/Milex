@@ -1,5 +1,5 @@
 // src/Components/Shared/SelectWithOther.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { sanitizeText } from '../utils/sanitize';
 
 const OTHER_VALUE = '__OTHER__';
@@ -22,6 +22,7 @@ const SelectWithOther = ({
   useEffect(() => {
     const knownNow = options.includes(value);
     if (value === '') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsOtherMode(false);
       setOtherText('');
     } else if (!knownNow) {

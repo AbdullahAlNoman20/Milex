@@ -82,19 +82,23 @@ export const followUpUpdateSchema = z
   })
   .strict();
 
+// Empty-string is what an unselected <select> or a blank text input sends —
+// treat it the same as "not provided" instead of a validation error.
+const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
+
 export const finalProfileSchema = z
   .object({
-    managingPartnerName: z.string().max(150).optional().nullable(),
-    binNumber: z.string().max(50).optional().nullable(),
-    tinNumber: z.string().max(50).optional().nullable(),
-    destinations: z.string().max(500).optional().nullable(),
-    preferredCarrier: z.string().max(150).optional().nullable(),
-    natureOfBusiness: z.string().max(150).optional().nullable(),
-    gainType: z.enum(['NEW_GAIN', 'REGAIN', 'AC_UPDATE']).optional().nullable(),
-    financeMode: z.enum(['EX', 'FR']).optional().nullable(),
-    area: z.string().max(100).optional().nullable(),
-    zone: z.string().max(100).optional().nullable(),
-    specialInstructions: z.string().max(500).optional().nullable(),
+    managingPartnerName: z.preprocess(emptyToUndefined, z.string().max(150).optional().nullable()),
+    binNumber: z.preprocess(emptyToUndefined, z.string().max(50).optional().nullable()),
+    tinNumber: z.preprocess(emptyToUndefined, z.string().max(50).optional().nullable()),
+    destinations: z.preprocess(emptyToUndefined, z.string().max(500).optional().nullable()),
+    preferredCarrier: z.preprocess(emptyToUndefined, z.string().max(150).optional().nullable()),
+    natureOfBusiness: z.preprocess(emptyToUndefined, z.string().max(150).optional().nullable()),
+    gainType: z.preprocess(emptyToUndefined, z.enum(['NEW_GAIN', 'REGAIN', 'AC_UPDATE']).optional().nullable()),
+    financeMode: z.preprocess(emptyToUndefined, z.enum(['EX', 'FR']).optional().nullable()),
+    area: z.preprocess(emptyToUndefined, z.string().max(100).optional().nullable()),
+    zone: z.preprocess(emptyToUndefined, z.string().max(100).optional().nullable()),
+    specialInstructions: z.preprocess(emptyToUndefined, z.string().max(500).optional().nullable()),
   })
   .strict();
 
