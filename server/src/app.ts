@@ -17,6 +17,7 @@ import notificationsRoutes from './modules/notifications/notifications.routes';
 import fileStorageRoutes from './modules/file-storage/fileStorage.routes';
 import reportsExportRoutes from './modules/reports-export/reportsExport.routes';
 import customersRoutes from './modules/customers/customers.routes';
+import serviceProvidersRoutes from './modules/service-providers/serviceProviders.routes';
 import onboardingRoutes from './modules/onboarding/onboarding.routes';
 import weeklyPlansRoutes from './modules/weekly-plans/weeklyPlans.routes';
 import dailyReportsRoutes from './modules/daily-reports/dailyReports.routes';
@@ -26,6 +27,11 @@ export const logger = pino({ level: env.IS_PRODUCTION ? 'info' : 'debug', redact
 
 export const buildApp = () => {
   const app = express();
+
+  // Correct client IP behind reverse proxies (Render/Vercel/Cloudflare) —
+  // without this, rate limiters and login lockout see the proxy's IP for
+  // every user instead of the real client IP.
+  app.set('trust proxy', 1);
 
   // Never trust the platform's default X-Powered-By leak.
   app.disable('x-powered-by');
@@ -70,6 +76,7 @@ export const buildApp = () => {
   app.use('/api/v1/files', fileStorageRoutes);
   app.use('/api/v1/reports/export', reportsExportRoutes);
   app.use('/api/v1/customers', customersRoutes);
+  app.use('/api/v1/service-providers', serviceProvidersRoutes);
   app.use('/api/v1/onboarding', onboardingRoutes);
   app.use('/api/v1/weekly-plans', weeklyPlansRoutes);
   app.use('/api/v1/daily-reports', dailyReportsRoutes);

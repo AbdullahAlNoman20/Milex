@@ -7,6 +7,7 @@ import { sanitizeAndEscape } from './sanitize.helper';
 import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
 import { runFileScan } from '../../jobs/file-scan.job';
 import { humanizeStatus } from '../../common/utils/humanize.util';
+import { ensureServiceProvidersExist } from '../service-providers/serviceProviders.service';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
 const generateRateRef = () => `MLX${Math.floor(1000000 + Math.random() * 9000000)}`;
@@ -97,6 +98,12 @@ export const createRecommendation = async (data: any, kamId: string) => {
   });
 
   await logAudit({ entity: 'Customer', entityId: customer.id, action: 'RECOMMENDATION_CREATED', actorId: kamId, afterState: { barcode } });
+
+  // Persist any new "Others" carrier name typed in this submission so it
+  // shows up as a normal dropdown option on every future recommendation form.
+  const providerNames = (data.shippingDetails || []).map((s: any) => s.provider).filter(Boolean);
+  await ensureServiceProvidersExist(providerNames);
+
   return customer;
 };
 
@@ -387,16 +394,16 @@ export const setAccountConfigMode = async (customerId: string, mode: 'REGULAR' |
   return updated;
 };
 
-// Regular-mode final onboarding: no document window, no LM re-review — the
-// only Line Manager approval in this revised workflow is the original rate
-// approval. Saving the final profile directly activates the account.
+// Regular-mode final submission now also routes through Line Manager review
+// (same gate as Provisional), instead of activating the account immediately.
 export const submitFinalOnboardingRegular = async (customerId: string, actorId: string) => {
   return transitionCustomerStatus({
     customerId,
-    toStatus: CUSTOMER_STATUS.ACTIVE_ACCOUNT,
+    toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
     actorId,
     extraUpdates: { accountProfileType: 'REGULAR' },
-    historyAction: 'FINAL ONBOARDING COMPLETED (REGULAR ACCOUNT) — ACCOUNT ACTIVATED',
+    historyAction: 'FINAL ONBOARDING REQUESTED (REGULAR ACCOUNT)',
+    historySubText: 'Awaiting Line Manager final verification',
   });
 };
 

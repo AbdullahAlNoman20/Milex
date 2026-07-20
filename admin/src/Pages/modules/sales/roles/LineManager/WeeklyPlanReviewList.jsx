@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/LineManager/WeeklyPlanReviewList.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import  { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { listPlansForReview, reviewPlan } from '../../services/weeklyPlanService';
@@ -21,6 +21,7 @@ const WeeklyPlanReviewList = () => {
   }, [showToast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 

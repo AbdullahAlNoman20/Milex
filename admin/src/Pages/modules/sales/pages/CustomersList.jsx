@@ -1,5 +1,5 @@
-// admin/src/Pages/modules/sales/pages/CustomersList.jsx 
-import React, { useMemo, useState, useEffect } from 'react';
+ // admin/src/Pages/modules/sales/pages/CustomersList.jsx
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { STATUS } from '../constants/salesStatus';
@@ -22,6 +22,7 @@ const CustomersList = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tabParam && TABS.some((t) => t.key === tabParam)) setActiveTab(tabParam);
   }, [tabParam]);
 

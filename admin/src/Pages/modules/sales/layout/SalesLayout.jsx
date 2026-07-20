@@ -1,5 +1,4 @@
 // src/Pages/modules/sales/layout/SalesLayout.jsx
-import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { SalesProvider } from '../context/SalesContext';
 import SalesSidebar from './SalesSidebar';

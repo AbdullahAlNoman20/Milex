@@ -1,18 +1,29 @@
 // admin/src/Pages/modules/sales/roles/KAM/DailyVisitingReport.jsx 
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Trash2, CheckCircle2, XCircle, History, ChevronDown, ChevronUp, Loader2, Lock } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, XCircle, History, ChevronDown, ChevronUp, Loader2, Lock, Save, Pencil } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { getReportByDate, saveReport, listMyReports } from '../../services/dailyReportService';
+import { todayLocalISO as todayISO } from '../../../../../Components/utils/date';
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
-
-const buildEmptyEntry = () => ({
-  id: `e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+const buildManualEntry = () => ({
+  id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   customerName: '',
-  completed: null,
+  purpose: '',
+  completed: true,
   reasonIfNotCompleted: '',
   outcomeNotes: '',
   sourceVisitId: null,
+  isManual: true,
+  locked: false,
+});
+
+const normalize = (v) => ({
+  ...v,
+  reasonIfNotCompleted: v.reasonIfNotCompleted || '',
+  outcomeNotes: v.outcomeNotes || '',
+  purpose: v.purpose || '',
+  isManual: !v.sourceVisitId,
+  locked: !!v.id && !String(v.id).startsWith('m_') && !String(v.id).startsWith('plan_'),
 });
 
 const DailyVisitingReport = () => {
@@ -21,6 +32,7 @@ const DailyVisitingReport = () => {
   const [visits, setVisits] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
+  const [unlockedIds, setUnlockedIds] = useState(new Set());
   const [history, setHistory] = useState([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [expandedReportId, setExpandedReportId] = useState(null);
@@ -35,13 +47,10 @@ const DailyVisitingReport = () => {
     setIsLoading(true);
     try {
       const existing = await getReportByDate(targetDate);
-      setVisits(
-        existing?.visits?.length
-          ? existing.visits.map((v) => ({ ...v, reasonIfNotCompleted: v.reasonIfNotCompleted || '', outcomeNotes: v.outcomeNotes || '' }))
-          : [buildEmptyEntry()]
-      );
+      setVisits(existing?.visits?.length ? existing.visits.map(normalize) : []);
+      setUnlockedIds(new Set());
     } catch {
-      setVisits([buildEmptyEntry()]);
+      setVisits([]);
     } finally {
       setIsLoading(false);
     }
@@ -56,15 +65,17 @@ const DailyVisitingReport = () => {
   const handleDateChange = (newDate) => setDate(newDate);
 
   const updateLocal = (id, updated) => setVisits((prev) => prev.map((v) => (v.id === id ? updated : v)));
-  const addVisit = () => setVisits((prev) => [...prev, buildEmptyEntry()]);
+  const addManualVisit = () => setVisits((prev) => [...prev, buildManualEntry()]);
   const removeVisit = (id) => setVisits((prev) => prev.filter((v) => v.id !== id));
+  const unlockRow = (id) => setUnlockedIds((prev) => new Set(prev).add(id));
 
   const persist = useCallback(
     async (nextVisits, id) => {
       setSavingId(id);
       try {
         const saved = await saveReport({ date, visits: nextVisits });
-        setVisits(saved.visits.map((v) => ({ ...v, reasonIfNotCompleted: v.reasonIfNotCompleted || '', outcomeNotes: v.outcomeNotes || '' })));
+        setVisits(saved.visits.map(normalize));
+        setUnlockedIds(new Set());
         loadHistory();
       } catch (err) {
         showToast(err?.message || 'Failed to save', 'error');
@@ -78,26 +89,25 @@ const DailyVisitingReport = () => {
   const handleDone = (v) => {
     if (!v.customerName.trim()) return showToast('Enter a customer name first', 'warning');
     const updated = { ...v, completed: true, reasonIfNotCompleted: '' };
-    updateLocal(v.id, updated);
     persist(visits.map((r) => (r.id === v.id ? updated : r)), v.id);
   };
 
   const handleSkip = (v) => {
     if (!v.customerName.trim()) return showToast('Enter a customer name first', 'warning');
-    updateLocal(v.id, { ...v, completed: false });
+    if (!v.reasonIfNotCompleted?.trim()) return showToast('Enter a reason for skipping', 'warning');
+    const updated = { ...v, completed: false };
+    persist(visits.map((r) => (r.id === v.id ? updated : r)), v.id);
   };
 
-  const handleReasonBlur = (v) => {
-    if (v.completed !== false || !v.reasonIfNotCompleted?.trim()) return;
-    persist(visits.map((r) => (r.id === v.id ? v : r)), v.id);
-  };
-
-  const handleOutcomeBlur = (v) => {
-    if (v.completed === null || !v.customerName.trim()) return;
+  const handleManualSave = (v) => {
+    if (!v.customerName.trim()) return showToast('Enter a customer name', 'warning');
     persist(visits.map((r) => (r.id === v.id ? v : r)), v.id);
   };
 
   if (isLoading) return <div className="text-center py-16 text-sm text-slate-400">Loading report...</div>;
+
+  const planVisits = visits.filter((v) => !v.isManual);
+  const manualVisits = visits.filter((v) => v.isManual);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -113,96 +123,157 @@ const DailyVisitingReport = () => {
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-        {visits.map((v) => {
-          const fromPlan = !!v.sourceVisitId;
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Scheduled Visits (from Weekly Plan)</h3>
+        {planVisits.length === 0 ? (
+          <p className="text-xs text-slate-400">No visits scheduled from your Weekly Plan for this date.</p>
+        ) : (
+          planVisits.map((v) => {
+            const isUnlocked = unlockedIds.has(v.id);
+            const isLockedRow = v.locked && !isUnlocked;
+            return (
+              <div key={v.id} className="border border-slate-200 rounded-lg p-4 space-y-3 relative">
+                {savingId === v.id && (
+                  <span className="absolute top-3 right-3 text-slate-400"><Loader2 size={14} className="animate-spin" /></span>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Customer Name <Lock size={10} />
+                    </label>
+                    <input
+                      disabled
+                      className="w-full border p-2.5 rounded text-sm outline-none bg-slate-50 text-slate-500 border-slate-100"
+                      value={v.customerName}
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
+                      Purpose <Lock size={10} />
+                    </label>
+                    <input
+                      disabled
+                      className="w-full border p-2.5 rounded text-sm outline-none bg-slate-50 text-slate-500 border-slate-100"
+                      value={v.purpose}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Visit Outcome</label>
+                  <textarea
+                    disabled={isLockedRow}
+                    className={`w-full border p-2.5 rounded text-sm outline-none min-h-[60px] ${isLockedRow ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200 focus:border-emerald-500'}`}
+                    placeholder="Visit outcome / notes"
+                    value={v.outcomeNotes}
+                    maxLength={500}
+                    onChange={(e) => updateLocal(v.id, { ...v, outcomeNotes: e.target.value })}
+                  />
+                </div>
+
+                {v.completed === false && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Reason for Skip</label>
+                    <textarea
+                      disabled={isLockedRow}
+                      className={`w-full border p-2.5 rounded text-sm outline-none min-h-[50px] ${isLockedRow ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-red-200 focus:border-red-500'}`}
+                      value={v.reasonIfNotCompleted}
+                      maxLength={500}
+                      onChange={(e) => updateLocal(v.id, { ...v, reasonIfNotCompleted: e.target.value })}
+                    />
+                  </div>
+                )}
+
+                {isLockedRow ? (
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold ${v.completed ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {v.completed ? 'Marked Done' : 'Marked Skipped'}
+                    </span>
+                    <button type="button" onClick={() => unlockRow(v.id)} className="text-xs font-bold text-slate-500 flex items-center hover:text-emerald-700 transition">
+                      <Pencil size={12} className="mr-1" /> Edit
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDone(v)}
+                      className="flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                    >
+                      <CheckCircle2 size={14} /> Done
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSkip(v)}
+                      className="flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-red-500 text-white hover:bg-red-600"
+                    >
+                      <XCircle size={14} /> Skip
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Additional Visits (not in Weekly Plan)</h3>
+        {manualVisits.map((v) => {
+          const isUnlocked = unlockedIds.has(v.id);
+          const isLockedRow = v.locked && !isUnlocked;
           return (
             <div key={v.id} className="border border-slate-200 rounded-lg p-4 space-y-3 relative">
               {savingId === v.id && (
                 <span className="absolute top-3 right-3 text-slate-400"><Loader2 size={14} className="animate-spin" /></span>
               )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
-                    Customer Name {fromPlan && <Lock size={10} />}
-                  </label>
-                  <input
-                    disabled={fromPlan}
-                    className={`w-full border p-2.5 rounded text-sm outline-none focus:border-emerald-500 ${fromPlan ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200'}`}
-                    placeholder="Customer name"
-                    value={v.customerName}
-                    maxLength={200}
-                    onChange={(e) => updateLocal(v.id, { ...v, customerName: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase mb-1">
-                    Purpose {fromPlan && <Lock size={10} />}
-                  </label>
-                  <input
-                    disabled={fromPlan}
-                    className={`w-full border p-2.5 rounded text-sm outline-none ${fromPlan ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200'}`}
-                    value={fromPlan ? v.purpose : ''}
-                    readOnly
-                    placeholder={fromPlan ? '' : 'Set from Weekly Plan'}
-                  />
-                </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Customer Name</label>
+                <input
+                  disabled={isLockedRow}
+                  className={`w-full border p-2.5 rounded text-sm outline-none ${isLockedRow ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200 focus:border-emerald-500'}`}
+                  placeholder="Customer name"
+                  value={v.customerName}
+                  maxLength={200}
+                  onChange={(e) => updateLocal(v.id, { ...v, customerName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Visit Outcome</label>
+                <textarea
+                  disabled={isLockedRow}
+                  className={`w-full border p-2.5 rounded text-sm outline-none min-h-[60px] ${isLockedRow ? 'bg-slate-50 text-slate-500 border-slate-100' : 'bg-white border-slate-200 focus:border-emerald-500'}`}
+                  placeholder="Visit outcome / notes"
+                  value={v.outcomeNotes}
+                  maxLength={500}
+                  onChange={(e) => updateLocal(v.id, { ...v, outcomeNotes: e.target.value })}
+                />
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDone(v)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${v.completed === true ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                >
-                  <CheckCircle2 size={14} /> Done
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSkip(v)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${v.completed === false ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                >
-                  <XCircle size={14} /> Skip
-                </button>
-              </div>
-
-              {v.completed === false && (
-                <div>
-                  <label className="block text-[10px] font-bold text-red-500 uppercase mb-1">Reason for Skip</label>
-                  <textarea
-                    className="w-full border border-red-200 p-2.5 rounded text-sm outline-none focus:border-red-500 min-h-[60px]"
-                    placeholder="Reason visit was not completed"
-                    value={v.reasonIfNotCompleted}
-                    maxLength={500}
-                    onChange={(e) => updateLocal(v.id, { ...v, reasonIfNotCompleted: e.target.value })}
-                    onBlur={() => handleReasonBlur(visits.find((r) => r.id === v.id))}
-                  />
+              {isLockedRow ? (
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => unlockRow(v.id)} className="text-xs font-bold text-slate-500 flex items-center hover:text-emerald-700 transition">
+                    <Pencil size={12} className="mr-1" /> Edit
+                  </button>
                 </div>
-              )}
-
-              {v.completed === true && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Visit Outcome / Notes</label>
-                  <textarea
-                    className="w-full border border-slate-200 p-2.5 rounded text-sm outline-none focus:border-emerald-500 min-h-[60px]"
-                    placeholder="Visit outcome / notes"
-                    value={v.outcomeNotes}
-                    maxLength={500}
-                    onChange={(e) => updateLocal(v.id, { ...v, outcomeNotes: e.target.value })}
-                    onBlur={() => handleOutcomeBlur(visits.find((r) => r.id === v.id))}
-                  />
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleManualSave(v)}
+                    className="flex-1 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    <Save size={14} /> Save
+                  </button>
+                  <button type="button" onClick={() => removeVisit(v.id)} className="px-3 text-red-500 hover:text-red-700 transition">
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              )}
-
-              {!fromPlan && (
-                <button type="button" onClick={() => removeVisit(v.id)} className="text-xs text-red-500 font-bold flex items-center hover:text-red-700">
-                  <Trash2 size={14} className="mr-1" /> Remove
-                </button>
               )}
             </div>
           );
         })}
-        <button type="button" onClick={addVisit} className="text-sm font-bold text-emerald-700 flex items-center hover:text-emerald-800 transition">
+        <button type="button" onClick={addManualVisit} className="text-sm font-bold text-emerald-700 flex items-center hover:text-emerald-800 transition">
           <Plus size={16} className="mr-1" /> Add Visit Entry
         </button>
       </div>
@@ -235,6 +306,7 @@ const DailyVisitingReport = () => {
                         <thead>
                           <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
                             <th className="py-2 pr-3">Customer Name</th>
+                            <th className="py-2 pr-3">Purpose</th>
                             <th className="py-2 pr-3">Status</th>
                             <th className="py-2 pr-3">Reason (if not completed)</th>
                             <th className="py-2">Outcome / Notes</th>
@@ -244,10 +316,15 @@ const DailyVisitingReport = () => {
                           {r.visits.map((v) => (
                             <tr key={v.id} className="text-xs align-top">
                               <td className="py-2.5 pr-3 font-semibold text-slate-700">{v.customerName}</td>
+                              <td className="py-2.5 pr-3 text-slate-500">{v.purpose || '—'}</td>
                               <td className="py-2.5 pr-3">
-                                <span className={`font-bold ${v.completed ? 'text-emerald-600' : 'text-red-500'}`}>
-                                  {v.completed ? 'Completed' : 'Not Completed'}
-                                </span>
+                                {v.completed === null ? (
+                                  <span className="font-bold text-slate-400">Not Decided</span>
+                                ) : (
+                                  <span className={`font-bold ${v.completed ? 'text-emerald-600' : 'text-red-500'}`}>
+                                    {v.completed ? 'Completed' : 'Not Completed'}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-2.5 pr-3 text-slate-500">{v.reasonIfNotCompleted || '—'}</td>
                               <td className="py-2.5 text-slate-500">{v.outcomeNotes || '—'}</td>

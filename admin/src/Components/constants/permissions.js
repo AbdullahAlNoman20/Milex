@@ -1,4 +1,3 @@
-
 import { ROLES } from './roles';
 
 export const PERMISSIONS = Object.freeze({

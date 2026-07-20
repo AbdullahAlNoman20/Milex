@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx 
+// admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx
 import React, { useState } from 'react';
 import { Mail, Printer, PenTool, FileSpreadsheet, X } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
@@ -7,7 +7,7 @@ import { useToast } from '../../../../../Components/hooks/useToast';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
 
 const OfferLetterPanel = ({ customer }) => {
-  const { updateStatus } = useSales();
+  const { updateStatus, setPrintData } = useSales();
   const { showToast } = useToast();
   const [offerText, setOfferText] = useState(
     customer.offerText ||
@@ -68,9 +68,16 @@ const OfferLetterPanel = ({ customer }) => {
       <div className="flex gap-3">
         <button
           type="button"
+          onClick={() => setPrintData({ type: 'offer', customer: { ...customer, offerText } })}
+          className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-2.5 rounded-lg font-bold shadow-sm hover:bg-slate-50 transition flex items-center justify-center"
+        >
+          <Printer size={14} className="mr-1.5" /> Print
+        </button>
+        <button
+          type="button"
           disabled={isSubmitting}
           onClick={handleSend}
-          className="w-full bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-800 transition flex items-center justify-center disabled:opacity-50"
+          className="flex-[2] bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-800 transition flex items-center justify-center disabled:opacity-50"
         >
           <Mail size={14} className="mr-1.5" /> {isResend ? 'Resend Offer Letter' : 'Send Offer Letter'}
         </button>

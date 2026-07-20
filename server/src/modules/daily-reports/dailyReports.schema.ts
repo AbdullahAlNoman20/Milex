@@ -4,7 +4,8 @@ import { z } from 'zod';
 const visitEntrySchema = z
   .object({
     customerName: z.string().min(1).max(200),
-    completed: z.boolean(),
+    purpose: z.string().max(300).optional().nullable(),
+    completed: z.boolean().nullable(),
     reasonIfNotCompleted: z.string().max(500).optional().nullable(),
     outcomeNotes: z.string().max(500).optional().nullable(),
     sourceVisitId: z.string().max(100).optional().nullable(),

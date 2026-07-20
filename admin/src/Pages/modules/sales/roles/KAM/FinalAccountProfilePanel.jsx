@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/KAM/FinalAccountProfilePanel.jsx 
+// admin/src/Pages/modules/sales/roles/KAM/FinalAccountProfilePanel.jsx
 import { useState, useCallback } from 'react';
 import { ClipboardEdit, FileCheck, Loader2 } from 'lucide-react';
 import { updateFinalProfile, setAccountConfigMode, submitFinalOnboardingRegular, submitFinalOnboarding } from '../../services/customerService';
@@ -83,7 +83,7 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
       if (mode === 'REGULAR') {
         await updateFinalProfile(customer.id, form);
         await submitFinalOnboardingRegular(customer.id);
-        showToast('Account activated', 'success');
+        showToast('Submitted for Final Onboarding — awaiting Line Manager verification', 'success');
       } else {
         await updateFinalProfile(customer.id, form);
         await submitFinalOnboarding(customer.id);
@@ -128,8 +128,8 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
         </div>
         <p className="text-[10px] text-slate-400 mt-2">
           {mode === 'REGULAR'
-            ? 'Fill everything, then submit once — the account activates immediately.'
-            : 'Each field and document you provide saves automatically as a draft. Submit for Final Onboarding once ready.'}
+            ? 'Fill everything, then submit once — this goes to your Line Manager for final approval.'
+            : 'Each field and document you provide saves automatically as a draft. Submit for Final Onboarding once ready — your Line Manager will do the final review.'}
         </p>
       </div>
 
@@ -183,7 +183,7 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
           className="w-full bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
         >
           {isSubmittingFinal ? <Loader2 size={16} className="mr-2 animate-spin" /> : <FileCheck size={16} className="mr-2" />}
-          {mode === 'REGULAR' ? 'Activate Account' : 'Submit for Final Onboarding'}
+          Submit for Final Onboarding
         </button>
       </div>
     </div>

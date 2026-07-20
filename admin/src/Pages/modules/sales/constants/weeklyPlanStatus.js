@@ -15,14 +15,22 @@ export const VISIT_SECTIONS = Object.freeze({
   PROSPECT: 'prospect',
 });
 
-// Work week runs Saturday → Friday.
+// Work week runs Saturday → Friday. Uses local date parts (not
+// toISOString(), which converts to UTC first and can shift the date back a
+// day in UTC+ timezones like Bangladesh).
+const toLocalISODate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export const getWeekStart = (date = new Date()) => {
   const d = new Date(date);
   const day = d.getDay(); // 0=Sun ... 6=Sat
   const diff = day === 6 ? 0 : -(day + 1);
   d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 };
 
 export const getWeekEnd = (weekStartDate) => {
