@@ -3,9 +3,26 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { listNotifications, markNotificationRead } from '../services/notificationService';
+import { getSocket } from '../services/socketService';
 
-const REFRESH_MS = 15000;
+const REFRESH_MS = 60000; // fallback poll only — socket handles instant updates
 const BELL_LIMIT = 8;
+
+// Put a file named notification-ping.mp3 in admin/public/sounds/ — a short
+// (under 1 second) soft "ping"/"pop" style sound works best; avoid long or
+// loud clips since this can fire during active work.
+const NOTIFICATION_SOUND_URL = '/sounds/notification-ping.mp3';
+
+let sharedAudio = null;
+const playNotificationSound = () => {
+  try {
+    if (!sharedAudio) sharedAudio = new Audio(NOTIFICATION_SOUND_URL);
+    sharedAudio.currentTime = 0;
+    sharedAudio.play().catch(() => {});
+  } catch {
+    /* ignore autoplay restrictions */
+  }
+};
 
 const NotificationBell = () => {
   const [items, setItems] = useState([]);
@@ -26,7 +43,18 @@ const NotificationBell = () => {
   useEffect(() => {
     refresh();
     const id = setInterval(refresh, REFRESH_MS);
-    return () => clearInterval(id);
+
+    const socket = getSocket();
+    const handleNew = () => {
+      playNotificationSound();
+      refresh();
+    };
+    socket.on('notification:new', handleNew);
+
+    return () => {
+      clearInterval(id);
+      socket.off('notification:new', handleNew);
+    };
   }, [refresh]);
 
   useEffect(() => {

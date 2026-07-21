@@ -8,3 +8,29 @@ export const sendNotification = async (data: Record<string, unknown>) => {
   // eslint-disable-next-line no-console
   console.log('Sending notification (inline)', data);
 };
+
+export const sendCustomerAccountEmail = async (customer: {
+  accountName: string;
+  barcode: string;
+  businessType: string;
+  address: string;
+  phone: string;
+  email: string;
+  status: string;
+}) => {
+  // TODO: wire a real email provider (e.g. Resend, SendGrid, SES) here.
+  // Kept as a structured log for now so the trigger point and payload are
+  // correct and ready to swap in a real send call without touching callers.
+  // eslint-disable-next-line no-console
+  console.log('Sending account-created email to customer', {
+    to: customer.email,
+    subject: `Your Milex Account (${customer.barcode}) Has Been Created`,
+    body: {
+      customerName: customer.accountName,
+      accountId: customer.barcode,
+      companyInfo: { businessType: customer.businessType, address: customer.address },
+      contactDetails: { phone: customer.phone, email: customer.email },
+      accountStatus: customer.status,
+    },
+  });
+};

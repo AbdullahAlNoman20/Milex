@@ -1,13 +1,15 @@
 // src/modules/customers/customers.service.ts
 import { prisma } from '../../config/db';
 import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
-import { transitionCustomerStatus } from '../../common/utils/stateMachine.util';
+import { transitionCustomerStatus, notifyCustomerWorkflowUsers } from '../../common/utils/stateMachine.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from './sanitize.helper';
 import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
 import { runFileScan } from '../../jobs/file-scan.job';
 import { humanizeStatus } from '../../common/utils/humanize.util';
 import { ensureServiceProvidersExist } from '../service-providers/serviceProviders.service';
+import { sendCustomerAccountEmail } from '../../jobs/notification.job';
+import { emitNotificationToUser } from '../../config/socket';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
 const generateRateRef = () => `MLX${Math.floor(1000000 + Math.random() * 9000000)}`;
@@ -99,9 +101,18 @@ export const createRecommendation = async (data: any, kamId: string) => {
 
   await logAudit({ entity: 'Customer', entityId: customer.id, action: 'RECOMMENDATION_CREATED', actorId: kamId, afterState: { barcode } });
 
-  // Persist any new "Others" carrier name typed in this submission so it
-  // shows up as a normal dropdown option on every future recommendation form.
-  const providerNames = (data.shippingDetails || []).map((s: any) => s.provider).filter(Boolean);
+  // Notify every Line Manager instantly instead of waiting for their next
+  // poll cycle. Kept lightweight — just a "check your list" ping, not the
+  // full payload, since the bell/page still fetch the real data over REST.
+  const lineManagers = await prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' } }, select: { id: true } });
+  lineManagers.forEach((lm) => emitNotificationToUser(lm.id));
+
+  // Persist any new "Others" carrier name(s) typed in this submission so
+  // they show up as normal dropdown options on every future recommendation
+  // form. Providers can be a comma-separated multi-select value.
+  const providerNames = (data.shippingDetails || [])
+    .flatMap((s: any) => (s.provider || '').split(',').map((p: string) => p.trim()))
+    .filter(Boolean);
   await ensureServiceProvidersExist(providerNames);
 
   return customer;
@@ -173,6 +184,7 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
     data: { customerId, action: 'OFFER LETTER SENT', subText: 'Awaiting customer feedback via KAM', status: 'active' },
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_LETTER_SENT', actorId: scId, afterState: { offerSent: true } });
+  await notifyCustomerWorkflowUsers(updated.handledById);
   return updated;
 };
 
@@ -201,6 +213,7 @@ export const sendAgreement = async (customerId: string, agreementText: string, s
     actorId: scId,
     afterState: { agreementSent: true },
   });
+  await notifyCustomerWorkflowUsers(updated.handledById);
   return updated;
 };
 
@@ -216,6 +229,7 @@ export const submitClientFeedback = async (
       data: { customerId, action: 'OFFER ACCEPTED BY CUSTOMER', subText: 'Awaiting Sales Coordinator to send the Agreement', status: 'active' },
     });
     await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_ACCEPTED', actorId: kamId, afterState: { offerAccepted: true } });
+    await notifyCustomerWorkflowUsers(updated.handledById);
     return updated;
   }
 
@@ -232,6 +246,7 @@ export const submitClientFeedback = async (
     data: { customerId, action: 'OFFER REJECTED BY CUSTOMER', subText: clean.r, status: 'active' },
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_REJECTED', actorId: kamId, afterState: { rejectReason: clean.r } });
+  await notifyCustomerWorkflowUsers(updated.handledById);
   return updated;
 };
 
@@ -525,6 +540,8 @@ export const requestFieldChange = async (
     },
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_CHANGE_REQUESTED', actorId: requesterId, afterState: { fieldKey, documentType } });
+  const ownerForRequest = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
+  if (ownerForRequest) await notifyCustomerWorkflowUsers(ownerForRequest.handledById);
   return request;
 };
 
@@ -557,6 +574,8 @@ export const requestDocumentChange = async (
     },
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'DOCUMENT_REUPLOAD_REQUESTED', actorId: requesterId, afterState: { documentType } });
+  const ownerForDocRequest = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
+  if (ownerForDocRequest) await notifyCustomerWorkflowUsers(ownerForDocRequest.handledById);
   return request;
 };
 
@@ -615,7 +634,14 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
   } else {
     await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'FIELD_CHANGE_REJECTED', actorId: lmId });
   }
-  return prisma.customer.findUniqueOrThrow({ where: { id: request.customerId } });
+  const decidedCustomer = await prisma.customer.findUniqueOrThrow({ where: { id: request.customerId } });
+  // Broadcast to the whole workflow group (handling KAM + every LM + every
+  // SC) instead of only the single original requester — a broadcast can't
+  // be missed by one stale/disconnected session the way a single targeted
+  // emit can.
+  await notifyCustomerWorkflowUsers(decidedCustomer.handledById);
+  emitNotificationToUser(request.requestedById);
+  return decidedCustomer;
 };
 
 // Line Manager can also just edit any field (including contact sub-fields)

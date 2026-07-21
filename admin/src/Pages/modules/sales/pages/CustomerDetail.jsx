@@ -106,7 +106,7 @@ const CustomerDetail = () => {
   const role = currentUser?.role;
   const isDocHandler = role === ROLES.KAM || role === ROLES.SALES_COORDINATOR;
   const isLmOrAdmin = role === ROLES.LINE_MANAGER || role === ROLES.SUPER_ADMIN;
-  const canEditProfile = isDocHandler || isLmOrAdmin;
+  const canEditProfile = role === ROLES.SALES_COORDINATOR || isLmOrAdmin;
   const isProvisionalActive =
     customer.accountProfileType === "PROVISIONAL" &&
     customer.status === STATUS.PROVISIONAL_ACTIVE;

@@ -21,10 +21,9 @@ export const isWithinRange = (value, min, max) => {
   return Number.isFinite(num) && num >= min && num <= max;
 };
 
-export const isValidCreditPeriod = (days, { extended = false } = {}) => {
+export const isValidCreditPeriod = (days) => {
   const num = Number(days);
-  if (!Number.isFinite(num)) return false;
-  return extended ? isWithinRange(num, 1, 90) : num === 15;
+  return Number.isFinite(num) && num >= 1 && num <= 90;
 };
 
 export const validateRecommendationStep1 = (form) => {

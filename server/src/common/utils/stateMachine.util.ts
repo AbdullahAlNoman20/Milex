@@ -2,8 +2,27 @@
 import { prisma } from '../../config/db';
 import { logAudit } from './auditLog.util';
 import { CUSTOMER_STATUS_TRANSITIONS } from '../constants/status.constant';
+import { emitNotificationToUser } from '../../config/socket';
 
 import { humanizeStatus } from './humanize.util';
+
+// Fires an instant realtime ping to everyone who works this customer's
+// pipeline (the handling KAM/SC, plus every Line Manager and Sales
+// Coordinator, since they all share the same queue). A push failure here
+// must never break the actual data-changing action, hence the try/catch.
+export const notifyCustomerWorkflowUsers = async (handledById: string) => {
+  try {
+    const notifyIds = new Set<string>([handledById]);
+    const others = await prisma.user.findMany({
+      where: { role: { name: { in: ['LINE_MANAGER', 'SALES_COORDINATOR'] } }, isActive: true },
+      select: { id: true },
+    });
+    others.forEach((u) => notifyIds.add(u.id));
+    notifyIds.forEach((id) => emitNotificationToUser(id));
+  } catch (err) {
+    console.warn('[socket] notifyCustomerWorkflowUsers failed (non-fatal):', (err as Error)?.message);
+  }
+};
 
 export class InvalidTransitionError extends Error {
   constructor(from: string, to: string) {
@@ -33,7 +52,7 @@ export const transitionCustomerStatus = async ({
   historySubText = '',
   ip,
 }: TransitionParams) => {
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const customer = await tx.customer.findUnique({ where: { id: customerId } });
     if (!customer) throw new Error('Customer not found');
 
@@ -70,9 +89,12 @@ export const transitionCustomerStatus = async ({
       actorId,
       beforeState,
       afterState: { status: toStatus },
-      ip,
+     ip,
     });
 
     return updated;
   });
+
+  await notifyCustomerWorkflowUsers(updated.handledById);
+  return updated;
 };

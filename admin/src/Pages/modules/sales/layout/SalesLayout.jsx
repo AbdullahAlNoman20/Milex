@@ -2,26 +2,44 @@
 import { Outlet } from 'react-router-dom';
 import { SalesProvider } from '../context/SalesContext';
 import SalesSidebar from './SalesSidebar';
+import { useEffect } from 'react';
 import Toast from '../../../../Components/Shared/Toast';
+import { useToast } from '../../../../Components/hooks/useToast';
+import { getSocket } from '../../../../Components/services/socketService';
+import { listNotifications } from '../../../../Components/services/notificationService';
 import ErrorBoundary from '../../../../Components/Shared/ErrorBoundary';
 import BarcodeSearchBar from '../components/BarcodeSearchBar';
 import PrintTemplate from '../components/PrintTemplate';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { useSales } from '../hooks/useSales';
-import { NotificationProvider } from '../../../../Components/context/NotificationContext';
 import NotificationBell from '../../../../Components/Shared/NotificationBell';
 import { LogOut } from 'lucide-react';
 
 const SalesLayoutInner = () => {
   const { currentUser, logout } = useAuth();
   const { printData, setPrintData } = useSales();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    const socket = getSocket();
+    const handleNew = () => {
+      listNotifications(1)
+        .then((data) => {
+          const latest = data.items?.[0];
+          if (latest) showToast(latest.label, latest.isOverdue ? 'warning' : 'info');
+        })
+        .catch(() => {});
+    };
+    socket.on('notification:new', handleNew);
+    return () => socket.off('notification:new', handleNew);
+  }, [showToast]);
 
   if (printData) {
     return <PrintTemplate data={printData} onClose={() => setPrintData(null)} />;
   }
 
   return (
-    <NotificationProvider>
+    <>
       <div className="flex h-screen bg-[#F4F6F8] font-sans text-slate-800">
         <SalesSidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -53,7 +71,7 @@ const SalesLayoutInner = () => {
           </main>
         </div>
       </div>
-    </NotificationProvider>
+    </>
   );
 };
 

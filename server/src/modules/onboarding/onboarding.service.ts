@@ -2,9 +2,10 @@
 import { prisma } from "../../config/db";
 import { CUSTOMER_STATUS } from "../../common/constants/status.constant";
 import { transitionCustomerStatus } from "../../common/utils/stateMachine.util";
-import { uploadFileToSupabase } from "../file-storage/fileStorage.service";
-import { runFileScan } from "../../jobs/file-scan.job";
-import { logAudit } from "../../common/utils/auditLog.util";
+import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
+import { runFileScan } from '../../jobs/file-scan.job';
+import { sendCustomerAccountEmail } from '../../jobs/notification.job';
+import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
 
 const DEFAULT_EXTENSION_DAYS = 5;
@@ -206,16 +207,26 @@ export const decideFinalOnboarding = async (
   customerId: string,
   approve: boolean,
   comments: string | undefined,
-  lmId: string,
+  lmId: string
 ) => {
   if (approve) {
-    return transitionCustomerStatus({
+    const updated = await transitionCustomerStatus({
       customerId,
       toStatus: CUSTOMER_STATUS.ACTIVE_ACCOUNT,
       actorId: lmId,
-      extraUpdates: { accountProfileType: "REGULAR" },
-      historyAction: "FINAL ONBOARDING APPROVED — ACCOUNT ACTIVATED",
+      extraUpdates: { accountProfileType: 'REGULAR' },
+      historyAction: 'FINAL ONBOARDING APPROVED — ACCOUNT ACTIVATED',
     });
+    sendCustomerAccountEmail({
+      accountName: updated.accountName,
+      barcode: updated.barcode,
+      businessType: updated.businessType,
+      address: updated.address,
+      phone: updated.phone,
+      email: updated.email,
+      status: updated.status,
+    }).catch(() => {});
+    return updated;
   }
   return transitionCustomerStatus({
     customerId,

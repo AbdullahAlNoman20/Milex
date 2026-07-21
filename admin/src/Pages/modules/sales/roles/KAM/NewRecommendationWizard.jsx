@@ -6,7 +6,8 @@ import { useSales } from "../../hooks/useSales";
 import { useAuth } from "../../../../../Components/hooks/useAuth";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import FormField from "../../../../../Components/Shared/FormField";
-import SelectWithOther from "../../../../../Components/Shared/SelectWithOther";
+import SelectWithOther from '../../../../../Components/Shared/SelectWithOther';
+import MultiSelectWithOther from '../../../../../Components/Shared/MultiSelectWithOther';
 import { listServiceProviders } from '../../services/serviceProviderService';
 import {
   BUSINESS_TYPE_OPTIONS,
@@ -917,10 +918,10 @@ const NewRecommendationWizard = () => {
                       />
                     </FormField>
                    <FormField label="Current Service Provider" required>
-                      <SelectWithOther
+                      <MultiSelectWithOther
                         options={carrierOptions}
-                        value={row.provider}
-                        onChange={(v) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, provider: v } : r)))}
+                        value={row.provider ? row.provider.split(',').map((s) => s.trim()).filter(Boolean) : []}
+                        onChange={(arr) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, provider: arr.join(', ') } : r)))}
                       />
                     </FormField>
                   </div>

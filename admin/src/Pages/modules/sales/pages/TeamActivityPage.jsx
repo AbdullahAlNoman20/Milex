@@ -38,15 +38,24 @@ const TeamActivityPage = () => {
     setActiveUser(user);
     setDetailTab('activity');
     setIsDetailLoading(true);
+    setActivityItems([]);
+    setSkippedItems([]);
     try {
-      const [items, reports] = await Promise.all([getUserActivity(user.id), listReportsForKam(user.id)]);
-      setActivityItems(items);
-      setSkippedItems(reports.flatMap((r) => r.visits.filter((v) => !v.completed).map((v) => ({ ...v, date: r.date }))));
+      const items = await getUserActivity(user.id);
+      setActivityItems(Array.isArray(items) ? items : []);
     } catch (err) {
-      showToast(err?.message || 'Failed to load activity', 'error');
-    } finally {
-      setIsDetailLoading(false);
+      showToast(err?.message || 'Failed to load activity log', 'error');
     }
+    try {
+      const reports = await listReportsForKam(user.id);
+      setSkippedItems(
+        (reports || []).flatMap((r) => r.visits.filter((v) => v.completed === false).map((v) => ({ ...v, date: r.date })))
+      );
+    } catch {
+      // SC-দের জন্য daily report না থাকতে পারে (এটা শুধু KAM-এর ফিচার) — চুপচাপ খালি রাখো, error দেখানোর দরকার নেই।
+      setSkippedItems([]);
+    }
+    setIsDetailLoading(false);
   };
 
   if (isLoading) return <Loader fullScreen label="Loading team..." />;

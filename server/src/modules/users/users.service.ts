@@ -110,9 +110,18 @@ export const listStaffDirectory = async () => {
 // needed; this just reads what's already being recorded.
 export const getUserActivity = async (userId: string) => {
   const [logins, actions] = await Promise.all([
-    prisma.loginLog.findMany({ where: { userId, success: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
-    prisma.auditLog.findMany({ where: { actorId: userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+    prisma.loginLog.findMany({
+      where: { userId, success: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    }),
+    prisma.auditLog.findMany({
+      where: { actorId: userId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    }),
   ]);
+
   const merged = [
     ...logins.map((l) => ({
       type: 'LOGIN' as const,
@@ -129,5 +138,6 @@ export const getUserActivity = async (userId: string) => {
       ip: a.ip,
     })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
   return merged.slice(0, 150);
 };
