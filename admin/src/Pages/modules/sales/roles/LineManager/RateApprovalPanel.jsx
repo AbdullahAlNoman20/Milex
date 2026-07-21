@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/LineManager/RateApprovalPanel.jsx 
+// admin/src/Pages/modules/sales/roles/LineManager/RateApprovalPanel.jsx
 import React, { useState } from 'react';
 import { CheckCircle, FileOutput } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
@@ -12,18 +12,14 @@ const RateApprovalPanel = ({ customer }) => {
   const { showToast } = useToast();
   const [approvedRate, setApprovedRate] = useState(customer.proposedRate || '');
   const [lmNote, setLmNote] = useState('');
-  const [authorizeExtension, setAuthorizeExtension] = useState(false);
   const [creditPeriod, setCreditPeriod] = useState(customer.creditPeriodDays || String(CREDIT_RULES.DEFAULT_PERIOD_DAYS));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleApprove = async () => {
     if (isSubmitting) return;
     if (!isRequired(approvedRate)) return showToast('Approved rate is required', 'warning');
-    if (!isValidCreditPeriod(creditPeriod, { extended: authorizeExtension })) {
-      return showToast(
-        `Credit period must be ${authorizeExtension ? `1-${CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}` : CREDIT_RULES.DEFAULT_PERIOD_DAYS} days`,
-        'warning'
-      );
+    if (!isValidCreditPeriod(creditPeriod)) {
+      return showToast(`Credit period must be between 1 and ${CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS} days`, 'warning');
     }
     setIsSubmitting(true);
     await updateStatus(
@@ -33,7 +29,7 @@ const RateApprovalPanel = ({ customer }) => {
         approvedRate: sanitizeText(approvedRate, { maxLength: 300 }),
         lmNote: sanitizeText(lmNote, { maxLength: 500 }),
         creditPeriodDays: creditPeriod,
-        creditPeriodExtendedByLM: authorizeExtension,
+        creditPeriodExtendedByLM: Number(creditPeriod) > CREDIT_RULES.DEFAULT_PERIOD_DAYS,
       },
       'RATE APPROVED BY LM',
       'Waiting for SC Offer letter'
@@ -66,24 +62,18 @@ const RateApprovalPanel = ({ customer }) => {
         onChange={(e) => setApprovedRate(e.target.value)}
       />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div>
+        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+          Credit Period (Days) — Default {CREDIT_RULES.DEFAULT_PERIOD_DAYS}, Max {CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
+        </label>
         <input
           type="number"
           min="1"
-          max={authorizeExtension ? CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS : CREDIT_RULES.DEFAULT_PERIOD_DAYS}
-          className="border border-slate-300 p-2.5 rounded-lg text-xs outline-none focus:border-emerald-500"
+          max={CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
+          className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
           value={creditPeriod}
           onChange={(e) => setCreditPeriod(e.target.value)}
         />
-        <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600">
-          <input
-            type="checkbox"
-            checked={authorizeExtension}
-            onChange={(e) => setAuthorizeExtension(e.target.checked)}
-            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-          />
-          Authorize up to {CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}d
-        </label>
       </div>
 
       <textarea

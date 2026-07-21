@@ -344,25 +344,21 @@ const WeeklySalesPlan = () => {
                   <div className="px-6 pb-5 space-y-4">
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse min-w-[420px] text-xs">
+                        <thead>
+                          <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                            <th className="py-2 pr-3 w-32">Date</th>
+                            <th className="py-2 pr-3">Customer Name</th>
+                            <th className="py-2">Purpose</th>
+                          </tr>
+                        </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {[...p.existingVisits, ...p.prospectVisits].map(
-                            (v) => (
-                              <tr key={v.id}>
-                                <td className="py-2 pr-3 font-bold text-slate-700 w-32">
-                                  {new Date(v.day).toLocaleDateString(
-                                    undefined,
-                                    { month: "short", day: "numeric" },
-                                  )}
-                                </td>
-                                <td className="py-2 pr-3 text-slate-700">
-                                  {v.customerName}
-                                </td>
-                                <td className="py-2 text-slate-500">
-                                  {v.purpose}
-                                </td>
-                              </tr>
-                            ),
-                          )}
+                          {[...p.existingVisits, ...p.prospectVisits].map((v) => (
+                            <tr key={v.id}>
+                              <td className="py-2 pr-3 font-bold text-slate-700 w-32">{new Date(v.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</td>
+                              <td className="py-2 pr-3 text-slate-700">{v.customerName}</td>
+                              <td className="py-2 text-slate-500">{v.purpose}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>

@@ -13,7 +13,10 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/kams', requirePermission(PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS, PERMISSIONS.MANAGE_USERS, PERMISSIONS.FULL_SYSTEM_CONTROL, PERMISSIONS.CREATE_RECOMMENDATION), controller.listKamsHandler);
-router.get('/directory', requirePermission(PERMISSIONS.VIEW_ACTIVITY_LOG, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listDirectoryHandler);
+router.get('/directory', requirePermission(PERMISSIONS.VIEW_ACTIVITY_LOG, PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listDirectoryHandler);
+
+// IMPORTANT: /me/activity must be registered before /:id/activity, otherwise
+// Express matches "me" as an :id param on the wildcard route below.
 router.get('/me/activity', controller.getMyActivityHandler);
 router.get('/:id/activity', requireOwnershipOrPermission((req) => asString(req.params.id), PERMISSIONS.VIEW_ACTIVITY_LOG), controller.getUserActivityHandler);
 
