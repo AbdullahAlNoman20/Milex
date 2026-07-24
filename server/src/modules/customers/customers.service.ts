@@ -23,9 +23,15 @@ export const listCustomers = async (
   const where: any = {};
   if (filters.status) where.status = filters.status;
   if (filters.search) {
+    // Strip a "REF-" prefix and any "-R2" revision suffix if the user pasted
+    // the full formatted reference badge (e.g. "REF-MLX1707581-R2") instead
+    // of just the raw code — keeps matching cheap (single indexed-ish OR)
+    // rather than adding a second round-trip.
+    const cleaned = filters.search.replace(/^REF-/i, '').replace(/-R\d+$/i, '');
     where.OR = [
       { accountName: { contains: filters.search, mode: 'insensitive' } },
       { barcode: { contains: filters.search, mode: 'insensitive' } },
+      { rateRef: { contains: cleaned, mode: 'insensitive' } },
     ];
   }
   // KAM only sees their own handled accounts unless elevated — horizontal scoping.
