@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/pages/CustomerDetail.jsx
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Building, Printer, Timer, PencilLine } from "lucide-react";
 import { useSales } from "../hooks/useSales";
@@ -9,6 +9,7 @@ import { STATUS, getWorkflowStageLabel } from "../constants/salesStatus";
 import { formatRateRef } from "../../../../Components/utils/format";
 import StatusBadge from "../components/StatusBadge";
 import BarcodeBadge from "../../../../Components/Shared/BarcodeBadge";
+import ScannableBarcode from "../../../../Components/Shared/ScannableBarcode";
 import CustomerContactsCard from "../components/CustomerContactsCard";
 import AuditTrail from "../components/AuditTrail";
 import Loader from "../../../../Components/Shared/Loader";
@@ -175,8 +176,14 @@ const CustomerDetail = () => {
       }
     }
 
+     // NOTE: accountProfileType alone can't gate this — regular-mode final
+    // onboarding also transitions through PROVISIONAL_FINAL_REVIEW_PENDING
+    // but sets accountProfileType to 'REGULAR' at that point (see
+    // submitFinalOnboardingRegular), so checking for 'PROVISIONAL' here was
+    // hiding the review panel for those accounts. Extension requests are
+    // still provisional-only by nature (PROVISIONAL_EXTENSION_REQUESTED only
+    // ever fires from a provisional flow), so this still works correctly.
     if (
-      customer.accountProfileType === "PROVISIONAL" &&
       role === ROLES.LINE_MANAGER &&
       [
         STATUS.PROVISIONAL_EXTENSION_REQUESTED,
@@ -218,6 +225,9 @@ const CustomerDetail = () => {
                 showBars={false}
               />
             )}
+          </div>
+          <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3 inline-block">
+            <ScannableBarcode value={customer.barcode} />
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -396,7 +406,7 @@ const CustomerDetail = () => {
         </div>
       </div>
 
-      {!canUploadDocs && <DocumentsList documents={customer.documents} />}
+      {!canUploadDocs && <DocumentsList customer={customer} documents={customer.documents} />}
 
       {isEditModalOpen && (
         <CustomerEditRequestModal

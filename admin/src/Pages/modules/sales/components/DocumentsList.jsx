@@ -1,8 +1,9 @@
-// admin/src/Pages/modules/sales/components/DocumentsList.jsx
-import React, { useState } from "react";
-import { FileText, Loader2, Eye } from "lucide-react";
+// admin/src/Pages/modules/sales/components/DocumentsList.jsx 
+import { useState } from "react";
+import { FileText, Loader2, Eye, Mail } from "lucide-react";
 import { getDocumentSignedUrl } from "../services/customerService";
 import { useToast } from "../../../../Components/hooks/useToast";
+import { useSales } from "../hooks/useSales";
 
 const CATEGORY_LABELS = {
   SIGNED_OFFER_LETTER: "Signed Offer Letter (Customer Copy)",
@@ -15,13 +16,51 @@ const CATEGORY_LABELS = {
   OTHERS: "Others Document",
 };
 
-const DocumentsList = ({ documents = [] }) => {
+// customer.offerText / customer.agreementText live as plain text columns on
+// Customer, not as rows in OnboardingDocument — so without this they'd never
+// show up in the documents list even though they were already "sent". These
+// are rendered as virtual, non-uploaded entries that open the print/preview
+// view instead of a signed-file download.
+const buildVirtualEntries = (customer) => {
+  const entries = [];
+  if (customer?.offerText) {
+    entries.push({
+      id: "virtual-offer",
+      isVirtual: true,
+      printType: "offer",
+      documentType: "OFFER_LETTER",
+      label: "Offer Letter (Sent to Customer)",
+      originalName: "Offer Letter",
+    });
+  }
+  if (customer?.agreementText) {
+    entries.push({
+      id: "virtual-agreement",
+      isVirtual: true,
+      printType: "agreement",
+      documentType: "AGREEMENT",
+      label: "Agreement (Sent to Customer)",
+      originalName: "Agreement",
+    });
+  }
+  return entries;
+};
+
+const DocumentsList = ({ customer, documents = [] }) => {
   const { showToast } = useToast();
+  const { setPrintData } = useSales();
   const [openingId, setOpeningId] = useState(null);
 
-  if (!documents.length) return null;
+  const virtualEntries = buildVirtualEntries(customer);
+  const allEntries = [...virtualEntries, ...documents];
+
+  if (!allEntries.length) return null;
 
   const handleOpen = async (doc) => {
+    if (doc.isVirtual) {
+      setPrintData({ type: doc.printType, customer });
+      return;
+    }
     if (doc.scanStatus !== "CLEAN") {
       return showToast(
         "This file is still being scanned — try again shortly",
@@ -43,19 +82,23 @@ const DocumentsList = ({ documents = [] }) => {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
       <h3 className="font-bold text-slate-900 text-base">Uploaded Documents</h3>
       <div className="space-y-2">
-        {documents.map((doc) => (
+        {allEntries.map((doc) => (
           <div
             key={doc.id}
             className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 gap-3"
           >
             <div className="min-w-0 flex items-center gap-2">
-              <FileText size={14} className="text-slate-400 shrink-0" />
+              {doc.isVirtual ? (
+                <Mail size={14} className="text-emerald-500 shrink-0" />
+              ) : (
+                <FileText size={14} className="text-slate-400 shrink-0" />
+              )}
               <div className="min-w-0">
                 <p className="font-bold text-purple-700">
-                  {CATEGORY_LABELS[doc.documentType] || doc.documentType}
+                  {doc.isVirtual ? doc.label : (CATEGORY_LABELS[doc.documentType] || doc.documentType)}
                 </p>
                 <p className="text-slate-500 truncate">{doc.originalName}</p>
-                {(doc.documentNumber || doc.expiryDate) && (
+                {!doc.isVirtual && (doc.documentNumber || doc.expiryDate) && (
                   <p className="text-slate-400 mt-0.5">
                     {doc.documentNumber ? `No: ${doc.documentNumber}` : ""}
                     {doc.documentNumber && doc.expiryDate ? " · " : ""}
