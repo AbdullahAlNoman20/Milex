@@ -73,3 +73,5 @@ export const request = async (path, { method = 'GET', body, headers = {}, _retri
 export const apiLogin = (email, password) => request('/auth/login', { method: 'POST', body: { email, password } });
 
 export const apiFetchMe = () => request('/auth/me');
+
+export const apiLogout = () => request('/auth/logout', { method: 'POST' });

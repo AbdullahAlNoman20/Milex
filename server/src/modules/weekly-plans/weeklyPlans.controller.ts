@@ -1,7 +1,7 @@
 // src/modules/weekly-plans/weeklyPlans.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import * as weeklyPlansService from './weeklyPlans.service';
-import { sendSuccess } from '../../common/utils/apiResponse.util';
+import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 import { asString } from '../../common/utils/requestParams.util';
 
 export const listMinePlansHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -54,6 +54,16 @@ export const reviewPlanHandler = async (req: Request, res: Response, next: NextF
     const plan = await weeklyPlansService.reviewPlan(asString(req.params.id), req.body.approved, req.body.comments, req.user!.id);
     return sendSuccess(res, { plan });
   } catch (err) {
+    next(err);
+  }
+};
+
+export const deletePlanHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await weeklyPlansService.deletePlan(asString(req.params.id), req.user!.id);
+    return sendSuccess(res, { deleted: true });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };

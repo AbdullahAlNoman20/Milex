@@ -57,6 +57,18 @@ export const submitPlan = async (kamId: string, weekStartDate: string) => {
   });
 };
 
+// KAM can delete any of their own weekly plans outright — no approval
+// workflow gates this anymore, so ownership is the only check needed.
+// Visit rows cascade-delete automatically (schema.prisma onDelete: Cascade
+// on both the ExistingVisits/ProspectVisits relations).
+export const deletePlan = async (id: string, kamId: string) => {
+  const plan = await prisma.weeklyPlan.findUnique({ where: { id } });
+  if (!plan) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Weekly plan not found' };
+  if (plan.kamId !== kamId) {
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this plan' };
+  }
+  await prisma.weeklyPlan.delete({ where: { id } });
+};
 export const reviewPlan = async (planId: string, approved: boolean, comments: string | undefined, lmId: string) => {
   const before = await prisma.weeklyPlan.findUniqueOrThrow({ where: { id: planId } });
   const updated = await prisma.weeklyPlan.update({

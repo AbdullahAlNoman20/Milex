@@ -19,5 +19,6 @@ router.get('/kam/:kamId', requirePermission(PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS,
 router.post('/draft', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), validateBody(upsertPlanSchema), controller.saveDraftHandler);
 router.post('/submit', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), controller.submitPlanHandler);
 router.post('/:id/review', requirePermission(PERMISSIONS.REVIEW_WEEKLY_PLAN), validateBody(reviewPlanSchema), controller.reviewPlanHandler);
+router.delete('/:id', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), controller.deletePlanHandler);
 
 export default router;

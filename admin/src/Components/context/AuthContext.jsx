@@ -7,7 +7,7 @@ import React, {
   useMemo,
 } from "react";
 import { ALL_ROLES } from "../constants/roles";
-import { apiLogin, apiFetchMe } from "../services/api";
+import { apiLogin, apiFetchMe, apiLogout } from "../services/api";
 
 export const AuthContext = createContext(null);
 
@@ -102,7 +102,16 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Must actually invalidate the httpOnly access/refresh cookies on the
+    // server — clearing only client state left them valid, so the next
+    // page load's silent apiFetchMe() call would restore the session and
+    // land right back on the dashboard, making Logout look broken.
+    try {
+      await apiLogout();
+    } catch {
+      /* proceed to clear client state regardless of server call outcome */
+    }
     setCurrentUser(null);
     clearSession();
   }, []);
