@@ -217,7 +217,7 @@ const CustomerDetail = () => {
             {customer.accountName}
           </h2>
           <div className="flex items-center gap-3 flex-wrap">
-            <BarcodeBadge value={customer.barcode} />
+            <ScannableBarcode value={customer.barcode} />
             {customer.rateRef && (
               <BarcodeBadge
                 value={formatRateRef(customer)}
@@ -225,9 +225,6 @@ const CustomerDetail = () => {
                 showBars={false}
               />
             )}
-          </div>
-          <div className="mt-3 bg-white border border-slate-200 rounded-lg p-3 inline-block">
-            <ScannableBarcode value={customer.barcode} />
           </div>
         </div>
         <div className="flex items-center gap-3">

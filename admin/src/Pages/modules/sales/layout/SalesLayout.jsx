@@ -55,7 +55,14 @@ const SalesLayoutInner = () => {
               </div>
               <button
                 type="button"
-                onClick={logout}
+                onClick={() => {
+                  logout();
+                  // Force a hard redirect (not client-side navigate) so no
+                  // stale route/history from the previous role's session
+                  // carries over into the next login — this is what caused
+                  // "Access Restricted" right after switching roles.
+                  window.location.href = '/login';
+                }}
                 aria-label="Logout"
                 className="w-9 h-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center hover:bg-red-100 transition"
               >
