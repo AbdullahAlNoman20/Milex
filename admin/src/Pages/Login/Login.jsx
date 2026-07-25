@@ -28,11 +28,16 @@ const Login = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    // Deliberately ignore location.state?.from here — that value can be a
+    // leftover from a previous user's session (e.g. a KAM was on
+    // /app/customers/123, logged out, and an LM logs in on the same
+    // browser tab). Always land fresh logins on the role's own dashboard
+    // root instead of re-playing a stale path that may not even be valid
+    // for the new role.
     if (!isInitializing && isAuthenticated) {
-      const redirectTo = location.state?.from?.pathname || "/app";
-      navigate(redirectTo, { replace: true });
+      navigate('/app', { replace: true });
     }
-  }, [isInitializing, isAuthenticated, navigate, location]);
+  }, [isInitializing, isAuthenticated, navigate]);
 
   const doLogin = useCallback(
     async (loginEmail, loginPassword) => {
@@ -53,10 +58,11 @@ const Login = () => {
         return;
       }
 
-      const redirectTo = location.state?.from?.pathname || "/app";
-      navigate(redirectTo, { replace: true });
+      // Always go to the dashboard root, ignoring any stale
+      // location.state.from — see the redirect useEffect above for why.
+      navigate("/app", { replace: true });
     },
-    [login, showToast, navigate, location],
+    [login, showToast, navigate],
   );
 
   const handleSubmit = useCallback(
