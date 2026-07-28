@@ -21,7 +21,7 @@ export const BUSINESS_TYPE_OPTIONS = Object.freeze([
   'Pharmaceuticals',
 ]);
 
-export const ACCOUNT_MODE_OPTIONS = Object.freeze(['Express', 'Fair']);
+export const ACCOUNT_MODE_OPTIONS = Object.freeze(['Express', 'Freight']);
 
 export const ACCOUNT_TYPE_OPTIONS = Object.freeze(['CREDIT CUSTOMER', 'CASH']);
 

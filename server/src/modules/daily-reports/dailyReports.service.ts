@@ -30,6 +30,7 @@ export const getReportByDate = async (kamId: string, date: string) => {
         ...missing.map((v) => ({
           id: `plan_${v.id}`,
           customerName: v.customerName,
+          customerId: v.customerId || null,
           purpose: v.purpose || '',
           completed: null,
           reasonIfNotCompleted: '',
@@ -49,6 +50,7 @@ export const getReportByDate = async (kamId: string, date: string) => {
     visits: scheduled.map((v) => ({
       id: `plan_${v.id}`,
       customerName: v.customerName,
+      customerId: v.customerId || null,
       purpose: v.purpose || '',
       completed: null,
       reasonIfNotCompleted: '',
@@ -68,6 +70,7 @@ export const listReportsForKam = async (kamId: string) =>
 
 const cleanVisit = (v: any) => ({
   customerName: v.customerName,
+  customerId: v.customerId || null,
   purpose: v.purpose || null,
   completed: v.completed === true || v.completed === false ? v.completed : null,
   reasonIfNotCompleted: v.reasonIfNotCompleted || null,

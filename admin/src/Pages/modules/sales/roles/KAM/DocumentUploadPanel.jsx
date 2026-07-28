@@ -1,6 +1,6 @@
 // admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx
-import React, { useState, useCallback } from 'react';
-import { Loader2, UploadCloud, Printer, Eye, Send, FileCheck } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Loader2, UploadCloud, Printer, Eye,  FileCheck } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { uploadOnboardingDocument, getDocumentSignedUrl, submitFinalOnboarding } from '../../services/customerService';
 import { useSales } from '../../hooks/useSales';

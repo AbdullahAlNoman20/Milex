@@ -9,6 +9,7 @@ import FormField from "../../../../../Components/Shared/FormField";
 import SelectWithOther from '../../../../../Components/Shared/SelectWithOther';
 import MultiSelectWithOther from '../../../../../Components/Shared/MultiSelectWithOther';
 import { listServiceProviders } from '../../services/serviceProviderService';
+import { uploadRecommendationAttachment } from '../../services/customerService';
 import {
   BUSINESS_TYPE_OPTIONS,
   ACCOUNT_MODE_OPTIONS,
@@ -148,6 +149,7 @@ const NewRecommendationWizard = () => {
   const [step, setStep] = useState(1);
   const [state, setState] = useState(() => buildInitialState());
   const [carrierOptions, setCarrierOptions] = useState([]);
+  const [attachmentFile, setAttachmentFile] = useState(null);
 
   useEffect(() => {
     listServiceProviders()
@@ -400,6 +402,13 @@ const NewRecommendationWizard = () => {
         contacts: flatContacts,
         shippingDetails: shipping,
       });
+      if (attachmentFile) {
+        try {
+          await uploadRecommendationAttachment(created.id, attachmentFile);
+        } catch (err) {
+          showToast(err?.message || 'Recommendation created, but the attachment upload failed', 'warning');
+        }
+      }
       clearDraft();
       navigate(`/app/customers/${encodeURIComponent(created.barcode)}`);
     } catch {
@@ -954,6 +963,26 @@ const NewRecommendationWizard = () => {
                   maxLength={300}
                   onChange={(e) => setField("proposedRate", e.target.value)}
                 />
+              </FormField>
+              <FormField label="Supporting Rate Document (optional)" hint="Excel, Word, PDF, or image — e.g. the rate sheet provided by DHL or another carrier">
+                {attachmentFile ? (
+                  <div className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                    <span className="truncate">{attachmentFile.name}</span>
+                    <button type="button" onClick={() => setAttachmentFile(null)} className="text-slate-400 hover:text-red-500 shrink-0 ml-2">
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <label className="block border-2 border-dashed border-slate-200 rounded-lg py-2.5 text-center cursor-pointer hover:bg-slate-50 transition text-xs font-semibold text-slate-500">
+                    Click to attach a document
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,.doc,.docx,.pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                )}
               </FormField>
               <FormField label="Visit Outcome / Recommendation Note" required>
                 <textarea

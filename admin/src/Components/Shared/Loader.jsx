@@ -1,5 +1,5 @@
 // src/Components/Shared/Loader.jsx
-import React from 'react';
+
 
 const SIZES = {
   sm: 'w-4 h-4 border-2',

@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/pages/TeamActivityPage.jsx
-import React, { useEffect, useState } from 'react';
+import  { useEffect, useState } from 'react';
 import { Eye, X, Users2, LogIn, Activity } from 'lucide-react';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { listStaffDirectory, getUserActivity } from '../services/teamService';

@@ -13,11 +13,29 @@ import { humanizeStatus } from './humanize.util';
 export const notifyCustomerWorkflowUsers = async (handledById: string) => {
   try {
     const notifyIds = new Set<string>([handledById]);
-    const others = await prisma.user.findMany({
-      where: { role: { name: { in: ['LINE_MANAGER', 'SALES_COORDINATOR'] } }, isActive: true },
+
+    const handler = await prisma.user.findUnique({ where: { id: handledById }, select: { lineManagerId: true } });
+
+    if (handler?.lineManagerId) {
+      // Scoped: only the Line Manager this KAM/SC is actually assigned to
+      // gets pinged — not every Line Manager in the system.
+      notifyIds.add(handler.lineManagerId);
+    } else {
+      // No LM assigned yet — fall back to notifying every active LM so
+      // nothing silently falls through the cracks.
+      const unassignedFallback = await prisma.user.findMany({
+        where: { role: { name: 'LINE_MANAGER' }, isActive: true },
+        select: { id: true },
+      });
+      unassignedFallback.forEach((u) => notifyIds.add(u.id));
+    }
+
+    const scs = await prisma.user.findMany({
+      where: { role: { name: 'SALES_COORDINATOR' }, isActive: true },
       select: { id: true },
     });
-    others.forEach((u) => notifyIds.add(u.id));
+    scs.forEach((u) => notifyIds.add(u.id));
+
     notifyIds.forEach((id) => emitNotificationToUser(id));
   } catch (err) {
     console.warn('[socket] notifyCustomerWorkflowUsers failed (non-fatal):', (err as Error)?.message);

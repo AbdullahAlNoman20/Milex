@@ -1,5 +1,7 @@
 // src/Pages/modules/sales/components/PrintTemplate.jsx
-import React from 'react';
+
+import { useEffect, useRef } from 'react';
+import JsBarcode from 'jsbarcode';
 import { Printer } from 'lucide-react';
 import { escapeHtml } from '../../../../Components/utils/sanitize';
 
@@ -37,6 +39,48 @@ const numberToWordsBDT = (value) => {
 const getContactByType = (contacts, type) => (contacts || []).find((ct) => ct.type === type) || {};
 
 const formatPrintDate = (value) => (value ? new Date(value).toLocaleDateString('en-GB').replace(/\//g, '.') : '');
+
+const formatPrintTimestamp = (value) =>
+  new Date(value || Date.now()).toLocaleString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
+
+// Real Code128 barcode for the Recommendation Form header — matches the
+// scanned-in reference PDF's ID barcode above the "Customer ID:" line.
+const RFormBarcode = ({ value }) => {
+  const svgRef = useRef(null);
+  useEffect(() => {
+    if (!svgRef.current || !value) return;
+    try {
+      JsBarcode(svgRef.current, value, {
+        format: 'CODE128', width: 1.3, height: 34, displayValue: false, margin: 0, background: 'transparent', lineColor: '#000',
+      });
+    } catch {
+      /* invalid chars — bars just won't render */
+    }
+  }, [value]);
+  if (!value) return null;
+  return <svg ref={svgRef} />;
+};
+
+// Simple bordered key/value table matching the reference PDF's plain black-
+// border tables (distinct from PBox's boxed-field style used by 'profile').
+const RTable = ({ rows }) => (
+  <table className="w-full border-collapse text-[11px]">
+    <tbody>
+      {rows.map(([label, value], i) => (
+        <tr key={i}>
+          <td className="border border-slate-800 px-2 py-1 font-semibold whitespace-nowrap" style={{ width: '220px' }}>{label}</td>
+          <td className="border border-slate-800 px-2 py-1">{value || ''}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
+const RSectionTitle = ({ children }) => (
+  <p className="font-bold text-[12px] text-slate-900 mt-5 mb-2">{children}</p>
+);
 
 const PBox = ({ label, value, labelWidth = '150px', center = false }) => (
   <div className="flex items-center gap-2">
@@ -111,7 +155,7 @@ const PrintTemplate = ({ data, onClose }) => {
         {data.type !== 'profile' && (
           <div className="flex justify-between items-end border-b-2 border-slate-800 pb-4 mb-8">
             <h1 className="text-4xl font-black text-emerald-800 italic tracking-tighter">MILEX</h1>
-            <p className="text-right text-xs text-slate-600 mt-2 font-mono bg-slate-100 px-2 py-1 inline-block border font-bold text-slate-800">
+            <p className="text-right text-xs  mt-2 font-mono bg-slate-100 px-2 py-1 inline-block border font-bold text-slate-800">
               ID: {escapeHtml(c.barcode)}
             </p>
           </div>
@@ -125,14 +169,185 @@ const PrintTemplate = ({ data, onClose }) => {
           <div className="space-y-4 text-sm whitespace-pre-wrap leading-relaxed">{c.agreementText}</div>
         )}
 
-        {data.type === 'recommendation' && (
-          <div className="text-center mt-20">
-            <h2 className="text-2xl font-bold">Recommendation Form Printout</h2>
-            {c.accountProfileType === 'PROVISIONAL' && (
-              <p className="text-red-600 font-bold mt-4">PROVISIONAL ACCOUNT</p>
-            )}
-          </div>
-        )}
+        {data.type === 'recommendation' && (() => {
+          const keyContact = getContactByType(c.contacts, 'KEY_CONTACT_PERSON');
+          const financialContact = getContactByType(c.contacts, 'FINANCIAL_CONTACT');
+          const seniorContact = getContactByType(c.contacts, 'SENIOR_MANAGEMENT');
+          const shipping = c.shippingDetails || [];
+          const rateRefDisplay = c.rateRef ? `${c.rateRef}${c.revision > 0 ? `(Revised-${c.revision})` : ''}` : '';
+
+          return (
+            <div className="text-slate-900 text-[11px]">
+              <p className="text-right text-[11px] mb-6">{formatPrintTimestamp(c.createdAt)}</p>
+              <h1 className="text-center font-bold text-lg mb-6">CUSTOMER RECOMMENDATION FORM</h1>
+
+              <div className="flex justify-end mb-1">
+                <RFormBarcode value={c.barcode} />
+              </div>
+              <div className="flex justify-end items-center gap-1 mb-4 text-[11px]">
+                <span className="font-semibold">Customer ID:</span>
+                <span className="font-mono">{c.barcode}</span>
+              </div>
+
+              <RTable rows={[['Name of the Key Account Manager', c.recommendedBy?.name || c.handledBy?.name || '']]} />
+
+              <RSectionTitle>Customer Account Information</RSectionTitle>
+              <RTable
+                rows={[
+                  ['Account Name', c.accountName],
+                  ['Name of MD/Chairman/CEO/ED', c.managingPartnerName],
+                  ['Mobile', c.phone],
+                  ['Phone', c.phone],
+                  ['FAX', ''],
+                  ['Email', c.email],
+                  ['Address', c.address],
+                ]}
+              />
+
+              <RSectionTitle>Customer Contact Information</RSectionTitle>
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Type</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Name</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Designation</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Mobile</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Email</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seniorContact.name && (
+                    <tr>
+                      <td className="border border-slate-800 px-2 py-1">Senior Management</td>
+                      <td className="border border-slate-800 px-2 py-1">{seniorContact.name}</td>
+                      <td className="border border-slate-800 px-2 py-1">{seniorContact.designation}</td>
+                      <td className="border border-slate-800 px-2 py-1">{seniorContact.mobile}</td>
+                      <td className="border border-slate-800 px-2 py-1">{seniorContact.email}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <td className="border border-slate-800 px-2 py-1">Key Contact Person</td>
+                    <td className="border border-slate-800 px-2 py-1">{keyContact.name}</td>
+                    <td className="border border-slate-800 px-2 py-1">{keyContact.designation}</td>
+                    <td className="border border-slate-800 px-2 py-1">{keyContact.mobile}</td>
+                    <td className="border border-slate-800 px-2 py-1">{keyContact.email}</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-slate-800 px-2 py-1">Finance Contact</td>
+                    <td className="border border-slate-800 px-2 py-1">{financialContact.name}</td>
+                    <td className="border border-slate-800 px-2 py-1">{financialContact.designation}</td>
+                    <td className="border border-slate-800 px-2 py-1">{financialContact.mobile}</td>
+                    <td className="border border-slate-800 px-2 py-1">{financialContact.email}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <RSectionTitle>Customer Commercial Information</RSectionTitle>
+              <RTable
+                rows={[
+                  ['Business Type', c.businessType],
+                  ['Service Required', c.serviceRequired === 'BOTH' ? 'Inbound (IB) / Outbound (OB)' : c.serviceRequired === 'IB' ? 'Inbound (IB)' : c.serviceRequired === 'OB' ? 'Outbound (OB)' : ''],
+                  ['Account Mode', c.accountMode],
+                  ['Account Type', c.accountType === 'CREDIT CUSTOMER' ? 'Credit' : 'Cash'],
+                  ['Credit Limit (TK)', c.creditLimitTk],
+                  ['Credit Period (Days)', c.creditPeriodDays],
+                  ['Area Name', c.area],
+                  ['Zone Name', c.zone],
+                ]}
+              />
+
+              {shipping.length > 0 && (
+                <>
+                  <RSectionTitle>Expected/Projected Shipping Details</RSectionTitle>
+                  <table className="w-full border-collapse text-[11px]">
+                    <thead>
+                      <tr>
+                        <th className="border border-slate-800 px-2 py-1 text-left">Shipment Type</th>
+                        <th className="border border-slate-800 px-2 py-1 text-left">Country</th>
+                        <th className="border border-slate-800 px-2 py-1 text-left">Avg Volume</th>
+                        <th className="border border-slate-800 px-2 py-1 text-left">Weight(kg)</th>
+                        <th className="border border-slate-800 px-2 py-1 text-left">Revenue(USD)</th>
+                        <th className="border border-slate-800 px-2 py-1 text-left">Current Service Provider</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shipping.map((s) => (
+                        <tr key={s.id}>
+                          <td className="border border-slate-800 px-2 py-1">{s.rateFor === 'Both' ? 'Import/Export' : s.rateFor?.toUpperCase()}</td>
+                          <td className="border border-slate-800 px-2 py-1">{s.country}</td>
+                          <td className="border border-slate-800 px-2 py-1">{s.volume}</td>
+                          <td className="border border-slate-800 px-2 py-1">{s.weight}</td>
+                          <td className="border border-slate-800 px-2 py-1">{s.revenue}</td>
+                          <td className="border border-slate-800 px-2 py-1">{s.provider}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {c.recNote && (
+                <>
+                  <RSectionTitle>Recommendation Note</RSectionTitle>
+                  <p className="border border-slate-800 px-2 py-2 text-[11px] font-bold">{c.recNote}</p>
+                </>
+              )}
+
+              <RSectionTitle>Approval</RSectionTitle>
+              <table className="w-full border-collapse text-[11px] mb-3">
+                <thead>
+                  <tr>
+                    <th className="border border-slate-800 px-2 py-1 text-left" style={{ width: '50%' }}>Approved Rate</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Rate Reference No:</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-slate-800 px-2 py-1">{c.approvedRate || (c.proposedRate ? 'Approved as Proposed' : '')}</td>
+                    <td className="border border-slate-800 px-2 py-1 font-mono">{rateRefDisplay}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Rate Prepared By</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Recommended By</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Approved By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-slate-800 px-2 py-1 min-h-[28px]">{c.recommendedBy?.name || ''}</td>
+                    <td className="border border-slate-800 px-2 py-1">{c.recommendedBy?.name || ''}</td>
+                    <td className="border border-slate-800 px-2 py-1"></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <p className="font-bold text-[11px] mt-6 mb-2">Approval Process:</p>
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Rate Signed By</th>
+                    <th className="border border-slate-800 px-2 py-1 text-left">Contract Signed By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-slate-800 px-2 py-1 h-8"></td>
+                    <td className="border border-slate-800 px-2 py-1 h-8"></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {c.accountProfileType === 'PROVISIONAL' && (
+                <p className="text-center text-red-600 font-bold mt-6">PROVISIONAL ACCOUNT</p>
+              )}
+            </div>
+          );
+        })()}
 
          {data.type === 'profile' && (() => {
           const keyContact = getContactByType(c.contacts, 'KEY_CONTACT_PERSON');

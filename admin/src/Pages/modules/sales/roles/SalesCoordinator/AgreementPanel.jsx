@@ -1,5 +1,5 @@
-// admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx 
-import React, { useState } from 'react';
+// admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx
+import  { useState } from 'react';
 import { Mail, Printer, PenTool } from 'lucide-react';
 import { sendAgreement } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';

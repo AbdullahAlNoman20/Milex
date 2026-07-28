@@ -12,6 +12,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../com
 import { generateMfaSecret, buildQrCodeDataUrl, verifyMfaToken } from '../../common/utils/mfa.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
+import { sendNotification } from '../../jobs/notification.job';
 
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_MINUTES = 15;
@@ -177,7 +178,13 @@ export const requestPasswordReset = async (email: string) => {
     },
   });
 
-  // Plugs into notification module rather than sending email directly here.
+  await sendNotification({
+    to: user.email,
+    subject: 'Milex Password Reset',
+    resetToken: rawToken,
+    expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES,
+  });
+
   return rawToken;
 };
 

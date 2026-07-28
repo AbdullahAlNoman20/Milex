@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/pages/MyActivityPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { History as HistoryIcon, LogIn, Activity } from 'lucide-react';
 import { getMyActivity } from '../services/teamService';
 import { listMyReports } from '../services/dailyReportService';

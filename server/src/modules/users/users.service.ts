@@ -11,17 +11,26 @@ const toSafeUser = (user: any) => ({
   role: user.role.name,
   isActive: user.isActive,
   mfaEnabled: user.mfaEnabled,
+  lineManagerId: user.lineManagerId || null,
   lastLoginAt: user.lastLoginAt,
   createdAt: user.createdAt,
 });
 
-export const listKams = async () => {
+export const listKams = async (lineManagerId?: string) => {
   const kams = await prisma.user.findMany({
-    where: { role: { name: 'KAM' }, isActive: true },
+    where: { role: { name: 'KAM' }, isActive: true, ...(lineManagerId ? { lineManagerId } : {}) },
     select: { id: true, name: true, email: true },
     orderBy: { name: 'asc' },
   });
   return kams;
+};
+
+export const listLineManagers = async () => {
+  return prisma.user.findMany({
+    where: { role: { name: 'LINE_MANAGER' }, isActive: true },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: 'asc' },
+  });
 };
 
 export const listUsers = async (page: number, pageSize: number) => {
@@ -37,12 +46,66 @@ export const listUsers = async (page: number, pageSize: number) => {
   return { items: items.map(toSafeUser), total, page, pageSize };
 };
 
+export const updateUser = async (
+  id: string,
+  updates: { name?: string; isActive?: boolean; role?: string; lineManagerId?: string | null },
+  actorId: string
+) => {
+  const before = await prisma.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
+
+  const data: any = {};
+  if (updates.name) data.name = updates.name;
+  if (typeof updates.isActive === 'boolean') data.isActive = updates.isActive;
+  if (updates.role) {
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: updates.role as any } });
+    data.roleId = role.id;
+  }
+  if (updates.lineManagerId !== undefined) data.lineManagerId = updates.lineManagerId;
+
+  const user = await prisma.user.update({ where: { id }, data, include: { role: true } });
+  await invalidateUserPermissionCache(id);
+
+  let deactivationSnapshot: unknown = undefined;
+  if (typeof updates.isActive === 'boolean' && updates.isActive === false && before.isActive === true) {
+    const handledCustomers = await prisma.customer.findMany({
+      where: { handledById: id },
+      select: { id: true, barcode: true, accountName: true },
+    });
+    deactivationSnapshot = { handledCustomerCount: handledCustomers.length, handledCustomers };
+  }
+
+  await logAudit({
+    entity: 'User',
+    entityId: id,
+    action: 'USER_UPDATED',
+    actorId,
+    beforeState: { isActive: before.isActive, role: before.role.name, lineManagerId: before.lineManagerId },
+    afterState: { isActive: user.isActive, role: user.role.name, lineManagerId: user.lineManagerId, deactivationSnapshot },
+  });
+  return toSafeUser(user);
+};
+
+export const setUserPassword = async (targetUserId: string, newPassword: string, actorId: string) => {
+  if (!isPasswordPolicyCompliant(newPassword)) {
+    throw { statusCode: 400, code: 'WEAK_PASSWORD', message: 'Password does not meet policy requirements' };
+  }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: targetUserId } });
+  const newHash = await hashPassword(newPassword);
+  const updatedHistory = [newHash, ...user.passwordHistory].slice(0, 5);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: targetUserId }, data: { passwordHash: newHash, passwordHistory: updatedHistory } }),
+    prisma.refreshToken.updateMany({ where: { userId: targetUserId }, data: { revoked: true } }),
+  ]);
+  await logAudit({ entity: 'User', entityId: targetUserId, action: 'PASSWORD_SET_BY_ADMIN', actorId });
+};
+
 export const createUser = async (data: {
   name: string;
   email: string;
   password: string;
   role: string;
   branchId?: string;
+  lineManagerId?: string | null;
 }, actorId: string) => {
   if (!isPasswordPolicyCompliant(data.password)) {
     throw { statusCode: 400, code: 'WEAK_PASSWORD', message: 'Password does not meet policy requirements' };
@@ -58,45 +121,18 @@ export const createUser = async (data: {
       passwordHistory: [passwordHash],
       roleId: role.id,
       branchId: data.branchId,
+      lineManagerId: data.lineManagerId || null,
     },
     include: { role: true },
   });
 
-  await logAudit({ entity: 'User', entityId: user.id, action: 'USER_CREATED', actorId, afterState: { email: user.email, role: role.name } });
+  await logAudit({ entity: 'User', entityId: user.id, action: 'USER_CREATED', actorId, afterState: { email: user.email, role: role.name, lineManagerId: user.lineManagerId } });
   return toSafeUser(user);
 };
 
-export const updateUser = async (
-  id: string,
-  updates: { name?: string; isActive?: boolean; role?: string },
-  actorId: string
-) => {
-  const before = await prisma.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
-
-  const data: any = {};
-  if (updates.name) data.name = updates.name;
-  if (typeof updates.isActive === 'boolean') data.isActive = updates.isActive;
-  if (updates.role) {
-    const role = await prisma.role.findUniqueOrThrow({ where: { name: updates.role as any } });
-    data.roleId = role.id;
-  }
-
-  const user = await prisma.user.update({ where: { id }, data, include: { role: true } });
-  await invalidateUserPermissionCache(id);
-  await logAudit({
-    entity: 'User',
-    entityId: id,
-    action: 'USER_UPDATED',
-    actorId,
-    beforeState: { isActive: before.isActive, role: before.role.name },
-    afterState: { isActive: user.isActive, role: user.role.name },
-  });
-  return toSafeUser(user);
-};
-
-export const listStaffDirectory = async () => {
+export const listStaffDirectory = async (lineManagerId?: string) => {
   const staff = await prisma.user.findMany({
-    where: { role: { name: { in: ['KAM', 'SALES_COORDINATOR'] } }, isActive: true },
+    where: { role: { name: { in: ['KAM', 'SALES_COORDINATOR'] } }, isActive: true, ...(lineManagerId ? { lineManagerId } : {}) },
     select: { id: true, name: true, email: true, role: { select: { name: true } } },
     orderBy: { name: 'asc' },
   });

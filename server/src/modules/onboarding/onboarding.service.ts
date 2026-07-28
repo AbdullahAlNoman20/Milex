@@ -173,6 +173,14 @@ export const decideTimeExtension = async (
   });
 };
 
+const REQUIRED_FINAL_DOC_TYPES = [
+  "TRADE_LICENSE",
+  "CUSTOMER_BIN",
+  "CUSTOMER_TIN",
+  "SIGNED_OFFER_LETTER",
+  "OFFER_RATE_RECEIPT",
+];
+
 export const submitFinalOnboardingRequest = async (
   customerId: string,
   kamId: string,
@@ -182,15 +190,23 @@ export const submitFinalOnboardingRequest = async (
     include: { documents: true },
   });
 
-  const hasCleanDocs =
-    customer.documents.length > 0 &&
-    customer.documents.every((d) => d.scanStatus === "CLEAN");
-  if (!hasCleanDocs) {
+  const docsByType = new Map(customer.documents.map((d) => [d.documentType, d]));
+  const missingDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => !docsByType.has(t));
+  if (missingDocs.length > 0) {
     throw {
       statusCode: 409,
       code: "DOCUMENTS_NOT_READY",
-      message:
-        "All onboarding documents must be uploaded and pass virus scanning first",
+      message: `Missing required documents: ${missingDocs.join(", ")}`,
+    };
+  }
+  const notCleanDocs = REQUIRED_FINAL_DOC_TYPES.filter(
+    (t) => docsByType.get(t)?.scanStatus !== "CLEAN",
+  );
+  if (notCleanDocs.length > 0) {
+    throw {
+      statusCode: 409,
+      code: "DOCUMENTS_NOT_READY",
+      message: "All required documents must pass virus scanning first",
     };
   }
 

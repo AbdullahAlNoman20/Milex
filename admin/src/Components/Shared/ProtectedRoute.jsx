@@ -1,5 +1,5 @@
 // src/Components/Shared/ProtectedRoute.jsx
-import React from 'react';
+
 import { Navigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import Loader from './Loader';

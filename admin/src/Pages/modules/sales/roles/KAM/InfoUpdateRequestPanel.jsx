@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/KAM/InfoUpdateRequestPanel.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { STATUS } from '../../constants/salesStatus';

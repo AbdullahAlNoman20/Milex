@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/components/CustomerContactsCard.jsx
-import React from 'react';
+
 import { humanizeStatus } from '../../../../Components/utils/format';
 
 const CustomerContactsCard = ({ contacts = [] }) => {

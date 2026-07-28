@@ -141,7 +141,7 @@ export const listFieldChangeRequestsHandler = async (req: Request, res: Response
 };
 
 export const decideFieldChangeRequestHandler = wrap((req) => customersService.decideFieldChangeRequest(asString(req.params.requestId), req.body.approve, req.user!.id));
-export const directFieldEditHandler = wrap((req) => customersService.directFieldEdit(asString(req.params.id), req.body.fieldKey, req.body.newValue, req.user!.id));
+export const directFieldEditHandler = wrap((req) => customersService.directFieldEdit(asString(req.params.id), req.body.fieldKey, req.body.newValue, req.user!.id, req.user!.role));
 
 export const listFollowUpsHandler = async (_req: Request, res: Response, next: NextFunction) => {
   try {
@@ -151,3 +151,27 @@ export const listFollowUpsHandler = async (_req: Request, res: Response, next: N
     next(err);
   }
 };
+
+export const uploadRecommendationAttachmentHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) return sendError(res, 400, 'MISSING_FILE', 'No file uploaded');
+    const doc = await customersService.uploadRecommendationAttachment(asString(req.params.id), file.buffer, file.originalname, req.user!.id);
+    return sendSuccess(res, { document: doc }, 201);
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const deleteCustomerHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await customersService.softDeleteCustomer(asString(req.params.id), req.user!.id);
+    return sendSuccess(res, { deleted: true });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const reassignCustomerHandler = wrap((req) => customersService.reassignCustomer(asString(req.params.id), req.body.newKamId, req.user!.id));

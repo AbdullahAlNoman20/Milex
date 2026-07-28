@@ -1,10 +1,10 @@
 // src/Pages/modules/sales/roles/KAM/ReviseRecommendationPanel.jsx
-import React, { useState } from 'react';
+import  { useState } from 'react';
 import { XCircle } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { STATUS } from '../../constants/salesStatus';
-import { isRequired, isPositiveNumber } from '../../../../../Components/utils/validators';
+import { isRequired,} from '../../../../../Components/utils/validators';
 import { sanitizeText } from '../../../../../Components/utils/sanitize';
 
 const ReviseRecommendationPanel = ({ customer }) => {

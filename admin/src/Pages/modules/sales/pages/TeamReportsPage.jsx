@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/pages/TeamReportsPage.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Eye, X, Users } from "lucide-react";
 import { useToast } from "../../../../Components/hooks/useToast";
 import { listKams } from "../services/teamService";

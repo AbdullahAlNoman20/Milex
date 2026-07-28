@@ -27,6 +27,7 @@ import FieldChangeRequestsPanel from "../components/FieldChangeRequestsPanel";
 import TimeExtensionRequestPanel from "../roles/KAM/TimeExtensionRequestPanel";
 import FinalOnboardingReviewPanel from "../roles/LineManager/FinalOnboardingReviewPanel";
 import CustomerEditRequestModal from "../components/CustomerEditRequestModal";
+import AdminCustomerActions from "../components/AdminCustomerActions";
 
 const PROVISIONAL_COUNTDOWN_STATUSES = [
   STATUS.PROVISIONAL_ACTIVE,
@@ -107,7 +108,11 @@ const CustomerDetail = () => {
   const role = currentUser?.role;
   const isDocHandler = role === ROLES.KAM || role === ROLES.SALES_COORDINATOR;
   const isLmOrAdmin = role === ROLES.LINE_MANAGER || role === ROLES.SUPER_ADMIN;
-  const canEditProfile = role === ROLES.SALES_COORDINATOR || isLmOrAdmin;
+  const isSuperAdmin = role === ROLES.SUPER_ADMIN;
+  const PRE_APPROVAL_STATUSES = [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL, STATUS.OFFER_REJECTED];
+  const isPreApproval = PRE_APPROVAL_STATUSES.includes(customer.status);
+  const canDirectEdit = isLmOrAdmin || ((role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && isPreApproval);
+  const canEditProfile = role === ROLES.SALES_COORDINATOR || role === ROLES.KAM || isLmOrAdmin;
   const isProvisionalActive =
     customer.accountProfileType === "PROVISIONAL" &&
     customer.status === STATUS.PROVISIONAL_ACTIVE;
@@ -323,7 +328,24 @@ const CustomerDetail = () => {
                   {customer.accountType}
                 </span>
               </div>
-            </div>
+             </div>
+
+            {Array.isArray(customer.rateHistory) && customer.rateHistory.length > 0 && (
+              <div className="mb-8">
+                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
+                  RATE REVISION HISTORY
+                </span>
+                <div className="space-y-2">
+                  {customer.rateHistory.map((h, i) => (
+                    <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs flex flex-wrap justify-between gap-2">
+                      <span className="font-mono text-slate-500">{h.rateRef || '—'}</span>
+                      <span className="text-slate-700 font-semibold">{h.rate || '—'}</span>
+                      <span className="text-slate-400">{h.changedAt ? new Date(h.changedAt).toLocaleDateString() : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {(customer.shippingDetails || []).length > 0 && (
               <div className="mb-8">
@@ -396,6 +418,9 @@ const CustomerDetail = () => {
               onDecided={refreshCustomer}
             />
           )}
+          {isSuperAdmin && (
+            <AdminCustomerActions customer={customer} onChanged={refreshCustomer} />
+          )}
           <AuditTrail
             history={customer.history}
             activeStepLabel={getWorkflowStageLabel(customer)}
@@ -408,7 +433,7 @@ const CustomerDetail = () => {
       {isEditModalOpen && (
         <CustomerEditRequestModal
           customer={customer}
-          isLineManager={isLmOrAdmin}
+          isLineManager={canDirectEdit}
           onClose={() => setIsEditModalOpen(false)}
           onDone={refreshCustomer}
         />

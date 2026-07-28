@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/SuperAdmin/SuperAdminOverview.jsx
-import React from 'react';
+
 import AdminOverview from '../Admin/AdminOverview';
 
 const SuperAdminOverview = () => (

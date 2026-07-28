@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/LineManager/ProvisionalAccountPanel.jsx
-import React, { useCallback, useState } from "react";
+import { useCallback, useState } from "react";
 import Countdown from "../../../../../Components/Shared/Countdown";
 
 const ProvisionalAccountPanel = ({ customer }) => {

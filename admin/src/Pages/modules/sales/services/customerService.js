@@ -226,3 +226,30 @@ export const directFieldEdit = async (id, fieldKey, newValue) => {
   const { data } = await request(`/customers/${id}/direct-field-edit`, { method: 'PATCH', body: { fieldKey, newValue } });
   return data.customer;
 };
+
+export const deleteCustomer = async (id) => {
+  await request(`/customers/${id}`, { method: 'DELETE' });
+};
+
+export const reassignCustomer = async (id, newKamId) => {
+  const { data } = await request(`/customers/${id}/reassign`, { method: 'POST', body: { newKamId } });
+  return data.customer;
+};
+
+export const uploadRecommendationAttachment = async (customerId, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
+  const res = await fetch(
+    `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/customers/${customerId}/recommendation-attachment`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {},
+      body: formData,
+    }
+  );
+  const json = await res.json();
+  if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
+  return json.data.document;
+};

@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/components/StatusBadge.jsx
-import React from 'react';
+
 import { getStatusTone } from '../constants/salesStatus';
 import { humanizeStatus } from '../../../../Components/utils/format';
 

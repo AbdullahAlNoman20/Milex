@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/LineManager/FollowUpReminderPanel.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { BellRing } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';

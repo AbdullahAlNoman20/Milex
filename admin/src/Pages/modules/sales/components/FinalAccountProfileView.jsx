@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/components/FinalAccountProfileView.jsx
-import React from 'react';
+
 import { ClipboardCheck } from 'lucide-react';
 import { GAIN_TYPE_OPTIONS, FINANCE_MODE_OPTIONS } from '../constants/formOptions';
 
@@ -20,7 +20,7 @@ const FinalAccountProfileView = ({ customer }) => {
       <h3 className="font-bold text-slate-900 text-base flex items-center">
         <ClipboardCheck size={18} className="mr-2 text-purple-600" /> Final Account Profile Data
       </h3>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Field label="Managing Partner" value={customer.managingPartnerName} />
         <Field label="BIN Number" value={customer.binNumber} />

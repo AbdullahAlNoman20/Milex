@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/components/DocumentsList.jsx 
+// admin/src/Pages/modules/sales/components/DocumentsList.jsx
 import { useState } from "react";
 import { FileText, Loader2, Eye, Mail } from "lucide-react";
 import { getDocumentSignedUrl } from "../services/customerService";
@@ -13,6 +13,7 @@ const CATEGORY_LABELS = {
   CUSTOMER_TIN: "Customer TIN",
   CUSTOMER_BIN: "Customer BIN",
   TRADE_LICENSE: "Trade License",
+  RECOMMENDATION_ATTACHMENT: "Recommendation Attachment (Rate Document)",
   OTHERS: "Others Document",
 };
 
@@ -23,6 +24,16 @@ const CATEGORY_LABELS = {
 // view instead of a signed-file download.
 const buildVirtualEntries = (customer) => {
   const entries = [];
+  if (customer?.accountName) {
+    entries.push({
+      id: "virtual-recommendation",
+      isVirtual: true,
+      printType: "recommendation",
+      documentType: "RECOMMENDATION_FORM",
+      label: "Customer Recommendation Form",
+      originalName: "Recommendation Form",
+    });
+  }
   if (customer?.offerText) {
     entries.push({
       id: "virtual-offer",

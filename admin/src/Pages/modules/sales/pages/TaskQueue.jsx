@@ -1,5 +1,5 @@
-// admin/src/Pages/modules/sales/pages/TaskQueue.jsx 
-import React, { useMemo } from 'react';
+// admin/src/Pages/modules/sales/pages/TaskQueue.jsx
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { STATUS } from '../constants/salesStatus';

@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/LineManager/CustomerInfoApprovalPanel.jsx
-import React from 'react';
+
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { STATUS } from '../../constants/salesStatus';

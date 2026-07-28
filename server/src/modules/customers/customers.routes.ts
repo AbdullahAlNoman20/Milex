@@ -19,6 +19,7 @@ import {
   finalProfileSchema,
   listCustomersQuerySchema,
   fieldChangeRequestSchema,
+  reassignCustomerSchema,
 
 } from './customers.schema';
 import { uploadMiddleware } from '../../common/middlewares/upload.middleware';
@@ -72,6 +73,9 @@ router.post('/:id/field-change-request', requirePermission(PERMISSIONS.REQUEST_I
 router.post('/:id/field-change-request/document', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), uploadMiddleware.single('file'), controller.requestDocumentChangeHandler);
 router.get('/:id/field-change-request', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE), controller.listFieldChangeRequestsHandler);
 router.post('/field-change-request/:requestId/decision', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), controller.decideFieldChangeRequestHandler);
-router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), controller.directFieldEditHandler);
+router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE, PERMISSIONS.REQUEST_INFO_UPDATE), controller.directFieldEditHandler);
+router.post('/:id/recommendation-attachment', requirePermission(PERMISSIONS.CREATE_RECOMMENDATION, PERMISSIONS.REVISE_RECOMMENDATION), uploadMiddleware.single('file'), controller.uploadRecommendationAttachmentHandler);
+router.post('/:id/reassign', requirePermission(PERMISSIONS.REASSIGN_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), validateBody(reassignCustomerSchema), controller.reassignCustomerHandler);
+router.delete('/:id', requirePermission(PERMISSIONS.DELETE_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.deleteCustomerHandler);
 
 export default router;

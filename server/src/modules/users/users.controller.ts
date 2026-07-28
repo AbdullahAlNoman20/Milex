@@ -1,13 +1,34 @@
-// server/src/modules/users/users.controller.ts 
+// server/src/modules/users/users.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import * as usersService from './users.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 import { asString } from '../../common/utils/requestParams.util';
 
-export const listKamsHandler = async (_req: Request, res: Response, next: NextFunction) => {
+export const listKamsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const kams = await usersService.listKams();
+    const lineManagerId = req.user!.role === 'LINE_MANAGER' ? req.user!.id : undefined;
+    const kams = await usersService.listKams(lineManagerId);
     return sendSuccess(res, { kams });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const listLineManagersHandler = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lineManagers = await usersService.listLineManagers();
+    return sendSuccess(res, { lineManagers });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const setUserPasswordHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await usersService.setUserPassword(asString(req.params.id), req.body.newPassword, req.user!.id);
+    return sendSuccess(res, { updated: true });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
@@ -46,9 +67,10 @@ export const updateUserHandler = async (req: Request, res: Response, next: NextF
   }
 };
 
-export const listDirectoryHandler = async (_req: Request, res: Response, next: NextFunction) => {
+export const listDirectoryHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const staff = await usersService.listStaffDirectory();
+    const lineManagerId = req.user!.role === 'LINE_MANAGER' ? req.user!.id : undefined;
+    const staff = await usersService.listStaffDirectory(lineManagerId);
     return sendSuccess(res, { staff });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
