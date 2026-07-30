@@ -177,7 +177,7 @@ const VisitTable = ({
                   <td className="py-2.5 px-3">
                     <StatusBadge day={v.day} />
                   </td>
-                  <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                   <td className="py-2.5 px-3 text-right whitespace-nowrap">
                     {locked && (
                       <button
                         type="button"
@@ -188,14 +188,16 @@ const VisitTable = ({
                         <Pencil size={13} />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => onRemove(v.id)}
-                      aria-label="Remove this visit"
-                      className="text-slate-300 hover:text-red-500 transition"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {isNewRow(v.id) && (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(v.id)}
+                        aria-label="Remove this visit"
+                        className="text-slate-300 hover:text-red-500 transition"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

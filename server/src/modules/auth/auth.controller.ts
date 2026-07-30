@@ -104,6 +104,24 @@ export const confirmMfaHandler = async (req: Request, res: Response, next: NextF
   }
 };
 
+export const changePasswordHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await authService.changeOwnPassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
+    const clearOpts = {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
+    };
+    res.clearCookie(ACCESS_COOKIE_NAME, clearOpts);
+    res.clearCookie(REFRESH_COOKIE_NAME, clearOpts);
+    return sendSuccess(res, { changed: true, requiresRelogin: true });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
 export const meHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = await authService.getMe(req.user!.id);

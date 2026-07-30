@@ -122,3 +122,5 @@ export const listCustomersQuerySchema = z
     search: z.string().max(100).optional(),
   })
   .strict();
+
+export const reassignCustomerSchema = z.object({ newKamId: z.string().min(1) }).strict();

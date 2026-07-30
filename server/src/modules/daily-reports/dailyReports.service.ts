@@ -13,6 +13,7 @@ export const getReportByDate = async (kamId: string, date: string) => {
     include: { existingVisits: true, prospectVisits: true },
   });
   const scheduled = plans.flatMap((p) => [...p.existingVisits, ...p.prospectVisits]).filter((v) => v.day === date);
+  const scheduledById = new Map(scheduled.map((v) => [v.id, v]));
 
   if (existing) {
     // Merge in any scheduled visit not already represented in the saved
@@ -22,11 +23,29 @@ export const getReportByDate = async (kamId: string, date: string) => {
     const missing = scheduled.filter(
       (v) => !existingSourceIds.has(v.id) && !existingNames.has(v.customerName.trim().toLowerCase())
     );
-    if (missing.length === 0) return existing;
+
+    // Keep already-saved rows' customer name / purpose / customerId in sync
+    // with their source Weekly Plan visit — otherwise editing the purpose in
+    // the Weekly Plan after a daily report already exists for that date
+    // never showed up here. Completion status, skip reason, and outcome
+    // notes (the KAM's own input for today) are left untouched.
+    const syncedExistingVisits = existing.visits.map((v: any) => {
+      if (!v.sourceVisitId) return v;
+      const source = scheduledById.get(v.sourceVisitId);
+      if (!source) return v;
+      return {
+        ...v,
+        customerName: source.customerName,
+        customerId: source.customerId || null,
+        purpose: source.purpose || '',
+      };
+    });
+
+    if (missing.length === 0) return { ...existing, visits: syncedExistingVisits };
     return {
       ...existing,
       visits: [
-        ...existing.visits,
+        ...syncedExistingVisits,
         ...missing.map((v) => ({
           id: `plan_${v.id}`,
           customerName: v.customerName,
