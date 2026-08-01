@@ -7,7 +7,7 @@ import { listPlansForKamId } from "../services/weeklyPlanService";
 import { listReportsForKam } from "../services/dailyReportService";
 import { humanizeStatus } from "../../../../Components/utils/format";
 import Loader from "../../../../Components/Shared/Loader";
-
+import Pagination from "../../../../Components/Shared/Pagination";
 const KpiCard = ({ icon: Icon, label, value, iconBg }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center gap-3 min-w-0">
     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
@@ -57,8 +57,15 @@ const TeamReportsPage = () => {
   const [tab, setTab] = useState("weekly");
   const [weeklyPlans, setWeeklyPlans] = useState([]);
   const [dailyReports, setDailyReports] = useState([]);
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
+ const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
   const [reportSearch, setReportSearch] = useState("");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search]);
 
   const loadKams = useCallback(() => {
     setIsLoading(true);
@@ -98,6 +105,10 @@ const TeamReportsPage = () => {
     if (!q) return kams;
     return kams.filter((k) => k.name?.toLowerCase().includes(q) || k.email?.toLowerCase().includes(q));
   }, [kams, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredKams.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedKams = filteredKams.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   const totalPlans = weeklyPlans.length;
   const totalReports = dailyReports.length;
@@ -239,7 +250,7 @@ const TeamReportsPage = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredKams.map((k, idx) => {
+                    pagedKams.map((k, idx) => {
                       const isActive = activeKam?.id === k.id;
                       return (
                         <tr
@@ -278,12 +289,12 @@ const TeamReportsPage = () => {
                       );
                     })
                   )}
-                </tbody>
+                 </tbody>
               </table>
             </div>
+            <Pagination page={pageClamped} totalPages={totalPages} totalItems={filteredKams.length} pageSize={PAGE_SIZE} onChange={setPage} className="px-4 sm:px-5" />
           </div>
 
-          {/* Right: Detail panel */}
           {activeKam && (
             <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
               {/* Profile header */}

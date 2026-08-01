@@ -77,5 +77,6 @@ router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INF
 router.post('/:id/recommendation-attachment', requirePermission(PERMISSIONS.CREATE_RECOMMENDATION, PERMISSIONS.REVISE_RECOMMENDATION), uploadMiddleware.single('file'), controller.uploadRecommendationAttachmentHandler);
 router.post('/:id/reassign', requirePermission(PERMISSIONS.REASSIGN_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), validateBody(reassignCustomerSchema), controller.reassignCustomerHandler);
 router.delete('/:id', requirePermission(PERMISSIONS.DELETE_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.deleteCustomerHandler);
+router.get('/:id/edit-history', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listEditHistoryHandler);
 
 export default router;

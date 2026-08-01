@@ -6,7 +6,7 @@ import { listStaffDirectory, getUserActivity } from '../services/teamService';
 import { listReportsForKam } from '../services/dailyReportService';
 import { humanizeAction } from '../../../../Components/utils/format';
 import Loader from '../../../../Components/Shared/Loader';
-
+import Pagination from '../../../../Components/Shared/Pagination';
 const ROLE_FILTERS = [
   { key: 'ALL', label: 'All' },
   { key: 'KAM', label: 'KAM' },
@@ -84,6 +84,12 @@ const TeamActivityPage = () => {
   const [skippedItems, setSkippedItems] = useState([]);
   const [detailTab, setDetailTab] = useState('activity');
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
+
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter]);
   const [activitySearch, setActivitySearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
 
@@ -96,6 +102,9 @@ const TeamActivityPage = () => {
   }, []);
 
   const filtered = roleFilter === 'ALL' ? staff : staff.filter((s) => s.role === roleFilter);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedFiltered = filtered.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   const loadUserDetail = async (user) => {
     setIsDetailLoading(true);
@@ -246,7 +255,7 @@ const TeamActivityPage = () => {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((u, idx) => (
+                  pagedFiltered.map((u, idx) => (
                     <tr key={u.id} className={`align-top ${idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-emerald-50/30 transition-colors`}>
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -280,6 +289,8 @@ const TeamActivityPage = () => {
       </div>
 
       {/* Modal */}
+      <Pagination page={pageClamped} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+
       {activeUser && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">

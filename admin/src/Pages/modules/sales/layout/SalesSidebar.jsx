@@ -76,9 +76,15 @@ const NAV_ITEMS = [
   },
 ];
 
+const isDesktopViewport = () =>
+  typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+
 const SalesSidebar = () => {
   const { currentUser } = useAuth();
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Desktop starts expanded (full sidebar with labels); mobile starts
+  // collapsed (icon rail / hidden behind the overlay) since there's no room
+  // for a full sidebar on small screens.
+  const [isExpanded, setIsExpanded] = useState(isDesktopViewport);
   const navRef = useRef(null);
 
   const visibleItems = useMemo(() => {
@@ -93,8 +99,11 @@ const SalesSidebar = () => {
   const collapse = useCallback(() => setIsExpanded(false), []);
   const toggle = useCallback(() => setIsExpanded((prev) => !prev), []);
 
+  // Clicking outside / Escape should only auto-collapse the mobile overlay
+  // flyout — on desktop the sidebar stays open until the user explicitly
+  // presses the toggle button, matching normal desktop app behavior.
   useEffect(() => {
-    if (!isExpanded) return undefined;
+    if (!isExpanded || isDesktopViewport()) return undefined;
     const handleClickOutside = (e) => {
       if (navRef.current && !navRef.current.contains(e.target)) collapse();
     };
@@ -109,6 +118,13 @@ const SalesSidebar = () => {
     };
   }, [isExpanded, collapse]);
 
+  // Navigating to a page should only auto-collapse on mobile (where the
+  // sidebar is a temporary overlay) — desktop keeps whatever state the user
+  // last chose via the toggle button.
+  const handleNavClick = useCallback(() => {
+    if (!isDesktopViewport()) collapse();
+  }, [collapse]);
+
   return (
     <>
       {isExpanded && (
@@ -119,10 +135,16 @@ const SalesSidebar = () => {
         />
       )}
 
-      <nav
+       <nav
         ref={navRef}
         aria-label="Sales navigation"
-        className={`fixed lg:sticky top-0 left-0 h-screen bg-white border-r border-slate-200 flex flex-col shadow-sm z-40 transition-[width] duration-300 ease-in-out overflow-hidden ${
+        // Collapsed state always sits in normal document flow (sticky) —
+        // on mobile that's a narrow 68px icon rail sitting beside the page
+        // content (not on top of it), same as desktop. Only the *expanded*
+        // state on mobile becomes a fixed overlay flyout with a backdrop;
+        // expanded on desktop (lg+) stays in-flow and simply pushes content
+        // over, since it never needs a backdrop there.
+        className={`${isExpanded ? 'fixed lg:sticky' : 'sticky'} top-0 left-0 h-screen bg-white border-r border-slate-200 flex flex-col shadow-sm z-40 transition-[width] duration-300 ease-in-out overflow-hidden shrink-0 ${
           isExpanded ? 'w-64' : 'w-[68px]'
         }`}
       >
@@ -147,7 +169,7 @@ const SalesSidebar = () => {
               key={to}
               to={to}
               end={end}
-              onClick={collapse}
+              onClick={handleNavClick}
               title={!isExpanded ? label : undefined}
               className={({ isActive }) =>
                 `w-full flex items-center px-6 py-3 text-left text-sm font-semibold border-l-4 transition whitespace-nowrap ${

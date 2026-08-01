@@ -253,3 +253,8 @@ export const uploadRecommendationAttachment = async (customerId, file) => {
   if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
   return json.data.document;
 };
+
+export const getCustomerEditHistory = async (id) => {
+  const { data } = await request(`/customers/${id}/edit-history`);
+  return data.items;
+};
