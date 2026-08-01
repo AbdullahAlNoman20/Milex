@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/components/AuditTrail.jsx
-import React from "react";
+
 import { Clock } from "lucide-react";
 
 const TimelineNode = ({ title, subText, timestamp, isActive, isPending }) => (

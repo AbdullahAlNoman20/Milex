@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/LineManager/FinalOnboardingReviewPanel.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { decideFinalOnboarding, decideTimeExtension } from '../../services/customerService';

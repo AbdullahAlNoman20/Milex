@@ -21,15 +21,17 @@ export const savePlan = async (plan) => {
     method: 'POST',
     body: {
       weekStartDate: plan.weekStartDate,
-      existingVisits: plan.existingVisits.map(({ day, customerName, purpose, outcomeNotes }) => ({
+      existingVisits: plan.existingVisits.map(({ day, customerName, customerId, purpose, outcomeNotes }) => ({
         day,
         customerName,
+        customerId,
         purpose,
         outcomeNotes,
       })),
-      prospectVisits: plan.prospectVisits.map(({ day, customerName, purpose, outcomeNotes }) => ({
+      prospectVisits: plan.prospectVisits.map(({ day, customerName, customerId, purpose, outcomeNotes }) => ({
         day,
         customerName,
+        customerId,
         purpose,
         outcomeNotes,
       })),

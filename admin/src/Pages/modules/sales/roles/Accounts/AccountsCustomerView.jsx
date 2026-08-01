@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/Accounts/AccountsCustomerView.jsx
-import React from 'react';
+
 
 const AccountsCustomerView = ({ customer }) => (
   <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">

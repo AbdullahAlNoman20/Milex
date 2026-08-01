@@ -12,6 +12,7 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../com
 import { generateMfaSecret, buildQrCodeDataUrl, verifyMfaToken } from '../../common/utils/mfa.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
+import { sendNotification } from '../../jobs/notification.job';
 
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_MINUTES = 15;
@@ -177,7 +178,13 @@ export const requestPasswordReset = async (email: string) => {
     },
   });
 
-  // Plugs into notification module rather than sending email directly here.
+  await sendNotification({
+    to: user.email,
+    subject: 'Milex Password Reset',
+    resetToken: rawToken,
+    expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES,
+  });
+
   return rawToken;
 };
 
@@ -234,6 +241,34 @@ export const confirmMfa = async (userId: string, token: string) => {
   const valid = verifyMfaToken(user.mfaSecret, token);
   if (!valid) throw { statusCode: 400, code: 'INVALID_MFA_TOKEN', message: 'Invalid MFA token' };
   await prisma.user.update({ where: { id: userId }, data: { mfaEnabled: true } });
+};
+
+export const changeOwnPassword = async (userId: string, currentPassword: string, newPassword: string) => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const currentOk = await verifyPassword(currentPassword, user.passwordHash);
+  if (!currentOk) {
+    throw { statusCode: 401, code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' };
+  }
+  if (!isPasswordPolicyCompliant(newPassword)) {
+    throw {
+      statusCode: 400,
+      code: 'WEAK_PASSWORD',
+      message: 'Password must be 8+ chars with upper, lower, number, and special character',
+    };
+  }
+  const reused = await isPasswordReused(newPassword, user.passwordHistory);
+  if (reused) {
+    throw { statusCode: 400, code: 'PASSWORD_REUSED', message: 'Cannot reuse a recent password' };
+  }
+  const newHash = await hashPassword(newPassword);
+  const updatedHistory = [newHash, ...user.passwordHistory].slice(0, PASSWORD_HISTORY_SIZE);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { passwordHash: newHash, passwordHistory: updatedHistory } }),
+    prisma.refreshToken.updateMany({ where: { userId }, data: { revoked: true } }),
+  ]);
+
+  await logAudit({ entity: 'User', entityId: userId, action: 'PASSWORD_CHANGED_SELF', actorId: userId });
 };
 
 export const getMe = async (userId: string) => {

@@ -1,5 +1,5 @@
 // src/Components/Shared/Toast.jsx
-import React from 'react';
+
 import { CheckCircle, AlertCircle, XCircle, Info, X } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 

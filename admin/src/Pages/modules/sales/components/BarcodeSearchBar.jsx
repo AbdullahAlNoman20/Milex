@@ -1,15 +1,15 @@
-// admin/src/Pages/modules/sales/components/BarcodeSearchBar.jsx — REPLACE ENTIRE FILE
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, X } from 'lucide-react';
-import { useSales } from '../hooks/useSales';
-import { searchCustomers } from '../services/customerService';
+// admin/src/Pages/modules/sales/components/BarcodeSearchBar.jsx
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Search, X } from "lucide-react";
+import { useSales } from "../hooks/useSales";
+import { searchCustomers } from "../services/customerService";
 
 const MAX_SEARCH_LENGTH = 40;
 const DEBOUNCE_MS = 200;
 
 const BarcodeSearchBar = () => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -21,10 +21,11 @@ const BarcodeSearchBar = () => {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target))
+        setIsOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Debounced, cancellable, server-side search — matches on account name,
@@ -48,7 +49,9 @@ const BarcodeSearchBar = () => {
         // instantly — if that exact barcode matches one customer, skip the
         // dropdown entirely and jump straight to their profile.
         if (autoNavigateIfExact) {
-          const exact = items.find((c) => c.barcode.toLowerCase() === term.trim().toLowerCase());
+          const exact = items.find(
+            (c) => c.barcode.toLowerCase() === term.trim().toLowerCase(),
+          );
           if (exact) openCustomerRef.current(exact);
         }
       } catch {
@@ -69,12 +72,12 @@ const BarcodeSearchBar = () => {
   const openCustomer = useCallback(
     (c) => {
       setSelectedCustomer(c);
-      setQuery('');
+      setQuery("");
       setResults([]);
       setIsOpen(false);
       navigate(`/app/customers/${encodeURIComponent(c.barcode)}`);
     },
-    [navigate, setSelectedCustomer]
+    [navigate, setSelectedCustomer],
   );
 
   // Keeps a stable reference to the latest openCustomer for the debounced
@@ -94,7 +97,7 @@ const BarcodeSearchBar = () => {
   };
 
   const clearSearch = () => {
-    setQuery('');
+    setQuery("");
     setResults([]);
     setIsOpen(false);
     requestIdRef.current++;
@@ -102,7 +105,11 @@ const BarcodeSearchBar = () => {
 
   return (
     <div className="relative" ref={wrapperRef}>
-      <form onSubmit={handleSubmit} className="relative flex items-center" role="search">
+      <form
+        onSubmit={handleSubmit}
+        className="relative flex items-center"
+        role="search"
+      >
         <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
           <Search size={16} />
         </span>
@@ -133,7 +140,9 @@ const BarcodeSearchBar = () => {
           {isSearching ? (
             <div className="px-4 py-3 text-xs text-slate-400">Searching...</div>
           ) : results.length === 0 ? (
-            <div className="px-4 py-3 text-xs text-slate-400">No matching customer found.</div>
+            <div className="px-4 py-3 text-xs text-slate-400">
+              No matching customer found.
+            </div>
           ) : (
             results.map((c) => (
               <button
@@ -143,8 +152,13 @@ const BarcodeSearchBar = () => {
                 className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition border-b border-slate-50 last:border-0 flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-800 truncate">{c.accountName}</p>
-                  <p className="text-[11px] text-slate-400 font-mono">{c.barcode}{c.rateRef ? ` · REF-${c.rateRef}` : ''}</p>
+                  <p className="text-sm font-bold text-slate-800 truncate">
+                    {c.accountName}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    {c.barcode}
+                    {c.rateRef ? ` · REF-${c.rateRef}` : ""}
+                  </p>
                 </div>
               </button>
             ))

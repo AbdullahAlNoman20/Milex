@@ -1,13 +1,13 @@
-// admin/src/Components/Shared/ScannableBarcode.jsx — REPLACE ENTIRE FILE
-import { useEffect, useRef, useState } from 'react';
-import JsBarcode from 'jsbarcode';
-import { FileDigit } from 'lucide-react';
+// admin/src/Components/Shared/ScannableBarcode.jsx
+import { useEffect, useRef, useState } from "react";
+import JsBarcode from "jsbarcode";
+import { FileDigit } from "lucide-react";
 
 // Same pill/badge look as BarcodeBadge (icon + mono text + faded bars,
 // same padding/border/radius/font-size), except the bars are a real
 // Code128 barcode instead of a decorative random pattern — so this one is
 // actually scannable while looking identical to the old badge.
-const ScannableBarcode = ({ value, className = '' }) => {
+const ScannableBarcode = ({ value, className = "" }) => {
   const svgRef = useRef(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
 
@@ -15,13 +15,13 @@ const ScannableBarcode = ({ value, className = '' }) => {
     if (!svgRef.current || !value) return;
     try {
       JsBarcode(svgRef.current, value, {
-        format: 'CODE128',
+        format: "CODE128",
         width: 1.4,
         height: 16,
         displayValue: false,
         margin: 0,
-        background: 'transparent',
-        lineColor: 'currentColor',
+        background: "transparent",
+        lineColor: "currentColor",
       });
       // JsBarcode sets viewBox/width attributes on the SVG itself after
       // rendering — read the actual rendered width back so the wrapping
@@ -44,10 +44,10 @@ const ScannableBarcode = ({ value, className = '' }) => {
       {value}
       <span
         className="ml-2 flex items-center h-4 shrink-0 opacity-70"
-        style={{ width: renderedWidth ? `${renderedWidth}px` : 'auto' }}
+        style={{ width: renderedWidth ? `${renderedWidth}px` : "auto" }}
         aria-hidden="true"
       >
-        <svg ref={svgRef} style={{ height: '16px', width: '100%' }} />
+        <svg ref={svgRef} style={{ height: "16px", width: "100%" }} />
       </span>
     </span>
   );

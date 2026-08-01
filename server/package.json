@@ -10,7 +10,7 @@
     "migrate": "prisma migrate dev",
     "studio": "prisma studio",
     "seed": "tsx src/database/seed/seed.ts",
-    "test": "vitest run"
+    "test": "jest"
   },
   "keywords": [],
   "author": "",

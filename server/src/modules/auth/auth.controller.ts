@@ -13,6 +13,7 @@ const setAuthCookies = (res: Response, accessToken: string, refreshToken: string
     httpOnly: true,
     secure: true,
     sameSite: 'none' as const,
+    domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
   };
   res.cookie(ACCESS_COOKIE_NAME, accessToken, { ...cookieOpts, maxAge: 15 * 60 * 1000 });
   res.cookie(REFRESH_COOKIE_NAME, refreshToken, { ...cookieOpts, maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -50,8 +51,14 @@ export const logoutHandler = async (req: Request, res: Response, next: NextFunct
   try {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (req.user) await authService.logout(refreshToken, req.user.id);
-    res.clearCookie(ACCESS_COOKIE_NAME, { httpOnly: true, secure: true, sameSite: 'none' });
-    res.clearCookie(REFRESH_COOKIE_NAME, { httpOnly: true, secure: true, sameSite: 'none' });
+    const clearOpts = {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
+    };
+    res.clearCookie(ACCESS_COOKIE_NAME, clearOpts);
+    res.clearCookie(REFRESH_COOKIE_NAME, clearOpts);
     return sendSuccess(res, { loggedOut: true });
   } catch (err) {
     next(err);
@@ -91,6 +98,24 @@ export const confirmMfaHandler = async (req: Request, res: Response, next: NextF
   try {
     await authService.confirmMfa(req.user!.id, req.body.token);
     return sendSuccess(res, { mfaEnabled: true });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const changePasswordHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await authService.changeOwnPassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
+    const clearOpts = {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
+    };
+    res.clearCookie(ACCESS_COOKIE_NAME, clearOpts);
+    res.clearCookie(REFRESH_COOKIE_NAME, clearOpts);
+    return sendSuccess(res, { changed: true, requiresRelogin: true });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);

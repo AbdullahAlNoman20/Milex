@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Mail, Printer, PenTool, FileSpreadsheet, X } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { uploadOnboardingDocument } from '../../services/customerService';

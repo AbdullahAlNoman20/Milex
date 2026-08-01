@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/pages/SalesDashboard.jsx
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FileText, ShieldCheck, Target, Clock, Plus } from 'lucide-react';
 import { useSales } from '../hooks/useSales';

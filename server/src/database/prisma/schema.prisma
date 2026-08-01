@@ -84,6 +84,9 @@ model User {
   roleId             String
   role               Role      @relation(fields: [roleId], references: [id])
   branchId           String?
+  lineManagerId      String?
+  lineManager        User?     @relation("LineManagerKams", fields: [lineManagerId], references: [id])
+  kams               User[]    @relation("LineManagerKams")
   mfaSecret          String?
   mfaEnabled         Boolean   @default(false)
   failedLoginCount   Int       @default(0)
@@ -101,6 +104,8 @@ model User {
   refreshTokens      RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   loginLogs          LoginLog[]
+
+  @@index([lineManagerId])
 }
 
 model RefreshToken {
@@ -184,6 +189,8 @@ model Customer {
   revision                 Int                @default(0)
   status                   CustomerStatus     @default(PENDING_RATE_PREPARATION)
   accountProfileType       AccountProfileType @default(REGULAR)
+  isDeleted                Boolean            @default(false)
+  rateHistory              Json[]             @default([])
 
   pendingInfoUpdateField    String?
   pendingInfoUpdateValue    String?
@@ -216,6 +223,7 @@ model Customer {
   @@index([handledById])
   @@index([followUpDate])
   @@index([status, provisionalExpiryDate])
+  @@index([isDeleted])
 }
 
 model Contact {
@@ -278,6 +286,7 @@ model FieldChangeRequest {
 
   @@index([customerId])
   @@index([approved])
+  @@index([pendingFileStorageKey])
 }
 
 model NotificationRead {
@@ -318,6 +327,7 @@ model OnboardingDocument {
   createdAt    DateTime @default(now())
 
   @@index([customerId])
+  @@index([storageKey])
 }
 
 model TimeExtensionRequest {
@@ -354,12 +364,16 @@ model Visit {
   id                 String      @id @default(uuid())
   day                String
   customerName       String
+  customerId         String?
   purpose            String
   outcomeNotes       String?
   existingPlanId     String?
   existingPlan       WeeklyPlan? @relation("ExistingVisits", fields: [existingPlanId], references: [id], onDelete: Cascade)
   prospectPlanId     String?
   prospectPlan       WeeklyPlan? @relation("ProspectVisits", fields: [prospectPlanId], references: [id], onDelete: Cascade)
+
+  @@index([existingPlanId])
+  @@index([prospectPlanId])
 }
 
 model DailyReport {
@@ -377,6 +391,7 @@ model DailyReport {
 model ReportVisit {
   id                     String      @id @default(uuid())
   customerName           String
+  customerId             String?
   purpose                String?
   completed              Boolean?
   reasonIfNotCompleted   String?
@@ -384,6 +399,8 @@ model ReportVisit {
   sourceVisitId          String?
   dailyReportId          String
   dailyReport            DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+
+  @@index([dailyReportId])
 }
 
 model AuditLog {

@@ -34,4 +34,4 @@ export const ToastProvider = ({ children }) => {
   const value = useMemo(() => ({ toasts, showToast, removeToast }), [toasts, showToast, removeToast]);
 
   return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
-};
+}; 

@@ -32,7 +32,9 @@ export const createRecommendationSchema = z
     email: z.string().email().max(254),
     businessType: z.string().min(1).max(120),
     serviceRequired: z.enum(['IB', 'OB', 'BOTH']),
-    accountMode: z.enum(['Express', 'Fair']),
+// Accepts legacy 'Fair' value too (old data / not-yet-updated clients)
+    // and normalizes it to 'Freight' so nothing breaks either way.
+    accountMode: z.enum(['Express', 'Fair', 'Freight']).transform((v) => (v === 'Fair' ? 'Freight' : v)),
     accountType: z.enum(['CREDIT CUSTOMER', 'CASH']),
     creditLimitTk: z.string().max(20).optional(),
     creditPeriodDays: z.string().max(5).optional(),
@@ -120,3 +122,5 @@ export const listCustomersQuerySchema = z
     search: z.string().max(100).optional(),
   })
   .strict();
+
+export const reassignCustomerSchema = z.object({ newKamId: z.string().min(1) }).strict();

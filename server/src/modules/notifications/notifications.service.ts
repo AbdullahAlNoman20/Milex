@@ -7,7 +7,7 @@ export const getNotificationsForUser = async (userId: string, role: string, limi
   const items: { id: string; label: string; link: string; isOverdue?: boolean }[] = [];
 
  if (role === 'LINE_MANAGER') {
-    const [pending, pendingFieldRequests] = await Promise.all([
+    const [pending, pendingFieldRequests, recentPlanChanges] = await Promise.all([
       prisma.customer.findMany({
         where: {
           status: {
@@ -18,17 +18,37 @@ export const getNotificationsForUser = async (userId: string, role: string, limi
               CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
             ],
           },
+          handledBy: { lineManagerId: userId },
         },
+        orderBy: { updatedAt: 'desc' },
         take: 20,
       }),
       // Field-edit requests from KAM/SC waiting on this Line Manager's decision.
       prisma.fieldChangeRequest.findMany({
-        where: { approved: null },
+        where: { approved: null, customer: { handledBy: { lineManagerId: userId } } },
         include: { customer: { select: { accountName: true, barcode: true } } },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
+      // Weekly plans recently created/edited/submitted by KAMs under this LM.
+      prisma.weeklyPlan.findMany({
+        where: {
+          kam: { lineManagerId: userId },
+          updatedAt: { gte: new Date(Date.now() - 3 * 86400000) },
+        },
+        include: { kam: { select: { name: true } } },
+        orderBy: { updatedAt: 'desc' },
+        take: 20,
+      }),
     ]);
+
+    recentPlanChanges.forEach((p) => {
+      items.push({
+        id: `wp-${p.id}-${p.updatedAt.getTime()}`,
+        label: `${p.kam.name} — Weekly Plan Updated (Week of ${p.weekStartDate})`,
+        link: `/app/team-reports`,
+      });
+    });
 
     pending.forEach((c) => {
       const ageDays = (Date.now() - c.updatedAt.getTime()) / 86400000;
@@ -63,6 +83,7 @@ export const getNotificationsForUser = async (userId: string, role: string, limi
           ],
         },
       },
+      orderBy: { updatedAt: 'desc' },
       take: 20,
     });
     mine.forEach((c) => {

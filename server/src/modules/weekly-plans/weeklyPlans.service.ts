@@ -1,6 +1,18 @@
 // src/modules/weekly-plans/weeklyPlans.service.ts
 import { prisma } from '../../config/db';
 import { logAudit } from '../../common/utils/auditLog.util';
+import { emitNotificationToUser } from '../../config/socket';
+
+// Pings the KAM's assigned Line Manager any time a weekly plan is created,
+// edited, or submitted — a failure here must never break the actual save.
+const notifyLineManagerOfPlanChange = async (kamId: string) => {
+  try {
+    const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
+    if (kam?.lineManagerId) emitNotificationToUser(kam.lineManagerId);
+  } catch (err) {
+    console.warn('[socket] notifyLineManagerOfPlanChange failed (non-fatal):', (err as Error)?.message);
+  }
+};
 
 export const listPlansForKam = async (kamId: string) =>
   prisma.weeklyPlan.findMany({
@@ -21,9 +33,10 @@ export const upsertDraft = async (kamId: string, data: any) => {
     where: { kamId_weekStartDate: { kamId, weekStartDate: data.weekStartDate } },
   });
 
+  let saved;
   if (existing) {
     await prisma.visit.deleteMany({ where: { OR: [{ existingPlanId: existing.id }, { prospectPlanId: existing.id }] } });
-    return prisma.weeklyPlan.update({
+    saved = await prisma.weeklyPlan.update({
       where: { id: existing.id },
       data: {
         existingVisits: { create: data.existingVisits },
@@ -31,17 +44,20 @@ export const upsertDraft = async (kamId: string, data: any) => {
       },
       include: { existingVisits: true, prospectVisits: true },
     });
+  } else {
+    saved = await prisma.weeklyPlan.create({
+      data: {
+        kamId,
+        weekStartDate: data.weekStartDate,
+        existingVisits: { create: data.existingVisits },
+        prospectVisits: { create: data.prospectVisits },
+      },
+      include: { existingVisits: true, prospectVisits: true },
+    });
   }
 
-  return prisma.weeklyPlan.create({
-    data: {
-      kamId,
-      weekStartDate: data.weekStartDate,
-      existingVisits: { create: data.existingVisits },
-      prospectVisits: { create: data.prospectVisits },
-    },
-    include: { existingVisits: true, prospectVisits: true },
-  });
+  await notifyLineManagerOfPlanChange(kamId);
+  return saved;
 };
 
 export const submitPlan = async (kamId: string, weekStartDate: string) => {
@@ -50,24 +66,25 @@ export const submitPlan = async (kamId: string, weekStartDate: string) => {
   });
   // No approval concept at all anymore — SUBMITTED is just a label for
   // "finalized this session"; the plan stays fully editable afterward.
-  return prisma.weeklyPlan.update({
+  const updated = await prisma.weeklyPlan.update({
     where: { id: plan.id },
     data: { status: 'SUBMITTED', lmComments: '' },
     include: { existingVisits: true, prospectVisits: true },
   });
+  await notifyLineManagerOfPlanChange(kamId);
+  return updated;
 };
 
-// KAM can delete any of their own weekly plans outright — no approval
-// workflow gates this anymore, so ownership is the only check needed.
-// Visit rows cascade-delete automatically (schema.prisma onDelete: Cascade
-// on both the ExistingVisits/ProspectVisits relations).
+// Once a weekly plan has been saved, it can no longer be deleted — only
+// edited. Deletion is permanently disabled here rather than removing the
+// route, so any existing caller gets a clear error instead of a 404.
 export const deletePlan = async (id: string, kamId: string) => {
   const plan = await prisma.weeklyPlan.findUnique({ where: { id } });
   if (!plan) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Weekly plan not found' };
   if (plan.kamId !== kamId) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this plan' };
   }
-  await prisma.weeklyPlan.delete({ where: { id } });
+  throw { statusCode: 403, code: 'DELETE_NOT_ALLOWED', message: 'Weekly plans cannot be deleted once saved — edit it instead' };
 };
 export const reviewPlan = async (planId: string, approved: boolean, comments: string | undefined, lmId: string) => {
   const before = await prisma.weeklyPlan.findUniqueOrThrow({ where: { id: planId } });

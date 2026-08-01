@@ -29,3 +29,10 @@ export const enableMfaVerifySchema = z
     token: z.string().length(6),
   })
   .strict();
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newPassword: z.string().min(8).max(200),
+  })
+  .strict();

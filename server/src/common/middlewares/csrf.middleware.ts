@@ -14,10 +14,10 @@ export const issueCsrfCookie = (res: Response) => {
     httpOnly: false,
     secure: true,
     sameSite: 'none',
+    domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
   });
   return token;
 };
-
 // Double-submit cookie pattern on all state-changing requests.
 export const verifyCsrf = (req: Request, res: Response, next: NextFunction) => {
   if (!STATE_CHANGING_METHODS.includes(req.method)) return next();

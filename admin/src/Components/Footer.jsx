@@ -1,5 +1,5 @@
 // src/Components/Footer.jsx
-import React from 'react';
+
 
 const Footer = () => (
   <footer className="border-t border-slate-200 bg-white py-6 mt-auto">

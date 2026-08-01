@@ -50,6 +50,7 @@ export const buildEmptyVisit = (date = todayLocalISO()) => ({
   id: `v_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   day: date, // holds an ISO date string ("YYYY-MM-DD"), not a weekday name
   customerName: '',
+  customerId: null,
   purpose: '',
   outcomeNotes: '',
   completed: false,

@@ -21,8 +21,9 @@ export const saveReport = async (report) => {
     method: 'POST',
     body: {
       date: report.date,
-      visits: report.visits.map(({ customerName, completed, reasonIfNotCompleted, outcomeNotes }) => ({
+      visits: report.visits.map(({ customerName, customerId, completed, reasonIfNotCompleted, outcomeNotes }) => ({
         customerName,
+        customerId,
         completed,
         reasonIfNotCompleted,
         outcomeNotes,

@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/LineManager/RateApprovalPanel.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle, FileOutput } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';

@@ -2,7 +2,7 @@
 import { Outlet } from 'react-router-dom';
 import { SalesProvider } from '../context/SalesContext';
 import SalesSidebar from './SalesSidebar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Toast from '../../../../Components/Shared/Toast';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { getSocket } from '../../../../Components/services/socketService';
@@ -13,12 +13,14 @@ import PrintTemplate from '../components/PrintTemplate';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { useSales } from '../hooks/useSales';
 import NotificationBell from '../../../../Components/Shared/NotificationBell';
-import { LogOut } from 'lucide-react';
+import ChangePasswordModal from '../../../../Components/Shared/ChangePasswordModal';
+import { LogOut, KeyRound } from 'lucide-react';
 
 const SalesLayoutInner = () => {
   const { currentUser, logout } = useAuth();
   const { printData, setPrintData } = useSales();
   const { showToast } = useToast();
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   useEffect(() => {
     const socket = getSocket();
@@ -48,11 +50,19 @@ const SalesLayoutInner = () => {
               <BarcodeSearchBar />
             </div>
             <div className="flex items-center gap-4">
-              <NotificationBell />
+               <NotificationBell />
               <div className="text-right hidden sm:block">
                 <p className="text-xs font-bold text-slate-800">{currentUser?.name}</p>
                 <p className="text-[10px] text-slate-400">{currentUser?.email}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordOpen(true)}
+                aria-label="Change Password"
+                className="w-9 h-9 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100 transition"
+              >
+                <KeyRound size={16} />
+              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -66,6 +76,7 @@ const SalesLayoutInner = () => {
               </button>
             </div>
           </header>
+          {isChangePasswordOpen && <ChangePasswordModal onClose={() => setIsChangePasswordOpen(false)} />}
           <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 relative">
             <Toast />
             <ErrorBoundary>
