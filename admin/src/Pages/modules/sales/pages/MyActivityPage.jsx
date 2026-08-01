@@ -5,6 +5,7 @@ import { getMyActivity } from '../services/teamService';
 import { listMyReports } from '../services/dailyReportService';
 import { humanizeAction } from '../../../../Components/utils/format';
 import Loader from '../../../../Components/Shared/Loader';
+import Pagination from '../../../../Components/Shared/Pagination';
 
 const Donut = ({ segments, size = 84, thickness = 14 }) => {
   const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
@@ -43,9 +44,16 @@ const MyActivityPage = () => {
   const [tab, setTab] = useState('activity');
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [tab, search]);
 
 useEffect(() => {
-   
+
     Promise.all([getMyActivity(), listMyReports()])
       .then(([activityItems, reports]) => {
         setItems(activityItems);
@@ -71,6 +79,11 @@ useEffect(() => {
   }, [items, search]);
 
   if (isLoading) return <Loader fullScreen label="Loading activity..." />;
+
+  const activeList = tab === 'skipped' ? skipped : filteredItems;
+  const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedList = activeList.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -144,7 +157,7 @@ useEffect(() => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {filteredItems.map((item, i) => (
+                        {pagedList.map((item, i) => (
                           <tr key={i} className={`align-top ${i % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-emerald-50/30 transition-colors`}>
                             <td className="py-2.5 px-4">
                               <div
@@ -165,9 +178,10 @@ useEffect(() => {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                     </table>
                   </div>
                 )}
+                <Pagination page={pageClamped} totalPages={totalPages} totalItems={activeList.length} pageSize={PAGE_SIZE} onChange={setPage} className="px-4 sm:px-5" />
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
@@ -175,7 +189,7 @@ useEffect(() => {
                   <p className="text-xs text-slate-400 px-5 py-10 text-center">No skipped visits.</p>
                 ) : (
                   <div className="divide-y divide-slate-100">
-                    {skipped.map((v, i) => (
+                    {pagedList.map((v, i) => (
                       <div key={i} className="px-4 sm:px-5 py-3.5">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-bold text-slate-800">{v.customerName}</p>
@@ -186,6 +200,7 @@ useEffect(() => {
                     ))}
                   </div>
                 )}
+                <Pagination page={pageClamped} totalPages={totalPages} totalItems={activeList.length} pageSize={PAGE_SIZE} onChange={setPage} className="px-4 sm:px-5" />
               </div>
             )}
           </div>

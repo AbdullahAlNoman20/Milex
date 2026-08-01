@@ -580,7 +580,14 @@ export const requestFieldChange = async (
       requestedById: requesterId,
     },
   });
-  await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_CHANGE_REQUESTED', actorId: requesterId, afterState: { fieldKey, documentType } });
+  await logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: 'FIELD_CHANGE_REQUESTED',
+    actorId: requesterId,
+    beforeState: isDocRequest ? undefined : { [label]: oldValue },
+    afterState: isDocRequest ? { [label]: 'Re-upload requested' } : { [label]: clean.v },
+  });
   const ownerForRequest = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
   if (ownerForRequest) await notifyCustomerWorkflowUsers(ownerForRequest.handledById);
   return request;
@@ -690,9 +697,23 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
     } else {
       await prisma.customer.update({ where: { id: request.customerId }, data: { [request.fieldKey]: request.newValue } });
     }
-    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'FIELD_CHANGE_APPROVED', actorId: lmId, afterState: { [request.fieldKey]: request.newValue } });
+    await logAudit({
+      entity: 'Customer',
+      entityId: request.customerId,
+      action: 'FIELD_CHANGE_APPROVED',
+      actorId: lmId,
+      beforeState: { [request.fieldLabel]: request.oldValue },
+      afterState: { [request.fieldLabel]: request.newValue },
+    });
   } else {
-    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'FIELD_CHANGE_REJECTED', actorId: lmId });
+    await logAudit({
+      entity: 'Customer',
+      entityId: request.customerId,
+      action: 'FIELD_CHANGE_REJECTED',
+      actorId: lmId,
+      beforeState: { [request.fieldLabel]: request.oldValue },
+      afterState: { [request.fieldLabel]: request.newValue },
+    });
   }
   const decidedCustomer = await prisma.customer.findUniqueOrThrow({ where: { id: request.customerId } });
   // Broadcast to the whole workflow group (handling KAM + every LM + every
@@ -733,18 +754,36 @@ export const directFieldEdit = async (
   const contactRef = parseContactKey(fieldKey);
   const clean = sanitizeAndEscape({ v: newValue });
 
-  if (contactRef) {
+if (contactRef) {
     const contact = await prisma.contact.findFirst({ where: { id: contactRef.contactId, customerId } });
     if (!contact) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'Contact not found on this customer' };
+    const oldValue = (contact as any)[contactRef.column] ?? null;
+    const label = (await resolveFieldLabelAndOldValue(customerId, fieldKey))?.label || fieldKey;
     await prisma.contact.update({ where: { id: contactRef.contactId }, data: { [contactRef.column]: clean.v } });
-    await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_DIRECTLY_EDITED', actorId, afterState: { fieldKey, value: clean.v } });
+    await logAudit({
+      entity: 'Customer',
+      entityId: customerId,
+      action: 'FIELD_DIRECTLY_EDITED',
+      actorId,
+      beforeState: { [label]: oldValue },
+      afterState: { [label]: clean.v },
+    });
     await notifyCustomerWorkflowUsers(customer.handledById);
     return prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   }
 
   if (!EDITABLE_FIELDS[fieldKey]) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be edited' };
+  const oldValue = (customer as any)[fieldKey]?.toString() ?? null;
+  const label = EDITABLE_FIELDS[fieldKey].label;
   const updated = await prisma.customer.update({ where: { id: customerId }, data: { [fieldKey]: clean.v } });
-  await logAudit({ entity: 'Customer', entityId: customerId, action: 'FIELD_DIRECTLY_EDITED', actorId, afterState: { [fieldKey]: clean.v } });
+  await logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: 'FIELD_DIRECTLY_EDITED',
+    actorId,
+    beforeState: { [label]: oldValue },
+    afterState: { [label]: clean.v },
+  });
   await notifyCustomerWorkflowUsers(customer.handledById);
   return updated;
 };
@@ -830,4 +869,37 @@ export const reassignCustomer = async (customerId: string, newKamId: string, act
   });
   await notifyCustomerWorkflowUsers(newKamId);
   return updated;
+};
+
+// Only these actions represent an actual field/document "edit" (direct edit,
+// or an edit-request that was approved/rejected) — everything else the
+// customer's audit trail records (status transitions, offers, rate
+// approvals, account creation, etc.) belongs to the workflow timeline
+// (AuditTrail component), not the "Edit History" view.
+const EDIT_HISTORY_ACTIONS = [
+  'FIELD_DIRECTLY_EDITED',
+  'FIELD_CHANGE_REQUESTED',
+  'FIELD_CHANGE_APPROVED',
+  'FIELD_CHANGE_REJECTED',
+  'DOCUMENT_REUPLOAD_REQUESTED',
+  'DOCUMENT_REUPLOAD_APPROVED',
+];
+
+export const listCustomerEditHistory = async (customerId: string, requester: { id: string; role: string }) => {
+  const customer = await prisma.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    include: { handledBy: { select: { lineManagerId: true } } },
+  });
+  if (requester.role === 'KAM' && customer.handledById !== requester.id) {
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+  }
+  if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+  }
+  return prisma.auditLog.findMany({
+    where: { entity: 'Customer', entityId: customerId, action: { in: EDIT_HISTORY_ACTIONS } },
+    orderBy: { createdAt: 'desc' },
+    take: 150,
+    include: { actor: { select: { name: true, email: true } } },
+  });
 };

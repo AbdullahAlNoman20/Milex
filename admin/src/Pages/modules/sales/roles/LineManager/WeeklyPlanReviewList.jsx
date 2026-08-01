@@ -4,12 +4,15 @@ import { CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { listPlansForReview, reviewPlan } from '../../services/weeklyPlanService';
 import { humanizeStatus } from '../../../../../Components/utils/format';
+import Pagination from '../../../../../Components/Shared/Pagination';
 
 const WeeklyPlanReviewList = () => {
   const { showToast } = useToast();
   const [plans, setPlans] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [comments, setComments] = useState({});
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   const refresh = useCallback(async () => {
     try {
@@ -35,6 +38,10 @@ const WeeklyPlanReviewList = () => {
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(plans.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedPlans = plans.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
       <h2 className="text-2xl font-bold text-slate-800">Weekly Plan Review</h2>
@@ -44,7 +51,7 @@ const WeeklyPlanReviewList = () => {
           No weekly plans pending review.
         </div>
       ) : (
-        plans.map((p) => (
+        pagedPlans.map((p) => (
           <div key={p.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <button
               type="button"
@@ -145,6 +152,7 @@ const WeeklyPlanReviewList = () => {
           </div>
         ))
       )}
+      <Pagination page={pageClamped} totalPages={totalPages} totalItems={plans.length} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };

@@ -6,6 +6,7 @@ import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Countdown from '../../../../Components/Shared/Countdown';
 import Loader from '../../../../Components/Shared/Loader';
+import Pagination from '../../../../Components/Shared/Pagination';
 import { formatRevision } from '../../../../Components/utils/format';
 
 const TABS = [
@@ -20,11 +21,17 @@ const CustomersList = () => {
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(TABS.some((t) => t.key === tabParam) ? tabParam : 'customer');
   const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tabParam && TABS.some((t) => t.key === tabParam)) setActiveTab(tabParam);
   }, [tabParam]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab]);
 
   const grouped = useMemo(
     () => ({
@@ -37,6 +44,9 @@ const CustomersList = () => {
 
   const rows = grouped[activeTab] || [];
   const columnCount = activeTab === 'provisional' ? 6 : 5;
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedRows = rows.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   const openCustomer = (c) => {
     setSelectedCustomer(c);
@@ -84,7 +94,7 @@ const CustomersList = () => {
                 <td colSpan={columnCount} className="p-8 text-center text-slate-400">No customers in this category.</td>
               </tr>
             ) : (
-              rows.map((c) => (
+              pagedRows.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
@@ -111,6 +121,7 @@ const CustomersList = () => {
           </tbody>
         </table>
       </div>
+      <Pagination page={pageClamped} totalPages={totalPages} totalItems={rows.length} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };

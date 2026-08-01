@@ -1,10 +1,11 @@
 // admin/src/Pages/modules/sales/pages/TaskQueue.jsx
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSales } from '../hooks/useSales';
 import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
+import Pagination from '../../../../Components/Shared/Pagination';
 import { formatRevision } from '../../../../Components/utils/format';
 
 const TaskQueue = () => {
@@ -15,6 +16,11 @@ const TaskQueue = () => {
     () => customers.filter((c) => c.status !== STATUS.ACTIVE),
     [customers]
   );
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(pendingCustomers.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedCustomers = pendingCustomers.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   const openCustomer = (c) => {
     setSelectedCustomer(c);
@@ -47,7 +53,7 @@ const TaskQueue = () => {
                 </td>
               </tr>
             ) : (
-              pendingCustomers.map((c) => (
+              pagedCustomers.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
@@ -71,6 +77,7 @@ const TaskQueue = () => {
           </tbody>
         </table>
       </div>
+      <Pagination page={pageClamped} totalPages={totalPages} totalItems={pendingCustomers.length} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };

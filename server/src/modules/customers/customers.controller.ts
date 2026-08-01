@@ -175,3 +175,13 @@ export const deleteCustomerHandler = async (req: Request, res: Response, next: N
 };
 
 export const reassignCustomerHandler = wrap((req) => customersService.reassignCustomer(asString(req.params.id), req.body.newKamId, req.user!.id));
+
+export const listEditHistoryHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await customersService.listCustomerEditHistory(asString(req.params.id), { id: req.user!.id, role: req.user!.role });
+    return sendSuccess(res, { items });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};

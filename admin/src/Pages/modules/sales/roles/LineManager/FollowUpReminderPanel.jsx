@@ -6,6 +6,7 @@ import { useToast } from '../../../../../Components/hooks/useToast';
 import { deriveFollowUps } from '../../services/followUpService';
 import { isValidDateString } from '../../../../../Components/utils/validators';
 import { humanizeStatus } from '../../../../../Components/utils/format';
+import Pagination from '../../../../../Components/Shared/Pagination';
 
 const FollowUpReminderPanel = () => {
   const { customers, updateCustomerMeta } = useSales();
@@ -15,6 +16,11 @@ const FollowUpReminderPanel = () => {
   const [draftNote, setDraftNote] = useState('');
 
   const items = deriveFollowUps(customers);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedItems = items.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   const startEdit = (item) => {
     setEditing(item.customerId);
@@ -44,7 +50,7 @@ const FollowUpReminderPanel = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => (
+          {pagedItems.map((item) => (
             <div
               key={item.customerId}
               className={`bg-white p-5 rounded-xl shadow-sm border ${item.isOverdue ? 'border-red-300' : 'border-slate-200'}`}
@@ -134,6 +140,7 @@ const FollowUpReminderPanel = () => {
           ))}
         </div>
       )}
+      <Pagination page={pageClamped} totalPages={totalPages} totalItems={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };

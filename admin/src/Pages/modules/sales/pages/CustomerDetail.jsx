@@ -1,7 +1,7 @@
 // admin/src/Pages/modules/sales/pages/CustomerDetail.jsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building, Printer, Timer, PencilLine } from "lucide-react";
+import { ArrowLeft, Building, Printer, Timer, PencilLine, Eye } from "lucide-react";
 import { useSales } from "../hooks/useSales";
 import { useAuth } from "../../../../Components/hooks/useAuth";
 import { ROLES } from "../../../../Components/constants/roles";
@@ -28,6 +28,7 @@ import TimeExtensionRequestPanel from "../roles/KAM/TimeExtensionRequestPanel";
 import FinalOnboardingReviewPanel from "../roles/LineManager/FinalOnboardingReviewPanel";
 import CustomerEditRequestModal from "../components/CustomerEditRequestModal";
 import AdminCustomerActions from "../components/AdminCustomerActions";
+import CustomerEditHistoryModal from "../components/CustomerEditHistoryModal";
 
 const PROVISIONAL_COUNTDOWN_STATUSES = [
   STATUS.PROVISIONAL_ACTIVE,
@@ -64,6 +65,7 @@ const CustomerDetail = () => {
   const [detail, setDetail] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   const customer = detail && detail.barcode === barcode ? detail : listCustomer;
 
@@ -233,6 +235,13 @@ const CustomerDetail = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsHistoryModalOpen(true)}
+            className="text-slate-600 text-xs font-bold flex items-center bg-slate-50 px-3 py-2 rounded-md border border-slate-200 hover:bg-slate-100 transition"
+          >
+            <Eye size={14} className="mr-1.5" /> History
+          </button>
           {canEditProfile && (
             <button
               type="button"
@@ -430,13 +439,17 @@ const CustomerDetail = () => {
 
       {!canUploadDocs && <DocumentsList customer={customer} documents={customer.documents} />}
 
-      {isEditModalOpen && (
+       {isEditModalOpen && (
         <CustomerEditRequestModal
           customer={customer}
           isLineManager={canDirectEdit}
           onClose={() => setIsEditModalOpen(false)}
           onDone={refreshCustomer}
         />
+      )}
+
+      {isHistoryModalOpen && (
+        <CustomerEditHistoryModal customerId={customer.id} onClose={() => setIsHistoryModalOpen(false)} />
       )}
     </div>
   );

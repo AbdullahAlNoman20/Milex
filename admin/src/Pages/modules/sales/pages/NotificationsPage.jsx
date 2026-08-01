@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Search, RefreshCw, CheckCheck, ExternalLink, AlertTriangle } from 'lucide-react';
 import { listNotifications, markAllNotificationsRead } from '../../../../Components/services/notificationService';
+import Pagination from '../../../../Components/Shared/Pagination';
 
 const Donut = ({ segments, size = 84, thickness = 14 }) => {
   const total = segments.reduce((s, seg) => s + seg.value, 0) || 1;
@@ -42,6 +43,13 @@ const NotificationsPage = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const hasMarkedRef = useRef(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, statusFilter]);
 
   const load = () => {
     setIsLoading(true);
@@ -93,6 +101,9 @@ const NotificationsPage = () => {
       <div className="flex items-center justify-center py-24 text-sm text-slate-400">Loading notifications...</div>
     );
   }
+    const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const pageClamped = Math.min(page, totalPages);
+  const pagedItems = filteredItems.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -176,7 +187,7 @@ const NotificationsPage = () => {
                 <p className="text-xs text-slate-400 px-5 py-10 text-center">No notifications match your filters.</p>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {filteredItems.map((n) => (
+                  {pagedItems.map((n) => (
                     <button
                       key={n.id}
                       type="button"
@@ -213,6 +224,7 @@ const NotificationsPage = () => {
                 </div>
               )}
             </div>
+            <Pagination page={pageClamped} totalPages={totalPages} totalItems={filteredItems.length} pageSize={PAGE_SIZE} onChange={setPage} className="px-1" />
           </div>
 
           {/* Right sidebar */}
