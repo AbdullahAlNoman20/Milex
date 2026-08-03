@@ -123,9 +123,10 @@ export const requestDocumentChangeHandler = async (req: Request, res: Response, 
   }
 };
 
-export const getEditableFieldDefsHandler = async (_req: Request, res: Response, next: NextFunction) => {
+export const getEditableFieldDefsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    return sendSuccess(res, { fields: customersService.getEditableFieldDefs() });
+    const scope = asOptionalString(req.query.scope);
+    return sendSuccess(res, { fields: customersService.getEditableFieldDefs(scope) });
   } catch (err) {
     next(err);
   }

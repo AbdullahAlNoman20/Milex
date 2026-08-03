@@ -8,7 +8,7 @@ import { useSales } from "../hooks/useSales";
 const CATEGORY_LABELS = {
   SIGNED_OFFER_LETTER: "Signed Offer Letter (Customer Copy)",
   OFFER_RATE_RECEIPT: "Signed Offer & Rate Receipt (Hard Copy Scan)",
-  OFFER_LETTER_EXCEL: "Offer Letter — Rate/Volume Excel",
+  OFFER_LETTER_EXCEL: "Offer Letter Attachment (Rate File)",
   SIGNED_AGREEMENT: "Signed Agreement",
   CUSTOMER_TIN: "Customer TIN",
   CUSTOMER_BIN: "Customer BIN",

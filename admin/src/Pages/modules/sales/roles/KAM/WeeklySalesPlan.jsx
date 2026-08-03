@@ -87,6 +87,77 @@ const KpiCard = ({ icon: Icon, label, value, iconBg = "bg-emerald-50 text-emeral
   </div>
 );
 
+const VisitCard = ({ type, v, idx, onChange, onRemove, locked, onUnlock, searchableCustomer }) => (
+  <div className={`p-4 space-y-3 ${idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"}`}>
+    <div className="flex items-center justify-between gap-2">
+      <TypeBadge type={type} />
+      <div className="flex items-center gap-2 shrink-0">
+        {locked && (
+          <button
+            type="button"
+            onClick={() => onUnlock(v.id)}
+            className="text-slate-300 hover:text-emerald-600 transition"
+            aria-label="Edit this visit"
+          >
+            <Pencil size={14} />
+          </button>
+        )}
+        {isNewRow(v.id) && (
+          <button
+            type="button"
+            onClick={() => onRemove(v.id)}
+            aria-label="Remove this visit"
+            className="text-slate-300 hover:text-red-500 transition"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+
+    <input
+      type="date"
+      disabled={locked}
+      className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
+        locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
+      }`}
+      value={v.day}
+      onChange={(e) => onChange({ ...v, day: e.target.value })}
+    />
+
+    {searchableCustomer && !locked ? (
+      <CustomerSearchSelect
+        value={v.customerName}
+        onSelect={({ customerName, customerId }) => onChange({ ...v, customerName, customerId })}
+      />
+    ) : (
+      <input
+        disabled={locked}
+        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-700 ${
+          locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
+        }`}
+        placeholder="Customer name"
+        value={v.customerName}
+        maxLength={200}
+        onChange={(e) => onChange({ ...v, customerName: e.target.value })}
+      />
+    )}
+
+    <input
+      disabled={locked}
+      className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
+        locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
+      }`}
+      placeholder="Purpose of visit"
+      value={v.purpose}
+      maxLength={300}
+      onChange={(e) => onChange({ ...v, purpose: e.target.value })}
+    />
+
+    <StatusBadge day={v.day} />
+  </div>
+);
+
 const VisitTable = ({
   type,
   title,
@@ -112,99 +183,119 @@ const VisitTable = ({
     {visits.length === 0 ? (
       <p className="text-xs text-slate-400 px-5 py-6">No visits planned yet.</p>
     ) : (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[720px]">
-          <thead className="sticky top-0 bg-slate-50 z-10">
-            <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
-              <th className="py-2.5 px-4 w-36">Date</th>
-              <th className="py-2.5 px-3 w-40">Customer Type</th>
-              <th className="py-2.5 px-3">Customer Name</th>
-              <th className="py-2.5 px-3">Visit Purpose</th>
-              <th className="py-2.5 px-3 w-32">Status</th>
-              <th className="py-2.5 px-3 w-24 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {visits.map((v, idx) => {
-              const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
-              return (
-                <tr key={v.id} className={`align-top ${idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"} hover:bg-emerald-50/30 transition-colors`}>
-                  <td className="py-2.5 px-4">
-                    <input
-                      type="date"
-                      disabled={locked}
-                      className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
-                        locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-                      }`}
-                      value={v.day}
-                      onChange={(e) => onChange({ ...v, day: e.target.value })}
-                    />
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <TypeBadge type={type} />
-                  </td>
-                  <td className="py-2.5 px-3">
-                    {searchableCustomer && !locked ? (
-                      <CustomerSearchSelect
-                        value={v.customerName}
-                        onSelect={({ customerName, customerId }) => onChange({ ...v, customerName, customerId })}
-                      />
-                    ) : (
+      <>
+        <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 bg-slate-50 z-10">
+              <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                <th className="py-2.5 px-4 w-36">Date</th>
+                <th className="py-2.5 px-3 w-40">Customer Type</th>
+                <th className="py-2.5 px-3">Customer Name</th>
+                <th className="py-2.5 px-3">Visit Purpose</th>
+                <th className="py-2.5 px-3 w-32">Status</th>
+                <th className="py-2.5 px-3 w-24 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visits.map((v, idx) => {
+                const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
+                return (
+                  <tr key={v.id} className={`align-top ${idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"} hover:bg-emerald-50/30 transition-colors`}>
+                    <td className="py-2.5 px-4">
                       <input
+                        type="date"
                         disabled={locked}
-                        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-700 ${
+                        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
                           locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
                         }`}
-                        placeholder="Customer name"
-                        value={v.customerName}
-                        maxLength={200}
-                        onChange={(e) => onChange({ ...v, customerName: e.target.value })}
+                        value={v.day}
+                        onChange={(e) => onChange({ ...v, day: e.target.value })}
                       />
-                    )}
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <input
-                      disabled={locked}
-                      className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
-                        locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-                      }`}
-                      placeholder="Purpose of visit"
-                      value={v.purpose}
-                      maxLength={300}
-                      onChange={(e) => onChange({ ...v, purpose: e.target.value })}
-                    />
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <StatusBadge day={v.day} />
-                  </td>
-                   <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                    {locked && (
-                      <button
-                        type="button"
-                        onClick={() => onUnlock(v.id)}
-                        className="text-slate-300 hover:text-emerald-600 transition mr-2"
-                        aria-label="Edit this visit"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                    )}
-                    {isNewRow(v.id) && (
-                      <button
-                        type="button"
-                        onClick={() => onRemove(v.id)}
-                        aria-label="Remove this visit"
-                        className="text-slate-300 hover:text-red-500 transition"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <TypeBadge type={type} />
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {searchableCustomer && !locked ? (
+                        <CustomerSearchSelect
+                          value={v.customerName}
+                          onSelect={({ customerName, customerId }) => onChange({ ...v, customerName, customerId })}
+                        />
+                      ) : (
+                        <input
+                          disabled={locked}
+                          className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-700 ${
+                            locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
+                          }`}
+                          placeholder="Customer name"
+                          value={v.customerName}
+                          maxLength={200}
+                          onChange={(e) => onChange({ ...v, customerName: e.target.value })}
+                        />
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <input
+                        disabled={locked}
+                        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
+                          locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
+                        }`}
+                        placeholder="Purpose of visit"
+                        value={v.purpose}
+                        maxLength={300}
+                        onChange={(e) => onChange({ ...v, purpose: e.target.value })}
+                      />
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <StatusBadge day={v.day} />
+                    </td>
+                     <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                      {locked && (
+                        <button
+                          type="button"
+                          onClick={() => onUnlock(v.id)}
+                          className="text-slate-300 hover:text-emerald-600 transition mr-2"
+                          aria-label="Edit this visit"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {isNewRow(v.id) && (
+                        <button
+                          type="button"
+                          onClick={() => onRemove(v.id)}
+                          aria-label="Remove this visit"
+                          className="text-slate-300 hover:text-red-500 transition"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="lg:hidden divide-y divide-slate-100">
+          {visits.map((v, idx) => {
+            const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
+            return (
+              <VisitCard
+                key={v.id}
+                type={type}
+                v={v}
+                idx={idx}
+                locked={locked}
+                onChange={onChange}
+                onRemove={onRemove}
+                onUnlock={onUnlock}
+                searchableCustomer={searchableCustomer}
+              />
+            );
+          })}
+        </div>
+      </>
     )}
   </div>
 );

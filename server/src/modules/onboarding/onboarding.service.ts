@@ -5,8 +5,9 @@ import { transitionCustomerStatus } from "../../common/utils/stateMachine.util";
 import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
 import { runFileScan } from '../../jobs/file-scan.job';
 import { sendCustomerAccountEmail } from '../../jobs/notification.job';
-import { logAudit } from '../../common/utils/auditLog.util';
+import { logAudit } from "../../common/utils/auditLog.util";
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
+import { DOCUMENT_TYPE_LABELS } from "../customers/customers.service";
 
 const DEFAULT_EXTENSION_DAYS = 5;
 
@@ -193,10 +194,11 @@ export const submitFinalOnboardingRequest = async (
   const docsByType = new Map(customer.documents.map((d) => [d.documentType, d]));
   const missingDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => !docsByType.has(t));
   if (missingDocs.length > 0) {
+    const humanNames = missingDocs.map((t) => DOCUMENT_TYPE_LABELS[t] || t);
     throw {
       statusCode: 409,
       code: "DOCUMENTS_NOT_READY",
-      message: `Missing required documents: ${missingDocs.join(", ")}`,
+      message: `Missing required documents: ${humanNames.join(", ")}`,
     };
   }
   const notCleanDocs = REQUIRED_FINAL_DOC_TYPES.filter(

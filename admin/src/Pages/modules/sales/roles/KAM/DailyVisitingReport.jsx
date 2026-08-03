@@ -167,7 +167,7 @@ const MiniCalendar = ({ selectedDate }) => {
   );
 };
 
-const VisitRow = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
+const VisitRowTable = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
   const isSaving = savingId === v.id;
 
   if (v.locked) {
@@ -254,7 +254,7 @@ const VisitRow = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
           </button>
           <button
             type="button"
-            onClick={() => onUpdate({ ...v, completed: false })}
+            onClick={() => onUpdate({ ...v, completed: false, outcomeNotes: '' })}
             className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 ${
               v.completed === false ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
             }`}
@@ -264,7 +264,7 @@ const VisitRow = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
         </div>
       </td>
       <td className="py-3 px-3 min-w-[220px] space-y-1.5">
-        {v.completed === false && (
+        {v.completed === false ? (
           <textarea
             className="w-full border border-red-200 p-2 rounded-lg text-xs outline-none focus:border-red-500 min-h-[44px]"
             placeholder="Reason for skip"
@@ -272,14 +272,15 @@ const VisitRow = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
             maxLength={500}
             onChange={(e) => onUpdate({ ...v, reasonIfNotCompleted: e.target.value })}
           />
+        ) : (
+          <textarea
+            className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-emerald-500 min-h-[44px]"
+            placeholder="Outcome / notes (optional)"
+            value={v.outcomeNotes}
+            maxLength={500}
+            onChange={(e) => onUpdate({ ...v, outcomeNotes: e.target.value })}
+          />
         )}
-        <textarea
-          className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-emerald-500 min-h-[44px]"
-          placeholder="Outcome / notes (optional)"
-          value={v.outcomeNotes}
-          maxLength={500}
-          onChange={(e) => onUpdate({ ...v, outcomeNotes: e.target.value })}
-        />
       </td>
       <td className="py-3 px-3 text-right whitespace-nowrap">
         <div className="flex items-center justify-end gap-1.5">
@@ -308,6 +309,138 @@ const VisitRow = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
         </div>
       </td>
     </tr>
+  );
+};
+
+const VisitRowCard = ({ v, savingId, onUpdate, onSave, onUnlock, onRemove }) => {
+  const isSaving = savingId === v.id;
+
+  if (v.locked) {
+    return (
+      <div className="p-4 bg-white hover:bg-emerald-50/30 transition-colors">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <TypeBadge isManual={v.isManual} />
+            <StatusPill completed={v.completed} />
+          </div>
+          <button
+            type="button"
+            onClick={() => onUnlock(v.id)}
+            className="text-slate-300 hover:text-emerald-600 transition shrink-0"
+            aria-label="Edit this visit"
+          >
+            <Pencil size={14} />
+          </button>
+        </div>
+        <p className="text-sm font-bold text-slate-800 mt-2 break-words">{v.customerName || '(no name)'}</p>
+        {v.purpose && <p className="text-xs text-slate-500 mt-0.5 break-words">{v.purpose}</p>}
+        {v.completed === false && v.reasonIfNotCompleted && (
+          <p className="text-xs text-red-600 mt-2 break-words">
+            <span className="font-bold">Reason:</span> {v.reasonIfNotCompleted}
+          </p>
+        )}
+        {v.completed !== false && v.outcomeNotes && (
+          <p className="text-xs text-slate-500 mt-2 break-words">{v.outcomeNotes}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-white space-y-3">
+      <TypeBadge isManual={v.isManual} />
+
+      {v.isManual ? (
+        <CustomerSearchSelect
+          value={v.customerName}
+          onSelect={({ customerName, customerId }) => onUpdate({ ...v, customerName, customerId })}
+        />
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <input
+            disabled
+            className="w-full border p-2 rounded-lg text-xs outline-none bg-slate-50 text-slate-500 border-slate-100 font-semibold"
+            value={v.customerName}
+          />
+          <Lock size={11} className="text-slate-300 shrink-0" />
+        </div>
+      )}
+
+      {!v.isManual && (
+        <div className="flex items-center gap-1.5">
+          <input
+            disabled
+            className="w-full border p-2 rounded-lg text-xs outline-none bg-slate-50 text-slate-500 border-slate-100"
+            value={v.purpose}
+          />
+          <Lock size={11} className="text-slate-300 shrink-0" />
+        </div>
+      )}
+
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => onUpdate({ ...v, completed: true })}
+          className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 ${
+            v.completed === true ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+        >
+          <CheckCircle2 size={13} /> Done
+        </button>
+        <button
+          type="button"
+          onClick={() => onUpdate({ ...v, completed: false, outcomeNotes: '' })}
+          className={`flex-1 py-2 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 ${
+            v.completed === false ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+        >
+          <XCircle size={13} /> Skip
+        </button>
+      </div>
+
+      {v.completed === false ? (
+        <textarea
+          className="w-full border border-red-200 p-2 rounded-lg text-xs outline-none focus:border-red-500 min-h-[44px]"
+          placeholder="Reason for skip"
+          value={v.reasonIfNotCompleted}
+          maxLength={500}
+          onChange={(e) => onUpdate({ ...v, reasonIfNotCompleted: e.target.value })}
+        />
+      ) : (
+        <textarea
+          className="w-full border border-slate-200 p-2 rounded-lg text-xs outline-none focus:border-emerald-500 min-h-[44px]"
+          placeholder="Outcome / notes (optional)"
+          value={v.outcomeNotes}
+          maxLength={500}
+          onChange={(e) => onUpdate({ ...v, outcomeNotes: e.target.value })}
+        />
+      )}
+
+      <div className="flex items-center justify-end gap-3 pt-1">
+        {isSaving ? (
+          <Loader2 size={14} className="animate-spin text-slate-400" />
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSave(v)}
+            aria-label="Save this visit"
+            className="text-slate-300 hover:text-emerald-600 transition"
+          >
+            <Save size={14} />
+          </button>
+        )}
+        {v.isManual && (
+          <button
+            type="button"
+            onClick={() => onRemove(v.id)}
+            aria-label="Remove visit"
+            className="text-slate-300 hover:text-red-500 transition"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -499,33 +632,48 @@ const DailyVisitingReport = () => {
               {planVisits.length === 0 ? (
                 <p className="text-xs text-slate-400 px-5 py-6">No visits scheduled from your Weekly Plan for this date.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[860px]">
-                    <thead className="sticky top-0 bg-slate-50 z-10">
-                      <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
-                        <th className="py-2.5 px-4 w-28">Type</th>
-                        <th className="py-2.5 px-3">Customer Name</th>
-                        <th className="py-2.5 px-3">Purpose</th>
-                        <th className="py-2.5 px-3 w-40">Visit Status</th>
-                        <th className="py-2.5 px-3">Outcome / Notes</th>
-                        <th className="py-2.5 px-3 w-16 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {planVisits.map((v) => (
-                        <VisitRow
-                          key={v.id}
-                          v={v}
-                          savingId={savingId}
-                          onUpdate={(updated) => updateLocal(v.id, updated)}
-                          onSave={handleSaveRow}
-                          onUnlock={unlockRow}
-                          onRemove={removeVisit}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 bg-slate-50 z-10">
+                        <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                          <th className="py-2.5 px-4 w-28">Type</th>
+                          <th className="py-2.5 px-3">Customer Name</th>
+                          <th className="py-2.5 px-3">Purpose</th>
+                          <th className="py-2.5 px-3 w-40">Visit Status</th>
+                          <th className="py-2.5 px-3">Outcome / Notes</th>
+                          <th className="py-2.5 px-3 w-16 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {planVisits.map((v) => (
+                          <VisitRowTable
+                            key={v.id}
+                            v={v}
+                            savingId={savingId}
+                            onUpdate={(updated) => updateLocal(v.id, updated)}
+                            onSave={handleSaveRow}
+                            onUnlock={unlockRow}
+                            onRemove={removeVisit}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="lg:hidden divide-y divide-slate-100">
+                    {planVisits.map((v) => (
+                      <VisitRowCard
+                        key={v.id}
+                        v={v}
+                        savingId={savingId}
+                        onUpdate={(updated) => updateLocal(v.id, updated)}
+                        onSave={handleSaveRow}
+                        onUnlock={unlockRow}
+                        onRemove={removeVisit}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
@@ -543,33 +691,48 @@ const DailyVisitingReport = () => {
               {manualVisits.length === 0 ? (
                 <p className="text-xs text-slate-400 px-5 py-6">No additional visits logged yet.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[860px]">
-                    <thead className="sticky top-0 bg-slate-50 z-10">
-                      <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
-                        <th className="py-2.5 px-4 w-28">Type</th>
-                        <th className="py-2.5 px-3">Customer Name</th>
-                        <th className="py-2.5 px-3">Purpose</th>
-                        <th className="py-2.5 px-3 w-40">Visit Status</th>
-                        <th className="py-2.5 px-3">Outcome / Notes</th>
-                        <th className="py-2.5 px-3 w-16 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {manualVisits.map((v) => (
-                        <VisitRow
-                          key={v.id}
-                          v={v}
-                          savingId={savingId}
-                          onUpdate={(updated) => updateLocal(v.id, updated)}
-                          onSave={handleSaveRow}
-                          onUnlock={unlockRow}
-                          onRemove={removeVisit}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 bg-slate-50 z-10">
+                        <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                          <th className="py-2.5 px-4 w-28">Type</th>
+                          <th className="py-2.5 px-3">Customer Name</th>
+                          <th className="py-2.5 px-3">Purpose</th>
+                          <th className="py-2.5 px-3 w-40">Visit Status</th>
+                          <th className="py-2.5 px-3">Outcome / Notes</th>
+                          <th className="py-2.5 px-3 w-16 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {manualVisits.map((v) => (
+                          <VisitRowTable
+                            key={v.id}
+                            v={v}
+                            savingId={savingId}
+                            onUpdate={(updated) => updateLocal(v.id, updated)}
+                            onSave={handleSaveRow}
+                            onUnlock={unlockRow}
+                            onRemove={removeVisit}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="lg:hidden divide-y divide-slate-100">
+                    {manualVisits.map((v) => (
+                      <VisitRowCard
+                        key={v.id}
+                        v={v}
+                        savingId={savingId}
+                        onUpdate={(updated) => updateLocal(v.id, updated)}
+                        onSave={handleSaveRow}
+                        onUnlock={unlockRow}
+                        onRemove={removeVisit}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>

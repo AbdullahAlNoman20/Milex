@@ -207,8 +207,9 @@ export const requestDocumentChange = async (id, documentType, reason, file) => {
   return json.data.request;
 };
 
-export const getEditableFields = async () => {
-  const { data } = await request('/customers/editable-fields');
+export const getEditableFields = async (scope) => {
+  const query = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  const { data } = await request(`/customers/editable-fields${query}`);
   return data.fields;
 };
 

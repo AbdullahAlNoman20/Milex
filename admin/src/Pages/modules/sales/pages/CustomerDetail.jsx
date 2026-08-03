@@ -111,9 +111,13 @@ const CustomerDetail = () => {
   const isDocHandler = role === ROLES.KAM || role === ROLES.SALES_COORDINATOR;
   const isLmOrAdmin = role === ROLES.LINE_MANAGER || role === ROLES.SUPER_ADMIN;
   const isSuperAdmin = role === ROLES.SUPER_ADMIN;
-  const PRE_APPROVAL_STATUSES = [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL, STATUS.OFFER_REJECTED];
-  const isPreApproval = PRE_APPROVAL_STATUSES.includes(customer.status);
-  const canDirectEdit = isLmOrAdmin || ((role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && isPreApproval);
+  // KAM/SC keep direct-edit access to the recommendation-form fields all the
+  // way through the provisional period — only once the account is fully
+  // ACTIVE does it become request-only (account-profile fields are always
+  // request-only for them, enforced server-side).
+  const isActiveAccount = customer.status === STATUS.ACTIVE;
+  const canDirectEdit = isLmOrAdmin || ((role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && !isActiveAccount);
+  const restrictToRecommendationFields = !isLmOrAdmin && canDirectEdit;
   const canEditProfile = role === ROLES.SALES_COORDINATOR || role === ROLES.KAM || isLmOrAdmin;
   const isProvisionalActive =
     customer.accountProfileType === "PROVISIONAL" &&
@@ -443,6 +447,7 @@ const CustomerDetail = () => {
         <CustomerEditRequestModal
           customer={customer}
           isLineManager={canDirectEdit}
+          restrictToRecommendationFields={restrictToRecommendationFields}
           onClose={() => setIsEditModalOpen(false)}
           onDone={refreshCustomer}
         />
