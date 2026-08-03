@@ -8,14 +8,21 @@ import { useSales } from '../../hooks/useSales';
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 const DOCUMENT_CATEGORIES = [
-  { key: 'SIGNED_OFFER_LETTER', label: 'Signed Offer Letter (Customer Copy)', hasMeta: false },
-  { key: 'OFFER_RATE_RECEIPT', label: 'Signed Offer & Rate Receipt (Hard Copy Scan)', hasMeta: false },
+  { key: 'SIGNED_OFFER_LETTER', label: 'Signed Offer Letter (Customer Copy) *', hasMeta: false },
+  { key: 'OFFER_RATE_RECEIPT', label: 'Signed Offer & Rate Receipt (Hard Copy Scan) *', hasMeta: false },
   { key: 'SIGNED_AGREEMENT', label: 'Signed Agreement', hasMeta: false },
-  { key: 'CUSTOMER_TIN', label: 'Customer TIN', hasMeta: true },
-  { key: 'CUSTOMER_BIN', label: 'Customer BIN', hasMeta: true },
-  { key: 'TRADE_LICENSE', label: 'Trade License', hasMeta: true },
+  // TIN/BIN numbers are already captured in "Final Account Profile Data"
+  // above — showing a duplicate Number field here just for the file upload
+  // was redundant, so it's removed for these two categories.
+  { key: 'CUSTOMER_TIN', label: 'Customer TIN *', hasMeta: false },
+  { key: 'CUSTOMER_BIN', label: 'Customer BIN *', hasMeta: false },
+  { key: 'TRADE_LICENSE', label: 'Trade License *', hasMeta: true },
   { key: 'OTHERS', label: 'Others Document', hasMeta: true },
 ];
+
+const REQUIRED_DOC_LABELS = Object.fromEntries(
+  DOCUMENT_CATEGORIES.map((c) => [c.key, c.label.replace(' *', '')])
+);
 
 const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
   const { showToast } = useToast();
@@ -160,7 +167,7 @@ const OfferLetterAutoCard = ({ customer }) => {
   );
 };
 
-const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'SIGNED_AGREEMENT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
+const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'OFFER_RATE_RECEIPT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
 
 const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
   const { showToast } = useToast();
@@ -214,6 +221,7 @@ const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
           <p className="text-xs text-slate-500 mt-1">
             Upload PDF, image, or Word files for each category. Maximum file size 10MB.
           </p>
+          <p className="text-[11px] text-red-500 font-semibold mt-1">* Required for final onboarding approval</p>
         </div>
         <button
           type="button"
@@ -242,7 +250,7 @@ const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
         <div className="pt-4 border-t border-slate-100 space-y-2">
           {missingRequired.length > 0 && (
             <p className="text-[11px] text-amber-600 font-semibold">
-              Still needed: {missingRequired.map((k) => k.replace(/_/g, ' ')).join(', ')}
+              Still needed: {missingRequired.map((k) => REQUIRED_DOC_LABELS[k] || k.replace(/_/g, ' ')).join(', ')}
             </p>
           )}
           <button

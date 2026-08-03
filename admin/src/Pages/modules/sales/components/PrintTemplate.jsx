@@ -120,6 +120,14 @@ const PSectionTitle = ({ children }) => (
 );
 
 const PrintTemplate = ({ data, onClose }) => {
+  useEffect(() => {
+    if (!data) return undefined;
+    // Skip the extra manual "Print Document" click — open the browser's
+    // print dialog automatically once this preview has painted.
+    const timer = setTimeout(() => window.print(), 60);
+    return () => clearTimeout(timer);
+  }, [data]);
+
   if (!data) return null;
   const c = data.customer;
 

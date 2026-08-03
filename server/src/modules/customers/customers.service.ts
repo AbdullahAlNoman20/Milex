@@ -442,7 +442,8 @@ export const submitFinalOnboardingRegular = async (customerId: string, actorId: 
   const docsByType = new Map(customer.documents.map((d) => [d.documentType, d]));
   const missingDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => !docsByType.has(t));
   if (missingDocs.length > 0) {
-    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: `Missing required documents: ${missingDocs.join(', ')}` };
+    const humanNames = missingDocs.map((t) => DOCUMENT_TYPE_LABELS[t] || t);
+    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: `Missing required documents: ${humanNames.join(', ')}` };
   }
   const notCleanDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => docsByType.get(t)?.scanStatus !== 'CLEAN');
   if (notCleanDocs.length > 0) {
@@ -513,7 +514,7 @@ export const EDITABLE_FIELDS: Record<string, EditFieldDef> = {
   approvedRate: { label: 'Approved Rate (Revision)', type: 'textarea' },
 };
 
-const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   SIGNED_OFFER_LETTER: 'Signed Offer Letter', OFFER_RATE_RECEIPT: 'Offer & Rate Receipt',
   SIGNED_AGREEMENT: 'Signed Agreement', CUSTOMER_TIN: 'Customer TIN', CUSTOMER_BIN: 'Customer BIN',
   TRADE_LICENSE: 'Trade License', OTHERS: 'Other Document',
@@ -727,10 +728,22 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
 
 // Line Manager can also just edit any field (including contact sub-fields)
 // directly, bypassing the request flow entirely.
-const PRE_APPROVAL_STATUSES = [
-  'PENDING_RATE_PREPARATION',
-  'PENDING_RATE_APPROVAL',
-  'OFFER_REJECTED_REVISE_RATE',
+// Recommendation-form fields — KAM/SC may keep editing these directly all
+// the way up to account activation (i.e. throughout the provisional
+// period). Account-profile fields (final onboarding data, added later by
+// KAM/SC/LM once the rate is approved) are deliberately excluded here —
+// those always require an edit request, regardless of status.
+const RECOMMENDATION_FIELD_KEYS = [
+  'accountName',
+  'address',
+  'phone',
+  'email',
+  'businessType',
+  'serviceRequired',
+  'accountMode',
+  'accountType',
+  'creditLimitTk',
+  'creditPeriodDays',
 ];
 
 export const directFieldEdit = async (
@@ -743,12 +756,21 @@ export const directFieldEdit = async (
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
 
   const isKamOrSc = actorRole === 'KAM' || actorRole === 'SALES_COORDINATOR';
-  if (isKamOrSc && !PRE_APPROVAL_STATUSES.includes(customer.status as any)) {
-    throw {
-      statusCode: 403,
-      code: 'REQUEST_REQUIRED',
-      message: 'Once the rate is approved, changes must go through an edit request',
-    };
+  if (isKamOrSc) {
+    if (customer.status === 'ACTIVE_ACCOUNT') {
+      throw {
+        statusCode: 403,
+        code: 'REQUEST_REQUIRED',
+        message: 'Once the account is active, changes must go through an edit request',
+      };
+    }
+    if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
+      throw {
+        statusCode: 403,
+        code: 'FIELD_NOT_DIRECTLY_EDITABLE',
+        message: 'This field can only be changed through an edit request',
+      };
+    }
   }
 
   const contactRef = parseContactKey(fieldKey);
@@ -788,8 +810,12 @@ if (contactRef) {
   return updated;
 };
 
-export const getEditableFieldDefs = () =>
-  Object.entries(EDITABLE_FIELDS).map(([key, def]) => ({ key, ...def }));
+export const getEditableFieldDefs = (scope?: string) => {
+  const entries = Object.entries(EDITABLE_FIELDS);
+  const filtered =
+    scope === 'recommendation' ? entries.filter(([key]) => RECOMMENDATION_FIELD_KEYS.includes(key)) : entries;
+  return filtered.map(([key, def]) => ({ key, ...def }));
+};
 
 export const uploadRecommendationAttachment = async (
   customerId: string,

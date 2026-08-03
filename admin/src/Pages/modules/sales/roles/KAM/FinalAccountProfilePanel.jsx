@@ -6,7 +6,15 @@ import { useToast } from '../../../../../Components/hooks/useToast';
 import { GAIN_TYPE_OPTIONS, FINANCE_MODE_OPTIONS } from '../../constants/formOptions';
 import DocumentUploadPanel from './DocumentUploadPanel';
 
-const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'SIGNED_AGREEMENT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
+const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'OFFER_RATE_RECEIPT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
+
+const REQUIRED_DOC_LABELS = {
+  SIGNED_OFFER_LETTER: 'Signed Offer Letter (Customer Copy)',
+  OFFER_RATE_RECEIPT: 'Signed Offer & Rate Receipt (Hard Copy Scan)',
+  CUSTOMER_TIN: 'Customer TIN',
+  CUSTOMER_BIN: 'Customer BIN',
+  TRADE_LICENSE: 'Trade License',
+};
 
 const FieldInput = ({ label, keyName, form, isSavingField, onChange, onBlur, type = 'text' }) => (
   <div>
@@ -174,7 +182,9 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
 
       <div className="pt-4 border-t border-slate-100 space-y-2">
         {mode === 'PROVISIONAL' && missingRequired.length > 0 && (
-          <p className="text-[11px] text-amber-600 font-semibold">Still needed: {missingRequired.map((k) => k.replace(/_/g, ' ')).join(', ')}</p>
+          <p className="text-[11px] text-amber-600 font-semibold">
+            Still needed: {missingRequired.map((k) => REQUIRED_DOC_LABELS[k] || k.replace(/_/g, ' ')).join(', ')}
+          </p>
         )}
         <button
           type="button"

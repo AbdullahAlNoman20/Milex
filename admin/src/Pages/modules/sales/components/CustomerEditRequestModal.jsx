@@ -12,12 +12,12 @@ import { useToast } from "../../../../Components/hooks/useToast";
 import { humanizeStatus } from "../../../../Components/utils/format";
 
 const DOCUMENT_CATEGORIES = [
-  { key: "SIGNED_OFFER_LETTER", label: "Signed Offer Letter" },
-  { key: "OFFER_RATE_RECEIPT", label: "Signed Offer & Rate Receipt" },
+  { key: "SIGNED_OFFER_LETTER", label: "Signed Offer Letter *" },
+  { key: "OFFER_RATE_RECEIPT", label: "Signed Offer & Rate Receipt *" },
   { key: "SIGNED_AGREEMENT", label: "Signed Agreement" },
-  { key: "CUSTOMER_TIN", label: "Customer TIN" },
-  { key: "CUSTOMER_BIN", label: "Customer BIN" },
-  { key: "TRADE_LICENSE", label: "Trade License" },
+  { key: "CUSTOMER_TIN", label: "Customer TIN *" },
+  { key: "CUSTOMER_BIN", label: "Customer BIN *" },
+  { key: "TRADE_LICENSE", label: "Trade License *" },
   { key: "OTHERS", label: "Others Document" },
 ];
 
@@ -34,6 +34,7 @@ const buildContactFieldDefs = (contacts) =>
 const CustomerEditRequestModal = ({
   customer,
   isLineManager,
+  restrictToRecommendationFields = false,
   onClose,
   onDone,
 }) => {
@@ -47,14 +48,14 @@ const CustomerEditRequestModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tab, setTab] = useState("fields");
 
-  useEffect(() => {
-    getEditableFields()
+   useEffect(() => {
+    getEditableFields(restrictToRecommendationFields ? 'recommendation' : undefined)
       .then((defs) =>
         setFieldDefs([...defs, ...buildContactFieldDefs(customer.contacts)]),
       )
       .catch(() => setFieldDefs(buildContactFieldDefs(customer.contacts)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [restrictToRecommendationFields]);
 
   const currentValueFor = (f) =>
     f.current !== undefined ? f.current : customer[f.key];
