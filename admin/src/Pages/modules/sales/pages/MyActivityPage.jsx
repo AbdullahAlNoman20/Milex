@@ -53,10 +53,16 @@ const MyActivityPage = () => {
   }, [tab, search]);
 
 useEffect(() => {
-
-    Promise.all([getMyActivity(), listMyReports()])
-      .then(([activityItems, reports]) => {
-        setItems(activityItems);
+    // Line Managers and Sales Coordinators don't hold the Daily Report
+    // permission, so listMyReports() 403s for them — that used to reject
+    // the whole Promise.all and silently skip setItems() too, leaving the
+    // page looking empty even though their login/action history existed.
+    // allSettled lets the activity log populate independently of whether
+    // the reports call succeeds.
+    Promise.allSettled([getMyActivity(), listMyReports()])
+      .then(([activityResult, reportsResult]) => {
+        setItems(activityResult.status === 'fulfilled' ? activityResult.value : []);
+        const reports = reportsResult.status === 'fulfilled' ? reportsResult.value : [];
         const skips = reports.flatMap((r) =>
           r.visits.filter((v) => !v.completed).map((v) => ({ ...v, date: r.date }))
         );

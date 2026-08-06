@@ -1,5 +1,5 @@
-// src/Pages/modules/sales/layout/SalesSidebar.jsx
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+// admin/src/Pages/modules/sales/layout/SalesSidebar.jsx
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, FileBox, FileText, Users, ShieldCheck, CalendarDays, ClipboardList, BellRing, Eye, History, Users2, Menu, X } from 'lucide-react';
 import { useAuth } from '../../../../Components/hooks/useAuth';
@@ -31,7 +31,6 @@ const NAV_ITEMS = [
     roles: [ROLES.KAM],
     permissions: null,
   },
-
   {
     to: '/app/follow-ups',
     label: 'Follow-up Reminders',
@@ -79,11 +78,14 @@ const NAV_ITEMS = [
 const isDesktopViewport = () =>
   typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
 
+// Desktop (lg+): sidebar is always in normal document flow, starts fully
+// expanded, and the toggle button just collapses it down to an icon-only
+// rail (and back) — never an overlay, never hidden entirely.
+// Mobile (<lg): sidebar starts collapsed to a bare hamburger rail; pressing
+// it slides the full sidebar in from the left as an overlay with a
+// backdrop; backdrop click / Escape / navigating collapses it back down.
 const SalesSidebar = () => {
   const { currentUser } = useAuth();
-  // Desktop starts expanded (full sidebar with labels); mobile starts
-  // collapsed (icon rail / hidden behind the overlay) since there's no room
-  // for a full sidebar on small screens.
   const [isExpanded, setIsExpanded] = useState(isDesktopViewport);
   const navRef = useRef(null);
 
@@ -99,9 +101,8 @@ const SalesSidebar = () => {
   const collapse = useCallback(() => setIsExpanded(false), []);
   const toggle = useCallback(() => setIsExpanded((prev) => !prev), []);
 
-  // Clicking outside / Escape should only auto-collapse the mobile overlay
-  // flyout — on desktop the sidebar stays open until the user explicitly
-  // presses the toggle button, matching normal desktop app behavior.
+  // Outside-click / Escape only auto-close the mobile overlay flyout —
+  // desktop's collapse/expand is purely manual via the toggle button.
   useEffect(() => {
     if (!isExpanded || isDesktopViewport()) return undefined;
     const handleClickOutside = (e) => {
@@ -118,38 +119,43 @@ const SalesSidebar = () => {
     };
   }, [isExpanded, collapse]);
 
-  // Navigating to a page should only auto-collapse on mobile (where the
-  // sidebar is a temporary overlay) — desktop keeps whatever state the user
-  // last chose via the toggle button.
+  // Navigating to a page only auto-collapses on mobile (temporary overlay);
+  // desktop keeps whatever expand/collapse state the user last chose.
   const handleNavClick = useCallback(() => {
     if (!isDesktopViewport()) collapse();
   }, [collapse]);
 
   return (
     <>
-      {isExpanded && (
-        <div
-          className="fixed inset-0 bg-slate-900/30 z-30 lg:hidden"
-          onClick={collapse}
-          aria-hidden="true"
-        />
+      {/* Mobile-only floating hamburger — fixed/overlaid on top of page
+          content instead of reserving a permanent rail, so content gets
+          the full viewport width. Hidden while the drawer is open (the
+          drawer's own X button takes over). */}
+      {!isExpanded && (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label="Open navigation menu"
+          aria-expanded={isExpanded}
+          className="lg:hidden fixed top-3 left-3 z-40 w-10 h-10 rounded-lg bg-white border border-slate-200 shadow-md flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-emerald-700 transition"
+        >
+          <Menu size={20} />
+        </button>
       )}
 
-       <nav
+      {isExpanded && (
+        <div className="fixed inset-0 bg-slate-900/30 z-40 lg:hidden" onClick={collapse} aria-hidden="true" />
+      )}
+
+      <nav
         ref={navRef}
         aria-label="Sales navigation"
-        // Collapsed state always sits in normal document flow (sticky) —
-        // on mobile that's a narrow 68px icon rail sitting beside the page
-        // content (not on top of it), same as desktop. Only the *expanded*
-        // state on mobile becomes a fixed overlay flyout with a backdrop;
-        // expanded on desktop (lg+) stays in-flow and simply pushes content
-        // over, since it never needs a backdrop there.
-        className={`${isExpanded ? 'fixed lg:sticky' : 'sticky'} top-0 left-0 h-screen bg-white border-r border-slate-200 flex flex-col shadow-sm z-40 transition-[width] duration-300 ease-in-out overflow-hidden shrink-0 ${
-          isExpanded ? 'w-64' : 'w-[68px]'
-        }`}
+        className={`fixed lg:sticky top-0 left-0 h-screen bg-white border-r border-slate-200 flex flex-col shadow-xl lg:shadow-sm z-50 lg:z-30 transition-all duration-300 ease-in-out shrink-0 ${
+          isExpanded ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:w-[68px] lg:translate-x-0'
+        } overflow-hidden`}
       >
-        <div className="h-20 flex items-center justify-between px-3 border-b border-slate-100 shrink-0">
-          <div className={`flex items-center overflow-hidden transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 w-0'}`}>
+        <div className="h-20 flex items-center justify-between px-3 lg:px-3 border-b border-slate-100 shrink-0">
+          <div className={`flex items-center overflow-hidden transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 w-0 lg:w-0'}`}>
             <img src="/log.jpeg" alt="MILEX" className="h-12 w-auto object-contain" />
           </div>
           <button

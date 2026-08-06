@@ -602,16 +602,7 @@ const DailyVisitingReport = () => {
             >
               <FileSpreadsheet size={14} /> Export Excel
             </button>
-            <button
-              type="button"
-              disabled={savingId === 'all'}
-              onClick={handleSaveAll}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-800 transition disabled:opacity-50"
-            >
-              {savingId === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Save Report
-            </button>
-          </div>
+            </div>
         </div>
 
         {/* KPI Cards */}
@@ -625,6 +616,17 @@ const DailyVisitingReport = () => {
         {/* Main grid: content + sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-8 space-y-5 min-w-0">
+            <div className="hidden lg:flex justify-end">
+              <button
+                type="button"
+                disabled={savingId === 'all'}
+                onClick={handleSaveAll}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-800 transition disabled:opacity-50"
+              >
+                {savingId === 'all' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save Report
+              </button>
+            </div>
             <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
               <div className="flex justify-between items-center px-4 sm:px-5 py-4 border-b border-slate-100">
                 <h3 className="font-bold text-slate-800 text-sm">Scheduled Visits (from Weekly Plan)</h3>
@@ -917,7 +919,7 @@ const DailyVisitingReport = () => {
         type="button"
         disabled={savingId === 'all'}
         onClick={handleSaveAll}
-        className="fixed bottom-5 right-5 z-20 inline-flex items-center gap-2 px-5 py-3 bg-emerald-700 text-white rounded-full text-sm font-bold shadow-lg hover:bg-emerald-800 transition disabled:opacity-50"
+        className="lg:hidden fixed bottom-5 right-5 z-20 inline-flex items-center gap-2 px-5 py-3 bg-emerald-700 text-white rounded-full text-sm font-bold shadow-lg hover:bg-emerald-800 transition disabled:opacity-50"
       >
         {savingId === 'all' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
         Save

@@ -47,12 +47,14 @@ const buildEmptyPlan = (weekStartDate = getWeekStart()) => ({
 
 const isNewRow = (id) => typeof id === "string" && id.startsWith("v_");
 
-const computeVisitStatus = (day) => {
-  if (!day) return { label: "Planned", cls: "bg-blue-50 text-blue-700 ring-blue-200" };
-  const today = new Date(todayLocalISO());
-  const d = new Date(day);
-  if (d < today) return { label: "Completed", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" };
-  return { label: "Planned", cls: "bg-blue-50 text-blue-700 ring-blue-200" };
+// Status/outcome reflects the real Daily Report entry linked to this visit
+// (synced from the backend via sourceVisitId) — a visit only becomes
+// Completed/Skipped once the KAM actually logs it in the Daily Visiting
+// Report; until then it stays Planned regardless of the date.
+const VISIT_STATUS_STYLES = {
+  Completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  Skipped: "bg-red-50 text-red-600 ring-red-200",
+  Planned: "bg-blue-50 text-blue-700 ring-blue-200",
 };
 
 const TypeBadge = ({ type }) =>
@@ -66,11 +68,11 @@ const TypeBadge = ({ type }) =>
     </span>
   );
 
-const StatusBadge = ({ day }) => {
-  const s = computeVisitStatus(day);
+const StatusBadge = ({ v }) => {
+  const label = v.completed === true ? "Completed" : v.completed === false ? "Skipped" : "Planned";
   return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset ${s.cls}`}>
-      {s.label}
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset ${VISIT_STATUS_STYLES[label]}`}>
+      {label}
     </span>
   );
 };
@@ -154,7 +156,12 @@ const VisitCard = ({ type, v, idx, onChange, onRemove, locked, onUnlock, searcha
       onChange={(e) => onChange({ ...v, purpose: e.target.value })}
     />
 
-    <StatusBadge day={v.day} />
+    <StatusBadge v={v} />
+    {v.completed === false ? (
+      <p className="text-[11px] text-red-600 break-words">{v.reasonIfNotCompleted || "—"}</p>
+    ) : (
+      v.outcomeNotes && <p className="text-[11px] text-slate-500 break-words">{v.outcomeNotes}</p>
+    )}
   </div>
 );
 
@@ -193,6 +200,7 @@ const VisitTable = ({
                 <th className="py-2.5 px-3">Customer Name</th>
                 <th className="py-2.5 px-3">Visit Purpose</th>
                 <th className="py-2.5 px-3 w-32">Status</th>
+                <th className="py-2.5 px-3">Outcome / Notes</th>
                 <th className="py-2.5 px-3 w-24 text-right">Action</th>
               </tr>
             </thead>
@@ -247,7 +255,14 @@ const VisitTable = ({
                       />
                     </td>
                     <td className="py-2.5 px-3">
-                      <StatusBadge day={v.day} />
+                      <StatusBadge v={v} />
+                    </td>
+                    <td className="py-2.5 px-3 text-xs text-slate-500 max-w-[220px]">
+                      {v.completed === false ? (
+                        <span className="text-red-600">{v.reasonIfNotCompleted || "—"}</span>
+                      ) : (
+                        v.outcomeNotes || "—"
+                      )}
                     </td>
                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
                       {locked && (
@@ -616,16 +631,7 @@ const exportExcel = () => {
                 <RotateCcw size={13} className="mr-1.5" /> Current Week
               </button>
             )}
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={handleSave}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-800 transition disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Save Plan
-            </button>
-          </div>
+             </div>
         </div>
 
         {/* KPI Cards */}
@@ -649,6 +655,17 @@ const exportExcel = () => {
         {/* Main grid: content + sidebar */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-8 space-y-5 min-w-0">
+            <div className="hidden lg:flex justify-end">
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={handleSave}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-800 transition disabled:opacity-50"
+              >
+                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Save Plan
+              </button>
+            </div>
             <VisitTable
               type="existing"
               title="Existing Client Visits"
@@ -873,6 +890,17 @@ const exportExcel = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating Save Button (mobile-friendly quick access) */}
+      <button
+        type="button"
+        disabled={isSaving}
+        onClick={handleSave}
+        className="lg:hidden fixed bottom-5 right-5 z-20 inline-flex items-center gap-2 px-5 py-3 bg-emerald-700 text-white rounded-full text-sm font-bold shadow-lg hover:bg-emerald-800 transition disabled:opacity-50"
+      >
+        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+        Save
+      </button>
     </div>
   );
 };
