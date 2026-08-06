@@ -48,6 +48,23 @@ const StatusPill = ({ status }) => {
   );
 };
 
+// completed === true -> Completed, false -> Skipped, null/undefined (no
+// Daily Report entry logged yet for this visit) -> Planned.
+const VisitStatusBadge = ({ completed }) => {
+  const label = completed === true ? "Completed" : completed === false ? "Skipped" : "Planned";
+  const cls =
+    label === "Completed"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : label === "Skipped"
+      ? "bg-red-50 text-red-600 ring-red-200"
+      : "bg-blue-50 text-blue-700 ring-blue-200";
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${cls}`}>
+      {label}
+    </span>
+  );
+};
+
 const TeamReportsPage = () => {
   const { showToast } = useToast();
   const [kams, setKams] = useState([]);
@@ -391,12 +408,13 @@ const TeamReportsPage = () => {
                             </p>
                           )}
                           <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[480px]">
+                            <table className="w-full text-left border-collapse min-w-[560px]">
                               <thead>
                                 <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
                                   <th className="py-2 pr-3">Day</th>
                                   <th className="py-2 pr-3">Customer Name</th>
                                   <th className="py-2 pr-3">Purpose</th>
+                                  <th className="py-2 pr-3">Status</th>
                                   <th className="py-2">Outcome / Notes</th>
                                 </tr>
                               </thead>
@@ -406,7 +424,16 @@ const TeamReportsPage = () => {
                                     <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
                                     <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
                                     <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
-                                    <td className="py-2.5 text-slate-500">{v.outcomeNotes || "—"}</td>
+                                    <td className="py-2.5 pr-3">
+                                      <VisitStatusBadge completed={v.completed} />
+                                    </td>
+                                    <td className="py-2.5 text-slate-500">
+                                      {v.completed === false ? (
+                                        <span className="text-red-600">{v.reasonIfNotCompleted || "—"}</span>
+                                      ) : (
+                                        v.outcomeNotes || "—"
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

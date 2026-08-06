@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
-import { Printer } from 'lucide-react';
 import { escapeHtml } from '../../../../Components/utils/sanitize';
 
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -120,44 +119,32 @@ const PSectionTitle = ({ children }) => (
 );
 
 const PrintTemplate = ({ data, onClose }) => {
-  useEffect(() => {
+ useEffect(() => {
     if (!data) return undefined;
-    // Skip the extra manual "Print Document" click — open the browser's
-    // print dialog automatically once this preview has painted.
+    // No on-screen preview at all — this component stays invisible (see
+    // the `hidden print:block` wrapper below) and only exists to trigger
+    // the browser's native print dialog, then removes itself once that
+    // dialog closes (whether the person printed or cancelled it).
     const timer = setTimeout(() => window.print(), 60);
-    return () => clearTimeout(timer);
-  }, [data]);
+    const handleAfterPrint = () => onClose?.();
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
+  }, [data, onClose]);
 
   if (!data) return null;
   const c = data.customer;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-800 overflow-y-auto p-8 flex flex-col items-center print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:block print:overflow-visible">
+    <div className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
       <style>{`
         @media print {
           @page { size: A4; margin: 10mm; }
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
-      <div className="print:hidden w-full max-w-4xl bg-slate-900 rounded-lg p-4 flex justify-between items-center mb-6 shadow-xl">
-        <p className="text-white font-bold text-sm">Document Print Preview</p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="bg-slate-700 text-white px-5 py-2 rounded text-xs font-bold hover:bg-slate-600 transition"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="bg-emerald-600 text-white px-5 py-2 rounded text-xs font-bold shadow-md hover:bg-emerald-700 transition flex items-center"
-          >
-            <Printer size={14} className="mr-2" /> Print Document
-          </button>
-        </div>
-      </div>
 
      <div className="bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:p-5 print:w-full print:max-w-none print:min-h-0">
         {data.type !== 'profile' && (

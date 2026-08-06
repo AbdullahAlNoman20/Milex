@@ -1,4 +1,4 @@
-// src/modules/weekly-plans/weeklyPlans.service.ts
+// server/src/modules/weekly-plans/weeklyPlans.service.ts — REPLACE ENTIRE FILE
 import { prisma } from '../../config/db';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { emitNotificationToUser } from '../../config/socket';
@@ -14,19 +14,56 @@ const notifyLineManagerOfPlanChange = async (kamId: string) => {
   }
 };
 
-export const listPlansForKam = async (kamId: string) =>
-  prisma.weeklyPlan.findMany({
+// Weekly Plan visits carry no completion/outcome data of their own — that
+// only exists once a KAM logs the corresponding Daily Visiting Report entry
+// (linked back via ReportVisit.sourceVisitId). This merges that real
+// completed/outcomeNotes/reasonIfNotCompleted data onto each visit so both
+// the KAM's own Weekly Plan view and the Line Manager's Team Reports view
+// (which reuses listPlansForKam via the /kam/:kamId route) show actual
+// visit outcomes instead of always appearing blank/Planned.
+const attachVisitOutcomes = async <T extends { existingVisits: any[]; prospectVisits: any[] }>(
+  plans: T[]
+): Promise<T[]> => {
+  const visitIds = plans.flatMap((p) => [...p.existingVisits, ...p.prospectVisits].map((v) => v.id));
+  if (visitIds.length === 0) return plans;
+
+  const reportVisits = await prisma.reportVisit.findMany({ where: { sourceVisitId: { in: visitIds } } });
+  const bySourceId = new Map(reportVisits.map((rv) => [rv.sourceVisitId as string, rv]));
+
+  const mapVisit = (v: any) => {
+    const rv = bySourceId.get(v.id);
+    return {
+      ...v,
+      completed: rv ? rv.completed : null,
+      outcomeNotes: rv?.outcomeNotes || null,
+      reasonIfNotCompleted: rv?.reasonIfNotCompleted || null,
+    };
+  };
+
+  return plans.map((p) => ({
+    ...p,
+    existingVisits: p.existingVisits.map(mapVisit),
+    prospectVisits: p.prospectVisits.map(mapVisit),
+  }));
+};
+
+export const listPlansForKam = async (kamId: string) => {
+  const plans = await prisma.weeklyPlan.findMany({
     where: { kamId },
     include: { existingVisits: true, prospectVisits: true },
     orderBy: { weekStartDate: 'desc' },
   });
+  return attachVisitOutcomes(plans);
+};
 
-export const listPlansForReview = async () =>
-  prisma.weeklyPlan.findMany({
+export const listPlansForReview = async () => {
+  const plans = await prisma.weeklyPlan.findMany({
     where: { status: 'SUBMITTED' },
     include: { existingVisits: true, prospectVisits: true },
     orderBy: { createdAt: 'asc' },
   });
+  return attachVisitOutcomes(plans);
+};
 
 export const upsertDraft = async (kamId: string, data: any) => {
   const existing = await prisma.weeklyPlan.findUnique({
@@ -57,7 +94,8 @@ export const upsertDraft = async (kamId: string, data: any) => {
   }
 
   await notifyLineManagerOfPlanChange(kamId);
-  return saved;
+  const [withOutcomes] = await attachVisitOutcomes([saved]);
+  return withOutcomes;
 };
 
 export const submitPlan = async (kamId: string, weekStartDate: string) => {
@@ -72,7 +110,8 @@ export const submitPlan = async (kamId: string, weekStartDate: string) => {
     include: { existingVisits: true, prospectVisits: true },
   });
   await notifyLineManagerOfPlanChange(kamId);
-  return updated;
+  const [withOutcomes] = await attachVisitOutcomes([updated]);
+  return withOutcomes;
 };
 
 // Once a weekly plan has been saved, it can no longer be deleted — only
@@ -86,6 +125,7 @@ export const deletePlan = async (id: string, kamId: string) => {
   }
   throw { statusCode: 403, code: 'DELETE_NOT_ALLOWED', message: 'Weekly plans cannot be deleted once saved — edit it instead' };
 };
+
 export const reviewPlan = async (planId: string, approved: boolean, comments: string | undefined, lmId: string) => {
   const before = await prisma.weeklyPlan.findUniqueOrThrow({ where: { id: planId } });
   const updated = await prisma.weeklyPlan.update({
@@ -104,5 +144,6 @@ export const reviewPlan = async (planId: string, approved: boolean, comments: st
     beforeState: { status: before.status },
     afterState: { status: updated.status },
   });
-  return updated;
+  const [withOutcomes] = await attachVisitOutcomes([updated]);
+  return withOutcomes;
 };
