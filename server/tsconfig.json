@@ -1,12 +1,12 @@
 // FILE: server/tsconfig.json
-// Full replace — esModuleInterop fix, still the current standard fix for this TS7 error class in 2026
+//  esModuleInterop fix, still the current standard fix for this TS7 error class in 2026
 
 {
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node",
-     
+
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",

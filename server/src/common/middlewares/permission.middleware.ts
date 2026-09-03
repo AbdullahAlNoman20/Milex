@@ -10,11 +10,11 @@ export const requirePermission = (...permissions: string[]) => (
   next: NextFunction
 ) => {
   if (!req.user) {
-    return sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required');
+    return sendError(res, 401, 'UNAUTHENTICATED', 'Please log in to continue.');
   }
   const hasAny = permissions.some((p) => req.user!.permissions.includes(p));
   if (!hasAny) {
-    return sendError(res, 403, 'FORBIDDEN', 'You do not have permission to perform this action');
+    return sendError(res, 403, 'FORBIDDEN', "You don't have permission to do this. If you think this is a mistake, contact your administrator.");
   }
   next();
 };
@@ -25,10 +25,10 @@ export const requireOwnershipOrPermission = (
   getOwnerId: (req: Request) => string | undefined,
   overridePermission: string
 ) => (req: Request, res: Response, next: NextFunction) => {
-  if (!req.user) return sendError(res, 401, 'UNAUTHENTICATED', 'Authentication required');
+  if (!req.user) return sendError(res, 401, 'UNAUTHENTICATED', 'Please log in to continue.');
   const ownerId = getOwnerId(req);
   if (ownerId === req.user.id || req.user.permissions.includes(overridePermission)) {
     return next();
   }
-  return sendError(res, 403, 'FORBIDDEN', 'You do not have access to this resource');
+  return sendError(res, 403, 'FORBIDDEN', "You don't have access to this. If you think this is a mistake, contact your administrator.");
 };

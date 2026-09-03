@@ -7,6 +7,7 @@ import {
   generateOpaqueToken,
   isPasswordPolicyCompliant,
   isPasswordReused,
+  PASSWORD_POLICY_MESSAGE,
 } from '../../common/utils/hash.util';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../common/utils/jwt.util';
 import { generateMfaSecret, buildQrCodeDataUrl, verifyMfaToken } from '../../common/utils/mfa.util';
@@ -44,12 +45,17 @@ export const login = async (
 
   if (!user || !user.isActive) {
     await logAttempt(false);
-    throw { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' };
+    throw { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'The email or password you entered is incorrect. Please try again.' };
   }
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {
+    const minutesLeft = Math.max(1, Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000));
     await logAttempt(false);
-    throw { statusCode: 423, code: 'ACCOUNT_LOCKED', message: 'Account temporarily locked due to failed attempts' };
+    throw {
+      statusCode: 423,
+      code: 'ACCOUNT_LOCKED',
+      message: `Too many failed login attempts. Your account is temporarily locked — please try again in about ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}.`,
+    };
   }
 
   const passwordOk = await verifyPassword(password, user.passwordHash);
@@ -64,20 +70,20 @@ export const login = async (
       },
     });
     await logAttempt(false);
-    throw { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' };
+    throw { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'The email or password you entered is incorrect. Please try again.' };
   }
 
   if (MFA_MANDATORY_ROLES.includes(user.role.name) || user.mfaEnabled) {
     if (!user.mfaSecret) {
-      throw { statusCode: 428, code: 'MFA_SETUP_REQUIRED', message: 'MFA setup is required before login' };
+      throw { statusCode: 428, code: 'MFA_SETUP_REQUIRED', message: 'You need to set up two-factor authentication before logging in. Please contact your administrator.' };
     }
     if (!mfaToken) {
-      throw { statusCode: 401, code: 'MFA_TOKEN_REQUIRED', message: 'MFA token required' };
+      throw { statusCode: 401, code: 'MFA_TOKEN_REQUIRED', message: 'Please enter your two-factor authentication code to continue.' };
     }
     const mfaOk = verifyMfaToken(user.mfaSecret, mfaToken);
     if (!mfaOk) {
       await logAttempt(false);
-      throw { statusCode: 401, code: 'INVALID_MFA_TOKEN', message: 'Invalid MFA token' };
+      throw { statusCode: 401, code: 'INVALID_MFA_TOKEN', message: 'That code doesn\'t look right. Please check your authenticator app and try again.' };
     }
   }
 
@@ -86,8 +92,7 @@ export const login = async (
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
   });
 
-  const permissions = user.role.permissions.map((rp) => rp.permission.key);
-  const accessToken = signAccessToken({ sub: user.id, role: user.role.name, permissions });
+  const accessToken = signAccessToken({ sub: user.id, role: user.role.name });
   const refreshTokenRaw = signRefreshToken(user.id);
 
   await prisma.refreshToken.create({
@@ -115,7 +120,7 @@ export const refreshAccessToken = async (refreshTokenRaw: string) => {
   try {
     payload = verifyRefreshToken(refreshTokenRaw);
   } catch {
-    throw { statusCode: 401, code: 'INVALID_REFRESH_TOKEN', message: 'Invalid or expired refresh token' };
+    throw { statusCode: 401, code: 'INVALID_REFRESH_TOKEN', message: 'Your session has expired. Please log in again.' };
   }
 
   const tokenHash = hashOpaqueToken(refreshTokenRaw);
@@ -126,7 +131,7 @@ export const refreshAccessToken = async (refreshTokenRaw: string) => {
     where: { userId: payload.sub, tokenHash, revoked: false },
   });
   if (!record || record.expiresAt < new Date()) {
-    throw { statusCode: 401, code: 'INVALID_REFRESH_TOKEN', message: 'Refresh token not recognized' };
+    throw { statusCode: 401, code: 'INVALID_REFRESH_TOKEN', message: 'Your session has expired. Please log in again.' };
   }
 
   const user = await prisma.user.findUnique({
@@ -134,7 +139,7 @@ export const refreshAccessToken = async (refreshTokenRaw: string) => {
     include: { role: { include: { permissions: { include: { permission: true } } } } },
   });
   if (!user || !user.isActive) {
-    throw { statusCode: 401, code: 'UNAUTHENTICATED', message: 'User no longer active' };
+    throw { statusCode: 401, code: 'UNAUTHENTICATED', message: 'Your account is no longer active. Please contact your administrator.' };
   }
 
   // Rotate: invalidate old, issue new (session fixation mitigation).
@@ -148,8 +153,7 @@ export const refreshAccessToken = async (refreshTokenRaw: string) => {
     },
   });
 
-  const permissions = user.role.permissions.map((rp) => rp.permission.key);
-  const accessToken = signAccessToken({ sub: user.id, role: user.role.name, permissions });
+  const accessToken = signAccessToken({ sub: user.id, role: user.role.name });
 
   return { accessToken, refreshToken: newRefreshTokenRaw };
 };
@@ -193,7 +197,7 @@ export const resetPassword = async (rawToken: string, newPassword: string) => {
     throw {
       statusCode: 400,
       code: 'WEAK_PASSWORD',
-      message: 'Password must be 8+ chars with upper, lower, number, and special character',
+      message: PASSWORD_POLICY_MESSAGE,
     };
   }
 
@@ -202,13 +206,13 @@ export const resetPassword = async (rawToken: string, newPassword: string) => {
     where: { tokenHash, used: false },
   });
   if (!record || record.expiresAt < new Date()) {
-    throw { statusCode: 400, code: 'INVALID_RESET_TOKEN', message: 'Reset token invalid or expired' };
+    throw { statusCode: 400, code: 'INVALID_RESET_TOKEN', message: 'This password reset link is invalid or has expired. Please request a new one.' };
   }
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
   const reused = await isPasswordReused(newPassword, user.passwordHistory);
   if (reused) {
-    throw { statusCode: 400, code: 'PASSWORD_REUSED', message: 'Cannot reuse a recent password' };
+    throw { statusCode: 400, code: 'PASSWORD_REUSED', message: 'You\'ve used this password recently. Please choose a different one.' };
   }
 
   const newHash = await hashPassword(newPassword);
@@ -236,10 +240,10 @@ export const setupMfa = async (userId: string) => {
 export const confirmMfa = async (userId: string, token: string) => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   if (!user.mfaSecret) {
-    throw { statusCode: 400, code: 'MFA_NOT_INITIALIZED', message: 'Call setup before confirm' };
+    throw { statusCode: 400, code: 'MFA_NOT_INITIALIZED', message: 'Please start two-factor setup again from your account settings.' };
   }
   const valid = verifyMfaToken(user.mfaSecret, token);
-  if (!valid) throw { statusCode: 400, code: 'INVALID_MFA_TOKEN', message: 'Invalid MFA token' };
+  if (!valid) throw { statusCode: 400, code: 'INVALID_MFA_TOKEN', message: 'That code doesn\'t look right. Please check your authenticator app and try again.' };
   await prisma.user.update({ where: { id: userId }, data: { mfaEnabled: true } });
 };
 
@@ -247,18 +251,18 @@ export const changeOwnPassword = async (userId: string, currentPassword: string,
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
   const currentOk = await verifyPassword(currentPassword, user.passwordHash);
   if (!currentOk) {
-    throw { statusCode: 401, code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' };
+    throw { statusCode: 401, code: 'INVALID_CURRENT_PASSWORD', message: 'Your current password is incorrect. Please try again.' };
   }
   if (!isPasswordPolicyCompliant(newPassword)) {
     throw {
       statusCode: 400,
       code: 'WEAK_PASSWORD',
-      message: 'Password must be 8+ chars with upper, lower, number, and special character',
+      message: PASSWORD_POLICY_MESSAGE,
     };
   }
   const reused = await isPasswordReused(newPassword, user.passwordHistory);
   if (reused) {
-    throw { statusCode: 400, code: 'PASSWORD_REUSED', message: 'Cannot reuse a recent password' };
+    throw { statusCode: 400, code: 'PASSWORD_REUSED', message: 'You\'ve used this password recently. Please choose a different one.' };
   }
   const newHash = await hashPassword(newPassword);
   const updatedHistory = [newHash, ...user.passwordHistory].slice(0, PASSWORD_HISTORY_SIZE);

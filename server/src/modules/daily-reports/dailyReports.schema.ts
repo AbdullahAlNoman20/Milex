@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const visitEntrySchema = z
   .object({
-    customerName: z.string().min(1).max(200),
+    customerName: z.string().min(1, 'Please enter the customer name.').max(200),
     customerId: z.string().max(100).optional().nullable(),
     purpose: z.string().max(300).optional().nullable(),
     completed: z.boolean().nullable(),
@@ -17,7 +17,7 @@ const visitEntrySchema = z
       v.completed !== false ||
       (v.reasonIfNotCompleted && v.reasonIfNotCompleted.trim().length > 0),
     {
-      message: "reasonIfNotCompleted is required when a visit is skipped",
+      message: "Please enter a reason for skipping this visit.",
       path: ["reasonIfNotCompleted"],
     },
   );

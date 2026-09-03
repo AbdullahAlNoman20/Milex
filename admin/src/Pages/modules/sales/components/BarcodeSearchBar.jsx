@@ -6,7 +6,7 @@ import { useSales } from "../hooks/useSales";
 import { searchCustomers } from "../services/customerService";
 
 const MAX_SEARCH_LENGTH = 40;
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 300;
 
 const BarcodeSearchBar = () => {
   const [query, setQuery] = useState("");

@@ -27,7 +27,8 @@ const ROLE_PERMISSION_MAP: Record<RoleName, string[]> = {
     PERMISSIONS.VIEW_CUSTOMER_PROFILE,
     PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS,
     PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT,
-    PERMISSIONS.REQUEST_TIME_EXTENSION,
+    // REQUEST_TIME_EXTENSION intentionally removed — only the KAM may
+    // request the 5-day provisional extension, not the Sales Coordinator.
     PERMISSIONS.SUBMIT_FINAL_ONBOARDING,
     PERMISSIONS.REQUEST_INFO_UPDATE,
   ],

@@ -154,12 +154,9 @@ const CustomerDetail = () => {
           return (
             <AgreementPanel customer={customer} onSent={refreshCustomer} />
           );
-        return (
-          <TimeExtensionRequestPanel
-            customer={customer}
-            onUpdated={refreshCustomer}
-          />
-        );
+        // Only the KAM can request the provisional-period extension — the
+        // Sales Coordinator just waits for documents to be uploaded.
+        return <Waiting>Waiting for KAM to complete document upload</Waiting>;
       }
       if (role === ROLES.KAM) {
         if (!customer.offerSent)

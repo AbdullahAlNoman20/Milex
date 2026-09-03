@@ -2,12 +2,14 @@
 import { prisma } from "../../config/db";
 import { CUSTOMER_STATUS } from "../../common/constants/status.constant";
 import { transitionCustomerStatus } from "../../common/utils/stateMachine.util";
-import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
+import { uploadFileToSupabase, deleteFileFromSupabase } from '../file-storage/fileStorage.service';
 import { runFileScan } from '../../jobs/file-scan.job';
 import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { logAudit } from "../../common/utils/auditLog.util";
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
 import { DOCUMENT_TYPE_LABELS } from "../customers/customers.service";
+import { assertKamOwnsCustomerIfKam } from "../../common/utils/scopeGuard.util";
+import { assertLineManagerOwnsCustomer } from "../../common/utils/scopeGuard.util";
 
 const DEFAULT_EXTENSION_DAYS = 5;
 
@@ -19,7 +21,9 @@ export const uploadOnboardingDocument = async (
   documentNumber: string | undefined,
   expiryDate: string | undefined,
   kamId: string,
+  actorRole: string,
 ) => {
+  await assertKamOwnsCustomerIfKam(customerId, kamId, actorRole);
   const customer = await prisma.customer.findUniqueOrThrow({
     where: { id: customerId },
   });
@@ -27,7 +31,7 @@ export const uploadOnboardingDocument = async (
     throw {
       statusCode: 409,
       code: "NOT_PROVISIONAL",
-      message: "Customer is not in provisional stage",
+      message: "Documents can only be uploaded for provisional accounts. This customer isn\'t in that stage right now.",
     };
   }
   // The offer-letter attachment (a supporting excel) is uploaded at the moment
@@ -37,7 +41,7 @@ export const uploadOnboardingDocument = async (
     throw {
       statusCode: 409,
       code: "OFFER_NOT_ACCEPTED",
-      message: "The offer must be accepted before documents can be uploaded",
+      message: "The customer needs to accept the offer before documents can be uploaded.",
     };
   }
 
@@ -57,6 +61,7 @@ export const uploadOnboardingDocument = async (
   const existing = await prisma.onboardingDocument.findFirst({
     where: { customerId, documentType: cleanType },
   });
+  const previousStorageKey = existing?.storageKey;
 
   const doc = existing
     ? await prisma.onboardingDocument.update({
@@ -87,6 +92,10 @@ export const uploadOnboardingDocument = async (
         },
       });
 
+  if (previousStorageKey && previousStorageKey !== storageKey) {
+    await deleteFileFromSupabase(previousStorageKey);
+  }
+
   await runFileScan(doc.id);
   await logAudit({
     entity: "OnboardingDocument",
@@ -104,6 +113,7 @@ export const requestTimeExtension = async (
   reason: string,
   kamId: string,
 ) => {
+  await assertKamOwnsCustomerIfKam(customerId, kamId, 'KAM');
   const clean = sanitizeAndEscape({ reason });
   const request = await prisma.timeExtensionRequest.create({
     data: {
@@ -134,6 +144,7 @@ export const decideTimeExtension = async (
   const request = await prisma.timeExtensionRequest.findUniqueOrThrow({
     where: { id: requestId },
   });
+  await assertLineManagerOwnsCustomer(request.customerId, lmId);
   const customer = await prisma.customer.findUniqueOrThrow({
     where: { id: request.customerId },
   });
@@ -185,7 +196,9 @@ const REQUIRED_FINAL_DOC_TYPES = [
 export const submitFinalOnboardingRequest = async (
   customerId: string,
   kamId: string,
+  actorRole: string,
 ) => {
+  await assertKamOwnsCustomerIfKam(customerId, kamId, actorRole);
   const customer = await prisma.customer.findUniqueOrThrow({
     where: { id: customerId },
     include: { documents: true },
@@ -227,6 +240,7 @@ export const decideFinalOnboarding = async (
   comments: string | undefined,
   lmId: string
 ) => {
+  await assertLineManagerOwnsCustomer(customerId, lmId);
   if (approve) {
     const updated = await transitionCustomerStatus({
       customerId,

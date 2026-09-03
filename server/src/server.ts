@@ -3,6 +3,7 @@ import { buildApp, logger } from './app';
 import { env } from './config/env';
 import { disconnectDb } from './config/db';
 import { initSocket } from './config/socket';
+import { startScheduledJobs } from './jobs/scheduler';
 
 const app = buildApp();
 
@@ -11,6 +12,7 @@ const server = app.listen(env.PORT, () => {
 });
 
 initSocket(server);
+startScheduledJobs();
 
 const shutdown = async (signal: string) => {
   logger.info(`Received ${signal}, shutting down gracefully...`);

@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as usersService from './users.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 import { asString } from '../../common/utils/requestParams.util';
+import { assertLineManagerOwnsKam } from '../../common/utils/scopeGuard.util';
 
 export const listKamsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -93,6 +94,9 @@ export const getUserActivityHandler = async (req: Request, res: Response, next: 
   try {
     const targetId = asString(req.params.id);
     if (!targetId) return sendError(res, 400, 'MISSING_ID', 'User id is required');
+    if (req.user!.role === 'LINE_MANAGER' && targetId !== req.user!.id) {
+      await assertLineManagerOwnsKam(targetId, req.user!.id);
+    }
     const items = await usersService.getUserActivity(targetId);
     return sendSuccess(res, { items });
   } catch (err: any) {

@@ -1,28 +1,6 @@
 // FILE: admin/src/Pages/modules/sales/roles/KAM/WeeklySalesPlan.jsx
-import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  Plus,
-  Trash2,
-  Save,
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  CalendarRange,
-  RotateCcw,
-  Loader2,
-  Users,
-  UserPlus,
-  ListChecks,
-  Clock,
-  Search,
-  Filter,
-  Folder,
-   Copy,
-  FileSpreadsheet,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import * as XLSX from "xlsx";
+import { useState, useEffect, useCallback } from "react";
+import { Plus, Trash2, Save, Pencil, ChevronDown, Loader2, X } from "lucide-react";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import { todayLocalISO } from "../../../../../Components/utils/date";
 import {
@@ -32,9 +10,7 @@ import {
   formatDateRange,
   buildEmptyVisit,
 } from "../../constants/weeklyPlanStatus";
-import {
-  listPlansForKam, savePlan
-} from "../../services/weeklyPlanService";
+import { listPlansForKam, savePlan } from "../../services/weeklyPlanService";
 import { isRequired } from "../../../../../Components/utils/validators";
 import CustomerSearchSelect from "../../components/CustomerSearchSelect";
 
@@ -47,380 +23,209 @@ const buildEmptyPlan = (weekStartDate = getWeekStart()) => ({
 
 const isNewRow = (id) => typeof id === "string" && id.startsWith("v_");
 
-// Status/outcome reflects the real Daily Report entry linked to this visit
-// (synced from the backend via sourceVisitId) — a visit only becomes
-// Completed/Skipped once the KAM actually logs it in the Daily Visiting
-// Report; until then it stays Planned regardless of the date.
 const VISIT_STATUS_STYLES = {
   Completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   Skipped: "bg-red-50 text-red-600 ring-red-200",
-  Planned: "bg-blue-50 text-blue-700 ring-blue-200",
+  Planned: "bg-slate-100 text-slate-600 ring-slate-200",
 };
-
-const TypeBadge = ({ type }) =>
-  type === "existing" ? (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">
-      Existing Client
-    </span>
-  ) : (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">
-      Prospect
-    </span>
-  );
 
 const StatusBadge = ({ v }) => {
   const label = v.completed === true ? "Completed" : v.completed === false ? "Skipped" : "Planned";
   return (
-    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ring-inset ${VISIT_STATUS_STYLES[label]}`}>
+    <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${VISIT_STATUS_STYLES[label]}`}>
       {label}
     </span>
   );
 };
 
-const KpiCard = ({ icon: Icon, label, value, iconBg = "bg-emerald-50 text-emerald-600" }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center gap-3 min-w-0">
-    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
-      <Icon size={18} />
+const formatDay = (iso) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "2-digit" }) : "—";
+
+const AddVisitModal = ({ section, onClose, onSave }) => {
+  const [day, setDay] = useState(todayLocalISO());
+  const [customerName, setCustomerName] = useState("");
+  const [customerId, setCustomerId] = useState(null);
+  const [purpose, setPurpose] = useState("");
+  const { showToast } = useToast();
+  const searchable = section === VISIT_SECTIONS.EXISTING;
+
+  const handleSubmit = () => {
+    if (!isRequired(day) || !isRequired(customerName) || !isRequired(purpose)) {
+      showToast("Date, customer name and purpose are required", "warning");
+      return;
+    }
+    onSave({ ...buildEmptyVisit(day), customerName, customerId, purpose });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-[12px] p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-[#111827] text-sm">
+            Add {section === VISIT_SECTIONS.EXISTING ? "Existing Client" : "Prospect"} Visit
+          </h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-semibold text-[#111827] mb-1 block">Date</label>
+          <input
+            type="date"
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+            className="w-full border border-[#E5E7EB] p-2.5 rounded-[10px] text-xs outline-none focus:border-[#059669]"
+          />
+        </div>
+
+        <div>
+          <label className="text-[11px] font-semibold text-[#111827] mb-1 block">Customer Name</label>
+          {searchable ? (
+            <CustomerSearchSelect
+              value={customerName}
+              onSelect={({ customerName: n, customerId: id }) => {
+                setCustomerName(n);
+                setCustomerId(id);
+              }}
+            />
+          ) : (
+            <input
+              value={customerName}
+              maxLength={200}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Customer name"
+              className="w-full border border-[#E5E7EB] p-2.5 rounded-[10px] text-xs outline-none focus:border-[#059669]"
+            />
+          )}
+        </div>
+
+        <div>
+          <label className="text-[11px] font-semibold text-[#111827] mb-1 block">Visit Purpose</label>
+          <input
+            value={purpose}
+            maxLength={300}
+            onChange={(e) => setPurpose(e.target.value)}
+            placeholder="Purpose of visit"
+            className="w-full border border-[#E5E7EB] p-2.5 rounded-[10px] text-xs outline-none focus:border-[#059669]"
+          />
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-[10px] text-xs font-bold text-[#6B7280] hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            className="px-4 py-2.5 rounded-[10px] text-xs font-bold text-white bg-[#059669] hover:bg-[#0D8A68] transition"
+          >
+            Add Visit
+          </button>
+        </div>
+      </div>
     </div>
-    <div className="min-w-0">
-      <p className="text-[11px] font-semibold text-slate-500 truncate">{label}</p>
-      <p className="text-xl font-bold text-slate-800 leading-tight">{value}</p>
+  );
+};
+
+const PreviousPlansModal = ({ plans, onClose, onSelect }) => (
+  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-[12px] p-5 space-y-3 max-h-[80vh] flex flex-col">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-[#111827] text-sm">Previous Plans</h3>
+        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="overflow-y-auto divide-y divide-[#E5E7EB]">
+        {plans.length === 0 && <p className="text-xs text-[#6B7280] py-4">No previous plans found.</p>}
+        {plans.map((p) => {
+          const total = p.existingVisits.length + p.prospectVisits.length;
+          return (
+            <button
+              type="button"
+              key={p.id}
+              onClick={() => onSelect(p)}
+              className="w-full flex items-center justify-between py-3 text-left hover:bg-slate-50 transition px-1"
+            >
+              <span className="text-xs font-semibold text-[#111827]">
+                {formatDateRange(p.weekStartDate, getWeekEnd(p.weekStartDate))}
+              </span>
+              <span className="text-[10px] text-[#6B7280]">{total} visit(s)</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   </div>
 );
 
-const VisitCard = ({ type, v, idx, onChange, onRemove, locked, onUnlock, searchableCustomer }) => (
-  <div className={`p-4 space-y-3 ${idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"}`}>
-    <div className="flex items-center justify-between gap-2">
-      <TypeBadge type={type} />
+const VisitRowCard = ({ v, locked, onChange, onRemove, onUnlock, searchableCustomer }) => (
+  <div className="bg-white border border-[#E5E7EB] rounded-[12px] p-4 space-y-2">
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold text-[#6B7280]">{formatDay(v.day)}</p>
+        {locked ? (
+          <p className="text-sm font-semibold text-[#111827] break-words">{v.customerName}</p>
+        ) : searchableCustomer ? (
+          <CustomerSearchSelect
+            value={v.customerName}
+            onSelect={({ customerName, customerId }) => onChange({ ...v, customerName, customerId })}
+          />
+        ) : (
+          <input
+            className="w-full border border-[#E5E7EB] p-2 rounded-[10px] text-xs outline-none focus:border-[#059669] font-semibold"
+            value={v.customerName}
+            maxLength={200}
+            onChange={(e) => onChange({ ...v, customerName: e.target.value })}
+          />
+        )}
+      </div>
       <div className="flex items-center gap-2 shrink-0">
         {locked && (
-          <button
-            type="button"
-            onClick={() => onUnlock(v.id)}
-            className="text-slate-300 hover:text-emerald-600 transition"
-            aria-label="Edit this visit"
-          >
+          <button type="button" onClick={() => onUnlock(v.id)} className="text-slate-300 hover:text-[#059669] transition" aria-label="Edit">
             <Pencil size={14} />
           </button>
         )}
         {isNewRow(v.id) && (
-          <button
-            type="button"
-            onClick={() => onRemove(v.id)}
-            aria-label="Remove this visit"
-            className="text-slate-300 hover:text-red-500 transition"
-          >
+          <button type="button" onClick={() => onRemove(v.id)} className="text-slate-300 hover:text-red-500 transition" aria-label="Delete">
             <Trash2 size={14} />
           </button>
         )}
       </div>
     </div>
 
-    <input
-      type="date"
-      disabled={locked}
-      className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
-        locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-      }`}
-      value={v.day}
-      onChange={(e) => onChange({ ...v, day: e.target.value })}
-    />
-
-    {searchableCustomer && !locked ? (
-      <CustomerSearchSelect
-        value={v.customerName}
-        onSelect={({ customerName, customerId }) => onChange({ ...v, customerName, customerId })}
-      />
+    {locked ? (
+      <p className="text-xs text-[#6B7280] break-words">{v.purpose}</p>
     ) : (
       <input
-        disabled={locked}
-        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-700 ${
-          locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-        }`}
-        placeholder="Customer name"
-        value={v.customerName}
-        maxLength={200}
-        onChange={(e) => onChange({ ...v, customerName: e.target.value })}
+        className="w-full border border-[#E5E7EB] p-2 rounded-[10px] text-xs outline-none focus:border-[#059669]"
+        placeholder="Purpose of visit"
+        value={v.purpose}
+        maxLength={300}
+        onChange={(e) => onChange({ ...v, purpose: e.target.value })}
       />
     )}
 
-    <input
-      disabled={locked}
-      className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
-        locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-      }`}
-      placeholder="Purpose of visit"
-      value={v.purpose}
-      maxLength={300}
-      onChange={(e) => onChange({ ...v, purpose: e.target.value })}
-    />
-
-    <StatusBadge v={v} />
-    {v.completed === false ? (
-      <p className="text-[11px] text-red-600 break-words">{v.reasonIfNotCompleted || "—"}</p>
-    ) : (
-      v.outcomeNotes && <p className="text-[11px] text-slate-500 break-words">{v.outcomeNotes}</p>
-    )}
+    {!isNewRow(v.id) && <StatusBadge v={v} />}
   </div>
 );
-
-const VisitTable = ({
-  type,
-  title,
-  visits,
-  onAdd,
-  onChange,
-  onRemove,
-  editingRowIds,
-  onUnlock,
-  searchableCustomer = false,
-}) => (
-  <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-    <div className="flex justify-between items-center px-4 sm:px-5 py-4 border-b border-slate-100">
-      <h3 className="font-bold text-slate-800 text-sm">{title}</h3>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="text-xs font-bold text-emerald-700 flex items-center hover:text-emerald-800 shrink-0"
-      >
-        <Plus size={14} className="mr-1" /> Add Visit
-      </button>
-    </div>
-    {visits.length === 0 ? (
-      <p className="text-xs text-slate-400 px-5 py-6">No visits planned yet.</p>
-    ) : (
-      <>
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-slate-50 z-10">
-              <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
-                <th className="py-2.5 px-4 w-36">Date</th>
-                <th className="py-2.5 px-3 w-40">Customer Type</th>
-                <th className="py-2.5 px-3">Customer Name</th>
-                <th className="py-2.5 px-3">Visit Purpose</th>
-                <th className="py-2.5 px-3 w-32">Status</th>
-                <th className="py-2.5 px-3">Outcome / Notes</th>
-                <th className="py-2.5 px-3 w-24 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {visits.map((v, idx) => {
-                const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
-                return (
-                  <tr key={v.id} className={`align-top ${idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"} hover:bg-emerald-50/30 transition-colors`}>
-                    <td className="py-2.5 px-4">
-                      <input
-                        type="date"
-                        disabled={locked}
-                        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
-                          locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-                        }`}
-                        value={v.day}
-                        onChange={(e) => onChange({ ...v, day: e.target.value })}
-                      />
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <TypeBadge type={type} />
-                    </td>
-                    <td className="py-2.5 px-3">
-                      {searchableCustomer && !locked ? (
-                        <CustomerSearchSelect
-                          value={v.customerName}
-                          onSelect={({ customerName, customerId }) => onChange({ ...v, customerName, customerId })}
-                        />
-                      ) : (
-                        <input
-                          disabled={locked}
-                          className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-700 ${
-                            locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-                          }`}
-                          placeholder="Customer name"
-                          value={v.customerName}
-                          maxLength={200}
-                          onChange={(e) => onChange({ ...v, customerName: e.target.value })}
-                        />
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <input
-                        disabled={locked}
-                        className={`w-full border p-2 rounded-lg text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 ${
-                          locked ? "bg-slate-50 text-slate-500 border-slate-100" : "bg-white border-slate-200"
-                        }`}
-                        placeholder="Purpose of visit"
-                        value={v.purpose}
-                        maxLength={300}
-                        onChange={(e) => onChange({ ...v, purpose: e.target.value })}
-                      />
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <StatusBadge v={v} />
-                    </td>
-                    <td className="py-2.5 px-3 text-xs text-slate-500 max-w-[220px]">
-                      {v.completed === false ? (
-                        <span className="text-red-600">{v.reasonIfNotCompleted || "—"}</span>
-                      ) : (
-                        v.outcomeNotes || "—"
-                      )}
-                    </td>
-                     <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                      {locked && (
-                        <button
-                          type="button"
-                          onClick={() => onUnlock(v.id)}
-                          className="text-slate-300 hover:text-emerald-600 transition mr-2"
-                          aria-label="Edit this visit"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                      )}
-                      {isNewRow(v.id) && (
-                        <button
-                          type="button"
-                          onClick={() => onRemove(v.id)}
-                          aria-label="Remove this visit"
-                          className="text-slate-300 hover:text-red-500 transition"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="lg:hidden divide-y divide-slate-100">
-          {visits.map((v, idx) => {
-            const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
-            return (
-              <VisitCard
-                key={v.id}
-                type={type}
-                v={v}
-                idx={idx}
-                locked={locked}
-                onChange={onChange}
-                onRemove={onRemove}
-                onUnlock={onUnlock}
-                searchableCustomer={searchableCustomer}
-              />
-            );
-          })}
-        </div>
-      </>
-    )}
-  </div>
-);
-
-const MiniCalendar = ({ rangeStart, rangeEnd, isCustom, onPickDay, onManualChange, onReset }) => {
-  const start = new Date(rangeStart);
-  const end = new Date(rangeEnd);
-  const monthDate = new Date(start.getFullYear(), start.getMonth(), 1);
-  const monthLabel = monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-
-  const cells = useMemo(() => {
-    const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-    const startOffset = (firstDay.getDay() + 6) % 7; // Monday-first
-    const gridStart = new Date(firstDay);
-    gridStart.setDate(firstDay.getDate() - startOffset);
-    return Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(gridStart);
-      d.setDate(gridStart.getDate() + i);
-      return d;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeStart]);
-
-  const toISO = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  };
-
-  const isInRange = (d) => d >= start && d <= end;
-  const isCurrentMonth = (d) => d.getMonth() === monthDate.getMonth();
-
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 flex flex-col h-full">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-slate-800 text-sm">Mini Calendar</h3>
-        <span className="text-[11px] font-semibold text-slate-400">{monthLabel}</span>
-      </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 mb-1">
-        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-          <div key={d}>{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1 mb-3">
-        {cells.map((d, i) => {
-          const iso = toISO(d);
-          return (
-            <button
-              type="button"
-              key={i}
-              onClick={() => onPickDay(iso)}
-              className={`aspect-square flex items-center justify-center text-[11px] rounded-full transition ${
-                !isCurrentMonth(d) ? "text-slate-300" : "text-slate-600"
-              } ${isInRange(d) ? "bg-emerald-600 text-white font-bold" : "hover:bg-emerald-50"}`}
-            >
-              {d.getDate()}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-auto space-y-2">
-        <div className="flex items-center gap-1.5">
-          <input
-            type="date"
-            value={rangeStart}
-            onChange={(e) => onManualChange({ start: e.target.value, end: rangeEnd })}
-            className="flex-1 min-w-0 border border-slate-200 rounded-lg text-[11px] px-1.5 py-1.5 outline-none focus:border-emerald-500"
-          />
-          <span className="text-[10px] text-slate-400 shrink-0">to</span>
-          <input
-            type="date"
-            value={rangeEnd}
-            onChange={(e) => onManualChange({ start: rangeStart, end: e.target.value })}
-            className="flex-1 min-w-0 border border-slate-200 rounded-lg text-[11px] px-1.5 py-1.5 outline-none focus:border-emerald-500"
-          />
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full truncate">
-            {formatDateRange(rangeStart, rangeEnd)}
-          </span>
-          {isCustom && (
-            <button
-              type="button"
-              onClick={onReset}
-              className="text-[10px] font-bold text-slate-400 hover:text-emerald-600 transition shrink-0"
-            >
-              Reset to Week
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const WeeklySalesPlan = () => {
   const { showToast } = useToast();
   const currentWeekStart = getWeekStart();
   const [plan, setPlan] = useState(buildEmptyPlan(currentWeekStart));
   const [allPlans, setAllPlans] = useState([]);
-  const [expandedHistoryId, setExpandedHistoryId] = useState(null);
   const [editingRowIds, setEditingRowIds] = useState(new Set());
-    const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [savedSearch, setSavedSearch] = useState("");
-  const [savedPage, setSavedPage] = useState(1);
-  const [filterRange, setFilterRange] = useState(null);
-  const [pendingStart, setPendingStart] = useState(null);
-  const SAVED_PAGE_SIZE = 4;
+  const [activeTab, setActiveTab] = useState(VISIT_SECTIONS.EXISTING);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showPreviousPlans, setShowPreviousPlans] = useState(false);
 
   const loadPlans = useCallback(async () => {
     setIsLoading(true);
@@ -430,8 +235,6 @@ const WeeklySalesPlan = () => {
       const existingForWeek = plans.find((p) => p.weekStartDate === currentWeekStart);
       setPlan(existingForWeek || buildEmptyPlan(currentWeekStart));
       setEditingRowIds(new Set());
-      setFilterRange(null);
-      setPendingStart(null);
     } catch (err) {
       showToast(err?.message || "Failed to load weekly plans", "error");
     } finally {
@@ -445,15 +248,9 @@ const WeeklySalesPlan = () => {
     loadPlans();
   }, [loadPlans]);
 
-  const addVisit = (section) => {
-    const today = todayLocalISO();
-    setPlan((prev) => ({
-      ...prev,
-      [section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits"]: [
-        ...(section === VISIT_SECTIONS.EXISTING ? prev.existingVisits : prev.prospectVisits),
-        buildEmptyVisit(today),
-      ],
-    }));
+  const addVisit = (section, visitData) => {
+    const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
+    setPlan((prev) => ({ ...prev, [key]: [...prev[key], visitData] }));
   };
 
   const updateVisit = (section, id, updated) => {
@@ -478,12 +275,27 @@ const WeeklySalesPlan = () => {
     return true;
   };
 
+const sanitizeVisit = (v) => ({
+    ...v,
+    customerName: v.customerName || "",
+    purpose: v.purpose || "",
+    day: v.day || "",
+    reasonIfNotCompleted: v.reasonIfNotCompleted || "",
+    outcomeNotes: v.outcomeNotes || "",
+    customerId: v.customerId ?? null,
+  });
+
   const handleSave = async () => {
     if (isSaving) return;
     if (!validate()) return;
     setIsSaving(true);
     try {
-      const saved = await savePlan(plan);
+      const sanitizedPlan = {
+        ...plan,
+        existingVisits: plan.existingVisits.map(sanitizeVisit),
+        prospectVisits: plan.prospectVisits.map(sanitizeVisit),
+      };
+      const saved = await savePlan(sanitizedPlan);
       setPlan(saved);
       setEditingRowIds(new Set());
       setAllPlans((prev) => {
@@ -501,9 +313,7 @@ const WeeklySalesPlan = () => {
   const loadWeekIntoForm = (p) => {
     setPlan(p);
     setEditingRowIds(new Set());
-    setExpandedHistoryId(null);
-    setFilterRange(null);
-    setPendingStart(null);
+    setShowPreviousPlans(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -512,69 +322,9 @@ const WeeklySalesPlan = () => {
     loadWeekIntoForm(existingForWeek || buildEmptyPlan(currentWeekStart));
   };
 
-  const duplicateLastWeek = () => {
-    const prior = allPlans
-      .filter((p) => p.weekStartDate < currentWeekStart)
-      .sort((a, b) => (a.weekStartDate < b.weekStartDate ? 1 : -1))[0];
-    if (!prior) {
-      showToast("No previous week found to duplicate", "warning");
-      return;
-    }
-    setPlan((prev) => ({
-      ...prev,
-      existingVisits: prior.existingVisits.map((v) => ({ ...v, id: `v_${crypto.randomUUID()}` })),
-      prospectVisits: prior.prospectVisits.map((v) => ({ ...v, id: `v_${crypto.randomUUID()}` })),
-    }));
-    setEditingRowIds(new Set());
-    showToast("Copied last week's visits into this week (unsaved)", "success");
-  };
-
-const exportExcel = () => {
-    const rows = [
-      ...plan.existingVisits.map((v) => ({
-        Date: v.day,
-        "Customer Type": "Existing Client",
-        "Customer Name": v.customerName,
-        "Visit Purpose": v.purpose,
-      })),
-      ...plan.prospectVisits.map((v) => ({
-        Date: v.day,
-        "Customer Type": "Prospect",
-        "Customer Name": v.customerName,
-        "Visit Purpose": v.purpose,
-      })),
-    ];
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Weekly Plan");
-    XLSX.writeFile(wb, `weekly-plan-${plan.weekStartDate}.xlsx`);
-  };
-
-  const handlePickDay = (iso) => {
-    if (!pendingStart) {
-      setPendingStart(iso);
-      setFilterRange({ start: iso, end: iso });
-      return;
-    }
-    const start = iso < pendingStart ? iso : pendingStart;
-    const end = iso < pendingStart ? pendingStart : iso;
-    setFilterRange({ start, end });
-    setPendingStart(null);
-  };
-
-  const handleManualRangeChange = (range) => {
-    setFilterRange(range);
-    setPendingStart(null);
-  };
-
-  const handleResetRange = () => {
-    setFilterRange(null);
-    setPendingStart(null);
-  };
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24 text-sm text-slate-400 gap-2">
+      <div className="flex items-center justify-center py-24 text-sm text-[#6B7280] gap-2 bg-[#F8F9FA] min-h-screen">
         <Loader2 size={16} className="animate-spin" /> Loading weekly plan...
       </div>
     );
@@ -583,324 +333,233 @@ const exportExcel = () => {
   const isEditingCurrentWeek = plan.weekStartDate === currentWeekStart;
   const totalExisting = plan.existingVisits.length;
   const totalProspect = plan.prospectVisits.length;
-  const totalVisitsCount = totalExisting + totalProspect;
-
-  const rangeStart = filterRange?.start || plan.weekStartDate;
-  const rangeEnd = filterRange?.end || getWeekEnd(plan.weekStartDate);
-  const isCustomRange = !!filterRange;
-  const inRange = (day) => !!day && day >= rangeStart && day <= rangeEnd;
-  const filteredExistingVisits = plan.existingVisits.filter((v) => inRange(v.day));
-  const filteredProspectVisits = plan.prospectVisits.filter((v) => inRange(v.day));
-
-  const filteredSavedPlans = allPlans.filter((p) => {
-    if (!savedSearch.trim()) return true;
-    return formatDateRange(p.weekStartDate, getWeekEnd(p.weekStartDate)).toLowerCase().includes(savedSearch.toLowerCase());
-  });
-  const savedTotalPages = Math.max(1, Math.ceil(filteredSavedPlans.length / SAVED_PAGE_SIZE));
-  const savedPageClamped = Math.min(savedPage, savedTotalPages);
-  const pagedSavedPlans = filteredSavedPlans.slice(
-    (savedPageClamped - 1) * SAVED_PAGE_SIZE,
-    savedPageClamped * SAVED_PAGE_SIZE
-  );
+  const totalVisits = totalExisting + totalProspect;
+  const activeVisits = activeTab === VISIT_SECTIONS.EXISTING ? plan.existingVisits : plan.prospectVisits;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-5 sm:py-6 space-y-5">
+    <div className="min-h-screen bg-[#F8F9FA] pb-28 md:pb-8">
+      <div className="max-w-[1100px] mx-auto px-4 md:px-6 py-5 md:py-8 space-y-4">
         {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Weekly Sales Planning</h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">Plan customer visits for the selected week.</p>
+            <h1 className="text-lg md:text-xl font-bold text-[#111827]">Weekly Sales Planning</h1>
+            <p className="text-xs text-[#6B7280] mt-0.5">Plan your customer visits for the week.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={goToCurrentWeek}
-              disabled={isEditingCurrentWeek}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 border border-slate-200 bg-white px-3 py-2.5 rounded-lg hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <CalendarRange size={14} /> {formatDateRange(plan.weekStartDate, getWeekEnd(plan.weekStartDate))}
-              <ChevronDown size={14} />
-            </button>
-            {!isEditingCurrentWeek && (
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={goToCurrentWeek}
-                className="text-xs font-bold text-slate-600 border border-slate-200 bg-white px-3 py-2.5 rounded-lg flex items-center hover:bg-slate-50 transition"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#111827] border border-[#E5E7EB] bg-white px-3 py-2 rounded-[10px]"
               >
-                <RotateCcw size={13} className="mr-1.5" /> Current Week
+                {formatDateRange(plan.weekStartDate, getWeekEnd(plan.weekStartDate))}
+                <ChevronDown size={14} className="text-[#6B7280]" />
               </button>
-            )}
-             </div>
-        </div>
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <KpiCard icon={Users} label="Existing Client Visits" value={totalExisting} />
-          <KpiCard icon={UserPlus} label="Prospect Visits" value={totalProspect} iconBg="bg-amber-50 text-amber-600" />
-          <KpiCard icon={ListChecks} label="Total Planned Visits" value={totalVisitsCount} />
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <Clock size={18} />
+              {isEditingCurrentWeek && (
+                <span className="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1.5 text-[10px] font-bold bg-[#059669] text-white">
+                  Current Week
+                </span>
+              )}
             </div>
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold text-slate-500 truncate">Current Week Status</p>
-              <span className="inline-flex mt-0.5 items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200">
-                {isEditingCurrentWeek ? "In Progress" : "Viewing"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Main grid: content + sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          <div className="lg:col-span-8 space-y-5 min-w-0">
-            <div className="hidden lg:flex justify-end">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPreviousPlans(true)}
+                className="text-xs font-semibold text-[#6B7280] hover:text-[#059669] transition underline underline-offset-2"
+              >
+                Previous Plans
+              </button>
               <button
                 type="button"
                 disabled={isSaving}
                 onClick={handleSave}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-800 transition disabled:opacity-50"
+                className="hidden md:inline-flex items-center gap-1.5 px-4 py-2 bg-[#059669] text-white rounded-[10px] text-xs font-bold hover:bg-[#0D8A68] transition disabled:opacity-50"
               >
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                Save Plan
+                Save Weekly Plan
               </button>
             </div>
-            <VisitTable
-              type="existing"
-              title="Existing Client Visits"
-              visits={filteredExistingVisits}
-              editingRowIds={editingRowIds}
-              onUnlock={unlockRow}
-              searchableCustomer
-              onAdd={() => addVisit(VISIT_SECTIONS.EXISTING)}
-              onChange={(updated) => updateVisit(VISIT_SECTIONS.EXISTING, updated.id, updated)}
-              onRemove={(id) => removeVisit(VISIT_SECTIONS.EXISTING, id)}
-            />
-            <VisitTable
-              type="prospect"
-              title="Prospect Client Visits"
-              visits={filteredProspectVisits}
-              editingRowIds={editingRowIds}
-              onUnlock={unlockRow}
-              onAdd={() => addVisit(VISIT_SECTIONS.PROSPECT)}
-              onChange={(updated) => updateVisit(VISIT_SECTIONS.PROSPECT, updated.id, updated)}
-              onRemove={(id) => removeVisit(VISIT_SECTIONS.PROSPECT, id)}
-            />
           </div>
+        </div>
 
-          <div className="lg:col-span-4 space-y-5 min-w-0">
-            {/* Week Summary */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4">
-              <h3 className="font-bold text-slate-800 text-sm mb-3">Week Summary</h3>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-lg font-bold text-slate-800">{totalExisting}</p>
-                  <p className="text-[10px] font-semibold text-slate-500">Existing Visits</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-slate-800">{totalProspect}</p>
-                  <p className="text-[10px] font-semibold text-slate-500">Prospect Visits</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-slate-800">{totalVisitsCount}</p>
-                  <p className="text-[10px] font-semibold text-slate-500">Total Visits</p>
-                </div>
-              </div>
-            </div>
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-[#E5E7EB]">
+          {[
+            { key: VISIT_SECTIONS.EXISTING, label: "Existing Clients" },
+            { key: VISIT_SECTIONS.PROSPECT, label: "Prospects" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-2.5 text-xs font-bold transition border-b-2 -mb-px ${
+                activeTab === t.key ? "border-[#059669] text-[#059669]" : "border-transparent text-[#6B7280] hover:text-[#111827]"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
-              <MiniCalendar
-                rangeStart={rangeStart}
-                rangeEnd={rangeEnd}
-                isCustom={isCustomRange}
-                onPickDay={handlePickDay}
-                onManualChange={handleManualRangeChange}
-                onReset={handleResetRange}
-              />
-
-              {/* Quick Actions */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 space-y-2 flex flex-col h-full">
-                <h3 className="font-bold text-slate-800 text-sm mb-1">Quick Actions</h3>
-                <button
-                  type="button"
-                  onClick={() => addVisit(VISIT_SECTIONS.EXISTING)}
-                  className="w-full inline-flex items-center gap-2 justify-center text-xs font-bold text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 hover:bg-slate-50 transition"
-                >
-                  <Plus size={14} /> Add Existing Client
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addVisit(VISIT_SECTIONS.PROSPECT)}
-                  className="w-full inline-flex items-center gap-2 justify-center text-xs font-bold text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 hover:bg-slate-50 transition"
-                >
-                  <Plus size={14} /> Add Prospect
-                </button>
-                <button
-                  type="button"
-                  onClick={duplicateLastWeek}
-                  className="w-full inline-flex items-center gap-2 justify-center text-xs font-bold text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 hover:bg-slate-50 transition"
-                >
-                  <Copy size={14} /> Duplicate Last Week
-                </button>
-                <button
-                  type="button"
-                  onClick={exportExcel}
-                  className="w-full inline-flex items-center gap-2 justify-center text-xs font-bold text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 hover:bg-slate-50 transition"
-                >
-                  <FileSpreadsheet size={14} /> Export Excel
-                </button>
-              </div>
-            </div>
-
-            {/* Saved Plans */}
-            {allPlans.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-                <div className="p-4 pb-2 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800 text-sm">Saved Plans</h3>
-                </div>
-                <div className="px-4 pb-3 flex items-center gap-2">
-                  <div className="relative flex-1 min-w-0">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      value={savedSearch}
-                      onChange={(e) => {
-                        setSavedSearch(e.target.value);
-                        setSavedPage(1);
-                      }}
-                      maxLength={100}
-                      placeholder="Search week..."
-                      className="w-full pl-7 pr-2 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-50 transition shrink-0"
-                  >
-                    <Filter size={12} /> Filter
-                  </button>
-                </div>
-                <div className="divide-y divide-slate-100">
-                  {pagedSavedPlans.map((p) => {
-                    const totalVisits = p.existingVisits.length + p.prospectVisits.length;
-                    const isActive = p.weekStartDate === plan.weekStartDate;
+        {/* Visit List */}
+        {activeVisits.length === 0 ? (
+          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-5 py-8 text-center text-xs text-[#6B7280]">
+            No visits planned yet.
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block bg-white border border-[#E5E7EB] rounded-[12px] overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-[10px] text-[#6B7280] font-bold uppercase tracking-wide border-b border-[#E5E7EB]">
+                    <th className="py-2.5 px-4 w-28">Date</th>
+                    <th className="py-2.5 px-3">Customer</th>
+                    <th className="py-2.5 px-3">Purpose</th>
+                    <th className="py-2.5 px-3 w-28">Status</th>
+                    <th className="py-2.5 px-3 w-20 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E5E7EB]">
+                  {activeVisits.map((v) => {
+                    const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
                     return (
-                      <div key={p.id} className={isActive ? "bg-emerald-50/40" : ""}>
-                        <div className="w-full flex justify-between items-center px-4 py-3 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setExpandedHistoryId(expandedHistoryId === p.id ? null : p.id)}
-                            className="flex-1 flex items-center justify-between text-left hover:opacity-75 transition min-w-0"
-                          >
-                            <span className="text-xs font-bold text-slate-700 truncate">
-                              {formatDateRange(p.weekStartDate, getWeekEnd(p.weekStartDate))}
-                              {isActive && <span className="ml-2 text-[9px] font-bold uppercase text-emerald-700">Editing</span>}
-                            </span>
-                            <span className="text-[10px] text-slate-400 shrink-0 ml-2">{totalVisits} visit(s)</span>
-                          </button>
-                          <div className="flex items-center gap-0.5 shrink-0">
+                      <tr key={v.id} className="align-top">
+                        <td className="py-2.5 px-4">
+                          {locked ? (
+                            <span className="text-xs text-[#111827] font-medium">{formatDay(v.day)}</span>
+                          ) : (
+                            <input
+                              type="date"
+                              className="w-full border border-[#E5E7EB] p-1.5 rounded-[8px] text-xs outline-none focus:border-[#059669]"
+                              value={v.day}
+                              onChange={(e) => updateVisit(activeTab, v.id, { ...v, day: e.target.value })}
+                            />
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {locked ? (
+                            <span className="text-xs font-semibold text-[#111827]">{v.customerName}</span>
+                          ) : activeTab === VISIT_SECTIONS.EXISTING ? (
+                            <CustomerSearchSelect
+                              value={v.customerName}
+                              onSelect={({ customerName, customerId }) =>
+                                updateVisit(activeTab, v.id, { ...v, customerName, customerId })
+                              }
+                            />
+                          ) : (
+                            <input
+                              className="w-full border border-[#E5E7EB] p-1.5 rounded-[8px] text-xs outline-none focus:border-[#059669] font-semibold"
+                              value={v.customerName}
+                              maxLength={200}
+                              onChange={(e) => updateVisit(activeTab, v.id, { ...v, customerName: e.target.value })}
+                            />
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {locked ? (
+                            <span className="text-xs text-[#6B7280]">{v.purpose}</span>
+                          ) : (
+                            <input
+                              className="w-full border border-[#E5E7EB] p-1.5 rounded-[8px] text-xs outline-none focus:border-[#059669]"
+                              value={v.purpose}
+                              maxLength={300}
+                              onChange={(e) => updateVisit(activeTab, v.id, { ...v, purpose: e.target.value })}
+                            />
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">{!isNewRow(v.id) && <StatusBadge v={v} />}</td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          {locked && (
                             <button
                               type="button"
-                              onClick={() => loadWeekIntoForm(p)}
-                              aria-label="Open this week's plan"
-                              className="w-7 h-7 rounded-full text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition inline-flex items-center justify-center"
-                            >
-                              <Folder size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => loadWeekIntoForm(p)}
-                              aria-label="Edit this week's plan"
-                              className="w-7 h-7 rounded-full text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition inline-flex items-center justify-center"
+                              onClick={() => unlockRow(v.id)}
+                              className="text-slate-300 hover:text-[#059669] transition mr-2"
+                              aria-label="Edit"
                             >
                               <Pencil size={13} />
                             </button>
+                          )}
+                          {isNewRow(v.id) && (
                             <button
                               type="button"
-                              onClick={() => setExpandedHistoryId(expandedHistoryId === p.id ? null : p.id)}
-                              aria-label="Toggle details"
-                              className="w-7 h-7 rounded-full text-slate-300 hover:text-slate-600 transition inline-flex items-center justify-center"
+                              onClick={() => removeVisit(activeTab, v.id)}
+                              className="text-slate-300 hover:text-red-500 transition"
+                              aria-label="Delete"
                             >
-                              {expandedHistoryId === p.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              <Trash2 size={13} />
                             </button>
-                          </div>
-                        </div>
-                        {expandedHistoryId === p.id && (
-                          <div className="px-4 pb-4 space-y-3">
-                            {totalVisits === 0 ? (
-                              <p className="text-xs text-slate-400">No visits in this plan.</p>
-                            ) : (
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse min-w-[320px] text-xs">
-                                  <thead>
-                                    <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
-                                      <th className="py-2 pr-3 w-28">Date</th>
-                                      <th className="py-2 pr-3">Customer Name</th>
-                                      <th className="py-2">Purpose</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                    {[...p.existingVisits, ...p.prospectVisits].map((v) => (
-                                      <tr key={v.id}>
-                                        <td className="py-2 pr-3 font-bold text-slate-700 w-28">
-                                          {new Date(v.day).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                                        </td>
-                                        <td className="py-2 pr-3 text-slate-700">{v.customerName}</td>
-                                        <td className="py-2 text-slate-500">{v.purpose}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </td>
+                      </tr>
                     );
                   })}
-                  {pagedSavedPlans.length === 0 && (
-                    <p className="text-xs text-slate-400 px-4 py-4">No matching weeks found.</p>
-                  )}
-                </div>
-                <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-                  <span className="text-[10px] text-slate-400">
-                    Page {savedPageClamped} of {savedTotalPages}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={savedPageClamped <= 1}
-                      onClick={() => setSavedPage((p) => Math.max(1, p - 1))}
-                      className="w-7 h-7 rounded-full border border-slate-200 text-slate-500 inline-flex items-center justify-center disabled:opacity-40 hover:bg-slate-50 transition"
-                    >
-                      <ChevronLeft size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={savedPageClamped >= savedTotalPages}
-                      onClick={() => setSavedPage((p) => Math.min(savedTotalPages, p + 1))}
-                      className="w-7 h-7 rounded-full border border-slate-200 text-slate-500 inline-flex items-center justify-center disabled:opacity-40 hover:bg-slate-50 transition"
-                    >
-                      <ChevronRight size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {activeVisits.map((v) => (
+                <VisitRowCard
+                  key={v.id}
+                  v={v}
+                  locked={!isNewRow(v.id) && !editingRowIds.has(v.id)}
+                  onChange={(updated) => updateVisit(activeTab, v.id, updated)}
+                  onRemove={(id) => removeVisit(activeTab, id)}
+                  onUnlock={unlockRow}
+                  searchableCustomer={activeTab === VISIT_SECTIONS.EXISTING}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-[#E5E7EB] text-[#059669] rounded-[12px] px-4 py-3 text-xs font-bold hover:bg-emerald-50/50 transition"
+        >
+          <Plus size={14} /> Add Visit
+        </button>
+
+        {/* Small Summary */}
+        <p className="text-xs text-[#6B7280] text-center">
+          {totalVisits} Visits · {totalExisting} Existing · {totalProspect} Prospects
+        </p>
       </div>
 
-      {/* Floating Save Button (mobile-friendly quick access) */}
-      <button
-        type="button"
-        disabled={isSaving}
-        onClick={handleSave}
-        className="lg:hidden fixed bottom-5 right-5 z-20 inline-flex items-center gap-2 px-5 py-3 bg-emerald-700 text-white rounded-full text-sm font-bold shadow-lg hover:bg-emerald-800 transition disabled:opacity-50"
-      >
-        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-        Save
-      </button>
+      {showAddModal && (
+        <AddVisitModal
+          section={activeTab}
+          onClose={() => setShowAddModal(false)}
+          onSave={(visitData) => {
+            addVisit(activeTab, visitData);
+            setShowAddModal(false);
+          }}
+        />
+      )}
+
+      {showPreviousPlans && (
+        <PreviousPlansModal
+          plans={allPlans}
+          onClose={() => setShowPreviousPlans(false)}
+          onSelect={loadWeekIntoForm}
+        />
+      )}
+
+      {/* Mobile Sticky Save */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-[#E5E7EB] p-3">
+        <button
+          type="button"
+          disabled={isSaving}
+          onClick={handleSave}
+          className="w-full inline-flex items-center justify-center gap-2 py-3 bg-[#059669] text-white rounded-[12px] text-sm font-bold hover:bg-[#0D8A68] transition disabled:opacity-50"
+        >
+          {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          SAVE WEEKLY PLAN
+        </button>
+      </div>
     </div>
   );
 };

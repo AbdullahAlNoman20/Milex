@@ -5,7 +5,7 @@ import { emitNotificationToUser } from '../../config/socket';
 
 // Pings the KAM's assigned Line Manager any time a weekly plan is created,
 // edited, or submitted — a failure here must never break the actual save.
-const notifyLineManagerOfPlanChange = async (kamId: string) => {
+export const notifyLineManagerOfPlanChange = async (kamId: string) => {
   try {
     const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
     if (kam?.lineManagerId) emitNotificationToUser(kam.lineManagerId);

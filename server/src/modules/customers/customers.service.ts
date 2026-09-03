@@ -4,15 +4,39 @@ import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
 import { transitionCustomerStatus, notifyCustomerWorkflowUsers } from '../../common/utils/stateMachine.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from './sanitize.helper';
-import { uploadFileToSupabase } from '../file-storage/fileStorage.service';
+import { uploadFileToSupabase, deleteFileFromSupabase } from '../file-storage/fileStorage.service';
 import { runFileScan } from '../../jobs/file-scan.job';
 import { humanizeStatus } from '../../common/utils/humanize.util';
 import { ensureServiceProvidersExist } from '../service-providers/serviceProviders.service';
 import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { emitNotificationToUser } from '../../config/socket';
+import { assertLineManagerOwnsCustomer, assertKamOwnsCustomerIfKam } from '../../common/utils/scopeGuard.util';
+import { assertValidCreditPeriodValue, isCreditPeriodField } from '../../common/utils/creditRules.util';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
 export const generateRateRef = () => `MLX${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+const MAX_ID_GENERATION_ATTEMPTS = 5;
+
+const generateUniqueBarcode = async (): Promise<string> => {
+  for (let i = 0; i < MAX_ID_GENERATION_ATTEMPTS; i += 1) {
+    const candidate = generateBarcode();
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await prisma.customer.findUnique({ where: { barcode: candidate }, select: { id: true } });
+    if (!exists) return candidate;
+  }
+  throw { statusCode: 500, code: 'ID_GENERATION_FAILED', message: 'Could not generate a unique barcode, please try again' };
+};
+
+const generateUniqueRateRef = async (): Promise<string> => {
+  for (let i = 0; i < MAX_ID_GENERATION_ATTEMPTS; i += 1) {
+    const candidate = generateRateRef();
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await prisma.customer.findFirst({ where: { rateRef: candidate }, select: { id: true } });
+    if (!exists) return candidate;
+  }
+  throw { statusCode: 500, code: 'ID_GENERATION_FAILED', message: 'Could not generate a unique rate reference, please try again' };
+};
 
 export const listCustomers = async (
   page: number,
@@ -48,7 +72,7 @@ export const listCustomers = async (
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { createdAt: 'desc' },
-      include: { contacts: true, handledBy: { select: { name: true } } },
+      include: { handledBy: { select: { name: true } } },
     }),
     prisma.customer.count({ where }),
   ]);
@@ -68,20 +92,23 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       handledBy: { select: { name: true, lineManagerId: true } },
     },
   });
-  if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
+  if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
 
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
   if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
   return customer;
 };
 
 export const createRecommendation = async (data: any, kamId: string) => {
-  const barcode = generateBarcode();
   const clean = sanitizeAndEscape(data);
+  if (clean.creditPeriodDays) {
+    assertValidCreditPeriodValue(clean.creditPeriodDays);
+  }
+  const barcode = await generateUniqueBarcode();
 
   const customer = await prisma.customer.create({
     data: {
@@ -131,9 +158,14 @@ export const createRecommendation = async (data: any, kamId: string) => {
 };
 
 export const approveRate = async (customerId: string, data: any, lmId: string) => {
+  await assertLineManagerOwnsCustomer(customerId, lmId);
+  if (data.creditPeriodDays !== undefined && data.creditPeriodDays !== null && data.creditPeriodDays !== '') {
+    assertValidCreditPeriodValue(data.creditPeriodDays);
+  }
   const existing = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const now = new Date();
   const expiry = new Date(now.getTime() + 21 * 86400000);
+  const rateRef = existing.rateRef || (await generateUniqueRateRef());
   return transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
@@ -147,7 +179,7 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
       provisionalCreatedAt: now,
       provisionalExpiryDate: expiry,
       provisionalExtensionDays: 0,
-      rateRef: existing.rateRef || generateRateRef(),
+      rateRef,
       offerSent: false,
       offerAccepted: false,
       agreementSent: false,
@@ -158,6 +190,7 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
 };
 
 export const rejectRate = async (customerId: string, lmId: string) => {
+  await assertLineManagerOwnsCustomer(customerId, lmId);
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   return transitionCustomerStatus({
     customerId,
@@ -349,6 +382,7 @@ export const requestInfoUpdate = async (customerId: string, field: string, newVa
 };
 
 export const decideInfoUpdate = async (customerId: string, approve: boolean, lmId: string) => {
+  await assertLineManagerOwnsCustomer(customerId, lmId);
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const extraUpdates: Record<string, unknown> = {
     pendingInfoUpdateField: null,
@@ -372,6 +406,7 @@ export const updateFollowUp = async (
   data: { followUpDate?: string | null; followUpNote?: string },
   actorId: string
 ) => {
+  await assertLineManagerOwnsCustomer(customerId, actorId);
   const before = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const updated = await prisma.customer.update({
     where: { id: customerId },
@@ -411,7 +446,8 @@ export const deriveFollowUps = async () => {
     .sort((a, b) => (b.isOverdue === a.isOverdue ? 0 : b.isOverdue ? 1 : -1));
 };
 
-export const updateFinalProfile = async (customerId: string, data: any, actorId: string) => {
+export const updateFinalProfile = async (customerId: string, data: any, actorId: string, actorRole: string) => {
+  await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const clean = sanitizeAndEscape(data);
   const updated = await prisma.customer.update({
     where: { id: customerId },
@@ -427,7 +463,8 @@ export const updateFinalProfile = async (customerId: string, data: any, actorId:
   return updated;
 };
 
-export const setAccountConfigMode = async (customerId: string, mode: 'REGULAR' | 'PROVISIONAL', actorId: string) => {
+export const setAccountConfigMode = async (customerId: string, mode: 'REGULAR' | 'PROVISIONAL', actorId: string, actorRole: string) => {
+  await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const updated = await prisma.customer.update({ where: { id: customerId }, data: { accountConfigMode: mode } });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'ACCOUNT_CONFIG_MODE_SET', actorId, afterState: { accountConfigMode: mode } });
   return updated;
@@ -437,17 +474,18 @@ export const setAccountConfigMode = async (customerId: string, mode: 'REGULAR' |
 // (same gate as Provisional), instead of activating the account immediately.
 const REQUIRED_FINAL_DOC_TYPES = ['TRADE_LICENSE', 'CUSTOMER_BIN', 'CUSTOMER_TIN', 'SIGNED_OFFER_LETTER', 'OFFER_RATE_RECEIPT'];
 
-export const submitFinalOnboardingRegular = async (customerId: string, actorId: string) => {
+export const submitFinalOnboardingRegular = async (customerId: string, actorId: string, actorRole: string) => {
+  await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: { documents: true } });
   const docsByType = new Map(customer.documents.map((d) => [d.documentType, d]));
   const missingDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => !docsByType.has(t));
   if (missingDocs.length > 0) {
     const humanNames = missingDocs.map((t) => DOCUMENT_TYPE_LABELS[t] || t);
-    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: `Missing required documents: ${humanNames.join(', ')}` };
+    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: `Please upload the following before submitting: ${humanNames.join(', ')}.` };
   }
   const notCleanDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => docsByType.get(t)?.scanStatus !== 'CLEAN');
   if (notCleanDocs.length > 0) {
-    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: 'All required documents must pass virus scanning first' };
+    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: 'One or more of your uploaded documents are still being checked. Please wait a moment and try again.' };
   }
 
   return transitionCustomerStatus({
@@ -550,8 +588,10 @@ export const requestFieldChange = async (
   newValue: string | undefined,
   reason: string | undefined,
   documentType: string | undefined,
-  requesterId: string
+  requesterId: string,
+  requesterRole: string
 ) => {
+  await assertKamOwnsCustomerIfKam(customerId, requesterId, requesterRole);
   const isDocRequest = !!documentType;
   let label: string | undefined;
   let oldValue: string | null = null;
@@ -561,12 +601,12 @@ export const requestFieldChange = async (
   } else {
     if (!fieldKey) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'fieldKey is required' };
     const resolved = await resolveFieldLabelAndOldValue(customerId, fieldKey);
-    if (!resolved) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be requested for edit' };
+    if (!resolved) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field can\'t be edited through a request. Please choose a different field.' };
     label = resolved.label;
     oldValue = resolved.oldValue;
   }
-  if (!label) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be requested for edit' };
-  if (!isDocRequest && !newValue?.trim()) throw { statusCode: 400, code: 'MISSING_VALUE', message: 'A new value is required' };
+  if (!label) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field can\'t be edited through a request. Please choose a different field.' };
+  if (!isDocRequest && !newValue?.trim()) throw { statusCode: 400, code: 'MISSING_VALUE', message: 'Please enter the new value before submitting.' };
 
   const clean = sanitizeAndEscape({ v: newValue || '', r: reason || '' });
   const request = await prisma.fieldChangeRequest.create({
@@ -600,10 +640,12 @@ export const requestDocumentChange = async (
   reason: string | undefined,
   fileBuffer: Buffer,
   originalName: string,
-  requesterId: string
+  requesterId: string,
+  requesterRole: string
 ) => {
+  await assertKamOwnsCustomerIfKam(customerId, requesterId, requesterRole);
   const label = DOCUMENT_TYPE_LABELS[documentType];
-  if (!label) throw { statusCode: 400, code: 'INVALID_DOCUMENT_TYPE', message: 'Unknown document category' };
+  if (!label) throw { statusCode: 400, code: 'INVALID_DOCUMENT_TYPE', message: 'This document category isn\'t recognized. Please refresh the page and try again.' };
 
   const { storageKey, mimeType, sizeBytes } = await uploadFileToSupabase(fileBuffer, originalName);
   const clean = sanitizeAndEscape({ r: reason || '', n: originalName });
@@ -628,11 +670,17 @@ export const requestDocumentChange = async (
   return request;
 };
 
-export const listFieldChangeRequests = async (customerId: string) =>
-  prisma.fieldChangeRequest.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' } });
+export const listFieldChangeRequests = async (customerId: string, requester: { id: string; role: string }) => {
+  await assertKamOwnsCustomerIfKam(customerId, requester.id, requester.role);
+  if (requester.role === 'LINE_MANAGER') {
+    await assertLineManagerOwnsCustomer(customerId, requester.id);
+  }
+  return prisma.fieldChangeRequest.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' } });
+};
 
 export const decideFieldChangeRequest = async (requestId: string, approve: boolean, lmId: string) => {
   const request = await prisma.fieldChangeRequest.findUniqueOrThrow({ where: { id: requestId } });
+  await assertLineManagerOwnsCustomer(request.customerId, lmId);
   await prisma.fieldChangeRequest.update({
     where: { id: requestId },
     data: { approved: approve, decidedById: lmId, decidedAt: new Date() },
@@ -642,6 +690,7 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
     const existing = await prisma.onboardingDocument.findFirst({
       where: { customerId: request.customerId, documentType: request.documentType },
     });
+    const previousStorageKey = existing?.storageKey;
     const doc = existing
       ? await prisma.onboardingDocument.update({
           where: { id: existing.id },
@@ -666,6 +715,9 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
             scanStatus: 'PENDING',
           },
         });
+    if (previousStorageKey && previousStorageKey !== request.pendingFileStorageKey) {
+      await deleteFileFromSupabase(previousStorageKey);
+    }
     await runFileScan(doc.id);
     await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'DOCUMENT_REUPLOAD_APPROVED', actorId: lmId, afterState: { documentType: request.documentType } });
   } else if (approve && request.documentType) {
@@ -685,7 +737,7 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
         rateRef: target.rateRef || '',
         changedAt: new Date().toISOString(),
       };
-      const newRateRef = generateRateRef();
+      const newRateRef = await generateUniqueRateRef();
       await prisma.customer.update({
         where: { id: request.customerId },
         data: {
@@ -696,6 +748,9 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
         },
       });
     } else {
+      if (isCreditPeriodField(request.fieldKey)) {
+        assertValidCreditPeriodValue(request.newValue || '');
+      }
       await prisma.customer.update({ where: { id: request.customerId }, data: { [request.fieldKey]: request.newValue } });
     }
     await logAudit({
@@ -753,6 +808,7 @@ export const directFieldEdit = async (
   actorId: string,
   actorRole: string
 ) => {
+  await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
 
   const isKamOrSc = actorRole === 'KAM' || actorRole === 'SALES_COORDINATOR';
@@ -761,16 +817,20 @@ export const directFieldEdit = async (
       throw {
         statusCode: 403,
         code: 'REQUEST_REQUIRED',
-        message: 'Once the account is active, changes must go through an edit request',
+        message: 'This account is already active. To change anything now, please submit an edit request for your Line Manager to review.',
       };
     }
-    if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
+  if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
       throw {
         statusCode: 403,
         code: 'FIELD_NOT_DIRECTLY_EDITABLE',
-        message: 'This field can only be changed through an edit request',
+        message: 'This field can only be changed by submitting an edit request for your Line Manager to review.',
       };
     }
+  }
+
+  if (isCreditPeriodField(fieldKey)) {
+    assertValidCreditPeriodValue(newValue);
   }
 
   const contactRef = parseContactKey(fieldKey);
@@ -797,7 +857,27 @@ if (contactRef) {
   if (!EDITABLE_FIELDS[fieldKey]) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be edited' };
   const oldValue = (customer as any)[fieldKey]?.toString() ?? null;
   const label = EDITABLE_FIELDS[fieldKey].label;
-  const updated = await prisma.customer.update({ where: { id: customerId }, data: { [fieldKey]: clean.v } });
+
+  let updated;
+  if (fieldKey === 'approvedRate') {
+    const previousEntry = {
+      rate: customer.approvedRate || customer.proposedRate || '',
+      rateRef: customer.rateRef || '',
+      changedAt: new Date().toISOString(),
+    };
+    updated = await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        approvedRate: clean.v,
+        rateRef: generateRateRef(),
+        revision: { increment: 1 },
+        rateHistory: { push: previousEntry },
+      },
+    });
+  } else {
+    updated = await prisma.customer.update({ where: { id: customerId }, data: { [fieldKey]: clean.v } });
+  }
+
   await logAudit({
     entity: 'Customer',
     entityId: customerId,
@@ -830,6 +910,7 @@ export const uploadRecommendationAttachment = async (
   const { storageKey, mimeType, sizeBytes } = await uploadFileToSupabase(buffer, originalName);
   const cleanName = sanitizeAndEscape({ n: originalName }).n;
   const existing = await prisma.onboardingDocument.findFirst({ where: { customerId, documentType: 'RECOMMENDATION_ATTACHMENT' } });
+  const previousStorageKey = existing?.storageKey;
   const doc = existing
     ? await prisma.onboardingDocument.update({
         where: { id: existing.id },
@@ -847,6 +928,9 @@ export const uploadRecommendationAttachment = async (
           scanStatus: 'PENDING',
         },
       });
+  if (previousStorageKey && previousStorageKey !== storageKey) {
+    await deleteFileFromSupabase(previousStorageKey);
+  }
   await runFileScan(doc.id);
   await logAudit({ entity: 'OnboardingDocument', entityId: doc.id, action: 'RECOMMENDATION_ATTACHMENT_UPLOADED', actorId: requesterId });
   return doc;
@@ -881,7 +965,7 @@ export const reassignCustomer = async (customerId: string, newKamId: string, act
     prisma.user.findUniqueOrThrow({ where: { id: newKamId }, include: { role: true } }),
   ]);
   if (newKam.role.name !== 'KAM') {
-    throw { statusCode: 400, code: 'INVALID_ASSIGNEE', message: 'Customers can only be assigned to a KAM' };
+    throw { statusCode: 400, code: 'INVALID_ASSIGNEE', message: 'Customers can only be reassigned to a Key Account Manager.' };
   }
   const previousKamId = customer.handledById;
   const updated = await prisma.customer.update({ where: { id: customerId }, data: { handledById: newKamId } });
@@ -917,10 +1001,10 @@ export const listCustomerEditHistory = async (customerId: string, requester: { i
     include: { handledBy: { select: { lineManagerId: true } } },
   });
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
   if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
   return prisma.auditLog.findMany({
     where: { entity: 'Customer', entityId: customerId, action: { in: EDIT_HISTORY_ACTIONS } },

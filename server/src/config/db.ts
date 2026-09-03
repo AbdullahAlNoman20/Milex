@@ -6,7 +6,12 @@ import { env } from './env';
 
 // Prisma 7's default "client" engine requires an explicit driver adapter —
 // bare `new PrismaClient()` against a connection string alone no longer works.
-const pool = new Pool({ connectionString: env.DATABASE_URL });
+const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 const adapter = new PrismaPg(pool);
 
 export const prisma = new PrismaClient({

@@ -22,7 +22,8 @@ export const uploadDocumentHandler = async (req: Request, res: Response, next: N
       documentType,
       documentNumber,
       expiryDate,
-      req.user!.id
+      req.user!.id,
+      req.user!.role
     );
     return sendSuccess(res, { document: doc }, 201);
   } catch (err: any) {
@@ -63,7 +64,7 @@ export const decideExtensionHandler = async (req: Request, res: Response, next: 
 
 export const submitFinalOnboardingHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const customer = await onboardingService.submitFinalOnboardingRequest(asString(req.params.id), req.user!.id);
+    const customer = await onboardingService.submitFinalOnboardingRequest(asString(req.params.id), req.user!.id, req.user!.role);
     return sendSuccess(res, { customer });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);

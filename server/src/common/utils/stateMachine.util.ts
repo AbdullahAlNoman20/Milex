@@ -81,10 +81,18 @@ export const transitionCustomerStatus = async ({
 
     const beforeState = { status: customer.status };
 
-    const updated = await tx.customer.update({
-      where: { id: customerId },
+    // Optimistic concurrency: only apply the transition if status is still
+    // what we just read. If another concurrent request already moved this
+    // customer to a different status, count will be 0 and we fail loudly
+    // instead of silently overwriting a status change we never validated.
+    const { count } = await tx.customer.updateMany({
+      where: { id: customerId, status: customer.status },
       data: { status: toStatus as any, ...extraUpdates },
     });
+    if (count === 0) {
+      throw new InvalidTransitionError(customer.status, toStatus);
+    }
+    const updated = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
 
     await tx.customerHistoryEntry.updateMany({
       where: { customerId, status: 'active' },

@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/services/userAdminService.js — NEW FILE
+// admin/src/Pages/modules/sales/services/userAdminService.js
 import { request } from '../../../../Components/services/api';
 
 export const listAllUsers = async (page = 1, pageSize = 200) => {

@@ -1,6 +1,25 @@
 // src/modules/daily-reports/dailyReports.service.ts
 import { prisma } from '../../config/db';
 import { logAudit } from '../../common/utils/auditLog.util';
+import { notifyLineManagerOfPlanChange } from '../weekly-plans/weeklyPlans.service';
+
+// Mirrors the frontend's Saturday-start work week (see
+// admin/.../constants/weeklyPlanStatus.js#getWeekStart), but computed from
+// the report's own date rather than "today" so a report for a past/future
+// date maps to the correct week. Uses local Date field arithmetic only (no
+// toISOString/UTC conversion), so it can't shift the date by a day depending
+// on the server's timezone.
+const getWeekStartForDate = (isoDate: string): string => {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const dow = date.getDay(); // 0=Sun ... 6=Sat
+  const diff = dow === 6 ? 0 : -(dow + 1);
+  date.setDate(date.getDate() + diff);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 export const getReportByDate = async (kamId: string, date: string) => {
   const existing = await prisma.dailyReport.findUnique({ where: { kamId_date: { kamId, date } }, include: { visits: true } });
@@ -100,7 +119,46 @@ const cleanVisit = (v: any) => ({
 export const upsertReport = async (kamId: string, data: { date: string; visits: any[] }) => {
   const existing = await prisma.dailyReport.findUnique({ where: { kamId_date: { kamId, date: data.date } } });
 
-  const cleaned = data.visits.map(cleanVisit);
+  // A visit added directly on this page (no sourceVisitId — i.e. not already
+  // synced from a Weekly Plan) is pushed into that date's Weekly Plan as a
+  // prospect visit too, so "Add Visit" here actually shows up in Weekly
+  // Sales Planning for that week instead of only living in the daily report.
+  // Visits that already carry a sourceVisitId (already synced, or originally
+  // scheduled from the plan) are left untouched to avoid duplicates on every
+  // re-save.
+  const weekStartDate = getWeekStartForDate(data.date);
+  const needsSync = data.visits.some((v) => !v.sourceVisitId && v.customerName?.trim());
+
+  let visitsForSave = data.visits;
+  if (needsSync) {
+    const plan = await prisma.weeklyPlan.upsert({
+      where: { kamId_weekStartDate: { kamId, weekStartDate } },
+      update: {},
+      create: { kamId, weekStartDate },
+    });
+
+    visitsForSave = [];
+    for (const v of data.visits) {
+      if (v.sourceVisitId || !v.customerName?.trim()) {
+        visitsForSave.push(v);
+        continue;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const created = await prisma.visit.create({
+        data: {
+          day: data.date,
+          customerName: v.customerName,
+          customerId: v.customerId || null,
+          purpose: v.purpose || '',
+          prospectPlanId: plan.id,
+        },
+      });
+      visitsForSave.push({ ...v, sourceVisitId: created.id });
+    }
+    await notifyLineManagerOfPlanChange(kamId);
+  }
+
+  const cleaned = visitsForSave.map(cleanVisit);
 
   if (existing) {
     await prisma.reportVisit.deleteMany({ where: { dailyReportId: existing.id } });

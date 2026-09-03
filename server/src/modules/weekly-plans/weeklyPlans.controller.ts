@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as weeklyPlansService from './weeklyPlans.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 import { asString } from '../../common/utils/requestParams.util';
+import { assertLineManagerOwnsKam } from '../../common/utils/scopeGuard.util';
 
 export const listMinePlansHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -24,9 +25,14 @@ export const listForReviewHandler = async (_req: Request, res: Response, next: N
 
 export const listForKamHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const plans = await weeklyPlansService.listPlansForKam(asString(req.params.kamId));
+    const kamId = asString(req.params.kamId);
+    if (req.user!.role === 'LINE_MANAGER') {
+      await assertLineManagerOwnsKam(kamId, req.user!.id);
+    }
+    const plans = await weeklyPlansService.listPlansForKam(kamId);
     return sendSuccess(res, { plans });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };
