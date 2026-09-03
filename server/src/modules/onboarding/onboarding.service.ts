@@ -31,7 +31,7 @@ export const uploadOnboardingDocument = async (
     throw {
       statusCode: 409,
       code: "NOT_PROVISIONAL",
-      message: "Customer is not in provisional stage",
+      message: "Documents can only be uploaded for provisional accounts. This customer isn\'t in that stage right now.",
     };
   }
   // The offer-letter attachment (a supporting excel) is uploaded at the moment
@@ -41,7 +41,7 @@ export const uploadOnboardingDocument = async (
     throw {
       statusCode: 409,
       code: "OFFER_NOT_ACCEPTED",
-      message: "The offer must be accepted before documents can be uploaded",
+      message: "The customer needs to accept the offer before documents can be uploaded.",
     };
   }
 

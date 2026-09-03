@@ -92,13 +92,13 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       handledBy: { select: { name: true, lineManagerId: true } },
     },
   });
-  if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
+  if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
 
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
   if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
   return customer;
 };
@@ -481,11 +481,11 @@ export const submitFinalOnboardingRegular = async (customerId: string, actorId: 
   const missingDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => !docsByType.has(t));
   if (missingDocs.length > 0) {
     const humanNames = missingDocs.map((t) => DOCUMENT_TYPE_LABELS[t] || t);
-    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: `Missing required documents: ${humanNames.join(', ')}` };
+    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: `Please upload the following before submitting: ${humanNames.join(', ')}.` };
   }
   const notCleanDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => docsByType.get(t)?.scanStatus !== 'CLEAN');
   if (notCleanDocs.length > 0) {
-    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: 'All required documents must pass virus scanning first' };
+    throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: 'One or more of your uploaded documents are still being checked. Please wait a moment and try again.' };
   }
 
   return transitionCustomerStatus({
@@ -601,12 +601,12 @@ export const requestFieldChange = async (
   } else {
     if (!fieldKey) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'fieldKey is required' };
     const resolved = await resolveFieldLabelAndOldValue(customerId, fieldKey);
-    if (!resolved) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be requested for edit' };
+    if (!resolved) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field can\'t be edited through a request. Please choose a different field.' };
     label = resolved.label;
     oldValue = resolved.oldValue;
   }
-  if (!label) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be requested for edit' };
-  if (!isDocRequest && !newValue?.trim()) throw { statusCode: 400, code: 'MISSING_VALUE', message: 'A new value is required' };
+  if (!label) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field can\'t be edited through a request. Please choose a different field.' };
+  if (!isDocRequest && !newValue?.trim()) throw { statusCode: 400, code: 'MISSING_VALUE', message: 'Please enter the new value before submitting.' };
 
   const clean = sanitizeAndEscape({ v: newValue || '', r: reason || '' });
   const request = await prisma.fieldChangeRequest.create({
@@ -645,7 +645,7 @@ export const requestDocumentChange = async (
 ) => {
   await assertKamOwnsCustomerIfKam(customerId, requesterId, requesterRole);
   const label = DOCUMENT_TYPE_LABELS[documentType];
-  if (!label) throw { statusCode: 400, code: 'INVALID_DOCUMENT_TYPE', message: 'Unknown document category' };
+  if (!label) throw { statusCode: 400, code: 'INVALID_DOCUMENT_TYPE', message: 'This document category isn\'t recognized. Please refresh the page and try again.' };
 
   const { storageKey, mimeType, sizeBytes } = await uploadFileToSupabase(fileBuffer, originalName);
   const clean = sanitizeAndEscape({ r: reason || '', n: originalName });
@@ -817,14 +817,14 @@ export const directFieldEdit = async (
       throw {
         statusCode: 403,
         code: 'REQUEST_REQUIRED',
-        message: 'Once the account is active, changes must go through an edit request',
+        message: 'This account is already active. To change anything now, please submit an edit request for your Line Manager to review.',
       };
     }
-    if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
+  if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
       throw {
         statusCode: 403,
         code: 'FIELD_NOT_DIRECTLY_EDITABLE',
-        message: 'This field can only be changed through an edit request',
+        message: 'This field can only be changed by submitting an edit request for your Line Manager to review.',
       };
     }
   }
@@ -965,7 +965,7 @@ export const reassignCustomer = async (customerId: string, newKamId: string, act
     prisma.user.findUniqueOrThrow({ where: { id: newKamId }, include: { role: true } }),
   ]);
   if (newKam.role.name !== 'KAM') {
-    throw { statusCode: 400, code: 'INVALID_ASSIGNEE', message: 'Customers can only be assigned to a KAM' };
+    throw { statusCode: 400, code: 'INVALID_ASSIGNEE', message: 'Customers can only be reassigned to a Key Account Manager.' };
   }
   const previousKamId = customer.handledById;
   const updated = await prisma.customer.update({ where: { id: customerId }, data: { handledById: newKamId } });
@@ -1001,10 +1001,10 @@ export const listCustomerEditHistory = async (customerId: string, requester: { i
     include: { handledBy: { select: { lineManagerId: true } } },
   });
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
   if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
   return prisma.auditLog.findMany({
     where: { entity: 'Customer', entityId: customerId, action: { in: EDIT_HISTORY_ACTIONS } },

@@ -41,18 +41,21 @@ export const validateUploadedFile = async (
   buffer: Buffer,
   originalName: string
 ): Promise<{ valid: boolean; reason?: string; detectedMime?: string }> => {
-  if (buffer.length === 0 || buffer.length > MAX_FILE_SIZE_BYTES) {
-    return { valid: false, reason: 'File size out of allowed range (max 10MB)' };
+  if (buffer.length === 0) {
+    return { valid: false, reason: 'This file appears to be empty. Please choose a different file.' };
+  }
+  if (buffer.length > MAX_FILE_SIZE_BYTES) {
+    return { valid: false, reason: 'This file is too large. Please upload a file smaller than 10MB.' };
   }
   if (isExtensionBlocked(originalName)) {
-    return { valid: false, reason: 'This file type is not allowed' };
+    return { valid: false, reason: 'This type of file isn\'t allowed. Please upload a document, image, or spreadsheet instead.' };
   }
   const detected = await fromBuffer(buffer);
   if (detected && BLOCKED_MIME_TYPES.includes(detected.mime)) {
-    return { valid: false, reason: 'This file type is not allowed' };
+    return { valid: false, reason: 'This type of file isn\'t allowed. Please upload a document, image, or spreadsheet instead.' };
   }
   if (detected && !ALLOWED_MIME_TYPES.has(detected.mime)) {
-    return { valid: false, reason: 'This file type is not allowed' };
+    return { valid: false, reason: 'This type of file isn\'t allowed. Please upload a document, image, or spreadsheet instead.' };
   }
   return { valid: true, detectedMime: detected?.mime || 'application/octet-stream' };
 };

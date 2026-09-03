@@ -29,8 +29,8 @@ export const assertValidCreditPeriodValue = (value: string | number) => {
   if (!Number.isFinite(n) || n < 0 || n > MAX_CREDIT_PERIOD_DAYS) {
     throw {
       statusCode: 400,
-      code: "INVALID_CREDIT_PERIOD",
-      message: `Credit period must be between 0 and ${MAX_CREDIT_PERIOD_DAYS} days`,
+      code: 'INVALID_CREDIT_PERIOD',
+      message: `Please enter a credit period between 0 and ${MAX_CREDIT_PERIOD_DAYS} days.`,
     };
   }
 };

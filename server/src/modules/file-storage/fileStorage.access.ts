@@ -39,7 +39,7 @@ export const assertUserCanAccessStorageKey = async (
       throw {
         statusCode: 403,
         code: "FORBIDDEN",
-        message: "You do not have access to this file",
+        message: "You don't have access to this file.",
       };
     }
     return;
@@ -54,7 +54,7 @@ export const assertUserCanAccessStorageKey = async (
       throw {
         statusCode: 403,
         code: "FORBIDDEN",
-        message: "You do not have access to this file",
+        message: "You don't have access to this file.",
       };
     }
     return;
@@ -64,6 +64,6 @@ export const assertUserCanAccessStorageKey = async (
   throw {
     statusCode: 403,
     code: "FORBIDDEN",
-    message: "You do not have access to this file",
+    message: "You don't have access to this file.",
   };
 };

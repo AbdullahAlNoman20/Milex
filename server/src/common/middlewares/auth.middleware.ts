@@ -50,7 +50,7 @@ export const requireAuth = async (
     cookieToken || (header?.startsWith("Bearer ") ? header.slice(7) : null);
 
   if (!token) {
-    return sendError(res, 401, "UNAUTHENTICATED", "Missing access token");
+    return sendError(res, 401, "UNAUTHENTICATED", "Please log in to continue.");
   }
 
   try {
@@ -66,7 +66,7 @@ export const requireAuth = async (
         res,
         401,
         "UNAUTHENTICATED",
-        "User not found or deactivated",
+        "Your account is no longer active. Please contact your administrator.",
       );
     }
 
@@ -82,7 +82,7 @@ export const requireAuth = async (
       res,
       401,
       "UNAUTHENTICATED",
-      "Invalid or expired access token",
+      "Your session has expired. Please log in again.",
     );
   }
 };

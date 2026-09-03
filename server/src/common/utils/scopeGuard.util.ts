@@ -8,7 +8,7 @@ export const assertLineManagerOwnsCustomer = async (customerId: string, lmId: st
   });
   if (!customer) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
   if (customer.handledBy?.lineManagerId !== lmId) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer is not in your team' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You can only manage customers handled by your own team.' };
   }
 };
 
@@ -20,8 +20,12 @@ export const assertKamOwnsCustomerIfKam = async (customerId: string, actorId: st
   if (actorRole !== 'KAM') return;
   const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
   if (!customer) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
-  if (customer.handledById !== actorId) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'You do not have access to this customer record' };
+   if (customer.handledById !== actorId) {
+    throw {
+      statusCode: 403,
+      code: 'FORBIDDEN',
+      message: 'This customer isn\'t assigned to you, so you can\'t make changes here.',
+    };
   }
 };
 
@@ -31,6 +35,6 @@ export const assertLineManagerOwnsKam = async (kamId: string, lmId: string) => {
   const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
   if (!kam) throw { statusCode: 404, code: 'NOT_FOUND', message: 'User not found' };
   if (kam.lineManagerId !== lmId) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This team member is not in your team' };
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This team member doesn\'t report to you, so you can\'t view their activity.' };
   }
 };

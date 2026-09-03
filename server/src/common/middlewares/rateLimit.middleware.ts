@@ -11,7 +11,7 @@ export const loginRateLimiter = rateLimit({
   legacyHeaders: false,
   skip: () => !env.IS_PRODUCTION,
   keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? '')}:${(req.body?.email || '').toLowerCase()}`,
-  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many login attempts, try again later' } },
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Please wait a few minutes before trying again.' } },
 });
 
 export const mfaRateLimiter = rateLimit({
@@ -19,7 +19,7 @@ export const mfaRateLimiter = rateLimit({
   limit: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many MFA attempts, try again later' } },
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please wait a few minutes before trying again.' } },
 });
 
 export const globalApiLimiter = rateLimit({
@@ -34,7 +34,7 @@ export const exportRateLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Export limit reached, try again later' } },
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'You\'ve reached the export limit for now. Please try again in an hour.' } },
 });
 
 export const searchRateLimiter = rateLimit({

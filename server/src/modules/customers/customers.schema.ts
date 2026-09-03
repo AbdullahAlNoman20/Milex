@@ -26,37 +26,37 @@ const shippingDetailSchema = z
 
 export const createRecommendationSchema = z
   .object({
-    accountName: z.string().min(1).max(200),
-    address: z.string().min(1).max(500),
-    phone: z.string().min(7).max(16),
-    email: z.string().email().max(254),
-    businessType: z.string().min(1).max(120),
-    serviceRequired: z.enum(['IB', 'OB', 'BOTH']),
+    accountName: z.string().min(1, 'Please enter the account name.').max(200, 'The account name is too long.'),
+    address: z.string().min(1, 'Please enter an address.').max(500, 'The address is too long.'),
+    phone: z.string().min(7, 'Please enter a valid phone number.').max(16, 'That phone number looks too long.'),
+    email: z.string().email('Please enter a valid email address.').max(254, 'That email address is too long.'),
+    businessType: z.string().min(1, 'Please choose a business type.').max(120),
+    serviceRequired: z.enum(['IB', 'OB', 'BOTH'], { message: 'Please choose a valid service type.' }),
 // Accepts legacy 'Fair' value too (old data / not-yet-updated clients)
     // and normalizes it to 'Freight' so nothing breaks either way.
-    accountMode: z.enum(['Express', 'Fair', 'Freight']).transform((v) => (v === 'Fair' ? 'Freight' : v)),
-    accountType: z.enum(['CREDIT CUSTOMER', 'CASH']),
-    creditLimitTk: z.string().max(20).optional(),
+    accountMode: z.enum(['Express', 'Fair', 'Freight'], { message: 'Please choose a valid account mode.' }).transform((v) => (v === 'Fair' ? 'Freight' : v)),
+    accountType: z.enum(['CREDIT CUSTOMER', 'CASH'], { message: 'Please choose a valid account type.' }),
+    creditLimitTk: z.string().max(20, 'That credit limit looks too long.').optional(),
     creditPeriodDays: z.string().max(5).optional(),
     creditPeriodExtended: z.boolean().optional(),
-    proposedRate: z.string().min(1).max(300),
-    recNote: z.string().min(1).max(2000),
-    contacts: z.array(contactSchema).min(2),
-    shippingDetails: z.array(shippingDetailSchema).min(1),
+    proposedRate: z.string().min(1, 'Please enter a proposed rate.').max(300),
+    recNote: z.string().min(1, 'Please add a recommendation note.').max(2000),
+    contacts: z.array(contactSchema).min(2, 'Please add at least two contacts.'),
+    shippingDetails: z.array(shippingDetailSchema).min(1, 'Please add at least one shipping detail.'),
   })
   .strict();
 
 export const approveRateSchema = z
   .object({
-    approvedRate: z.string().min(1).max(300),
+    approvedRate: z.string().min(1, 'Please enter the approved rate.').max(300),
     lmNote: z.string().max(500).optional(),
     creditPeriodDays: z.string().max(5).optional(),
     creditPeriodExtendedByLM: z.boolean().optional(),
   })
   .strict();
 
-export const offerTextSchema = z.object({ offerText: z.string().min(1).max(5000) }).strict();
-export const agreementTextSchema = z.object({ agreementText: z.string().min(1).max(5000) }).strict();
+export const offerTextSchema = z.object({ offerText: z.string().min(1, 'The offer letter can\'t be empty.').max(5000, 'The offer letter is too long.') }).strict();
+export const agreementTextSchema = z.object({ agreementText: z.string().min(1, 'The agreement text can\'t be empty.').max(5000, 'The agreement text is too long.') }).strict();
 
 export const clientFeedbackSchema = z
   .object({
@@ -65,13 +65,13 @@ export const clientFeedbackSchema = z
   })
   .strict()
   .refine((v) => v.accepted || (v.rejectReason && v.rejectReason.length > 0), {
-    message: 'rejectReason is required when rejecting',
+    message: 'Please provide a reason for rejecting this offer.',
   });
 
 export const requestInfoUpdateSchema = z
   .object({
-    field: z.string().min(1).max(100),
-    newValue: z.string().min(1).max(500),
+    field: z.string().min(1, 'Please choose which field to update.').max(100),
+    newValue: z.string().min(1, 'Please enter the new value.').max(500),
   })
   .strict();
 
@@ -112,7 +112,7 @@ export const fieldChangeRequestSchema = z
     documentType: z.string().min(1).max(60).optional(),
   })
   .strict()
-  .refine((v) => v.fieldKey || v.documentType, { message: 'Either fieldKey or documentType is required' });
+  .refine((v) => v.fieldKey || v.documentType, { message: 'Please choose what you\'d like to change.' });
 
 export const listCustomersQuerySchema = z
   .object({
@@ -123,4 +123,4 @@ export const listCustomersQuerySchema = z
   })
   .strict();
 
-export const reassignCustomerSchema = z.object({ newKamId: z.string().min(1) }).strict();
+export const reassignCustomerSchema = z.object({ newKamId: z.string().min(1, 'Please choose a Key Account Manager to reassign to.') }).strict();

@@ -33,7 +33,7 @@ export const verifyCsrf = (req: Request, res: Response, next: NextFunction) => {
     crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken));
 
   if (!isValid) {
-    return sendError(res, 403, 'CSRF_VALIDATION_FAILED', 'CSRF token missing or invalid');
+    return sendError(res, 403, 'CSRF_VALIDATION_FAILED', 'For your security, please refresh the page and try again.');
   }
   next();
 };

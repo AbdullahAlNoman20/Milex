@@ -1,6 +1,6 @@
 // src/modules/users/users.service.ts
 import { prisma } from '../../config/db';
-import { hashPassword, isPasswordPolicyCompliant } from '../../common/utils/hash.util';
+import { hashPassword, isPasswordPolicyCompliant, PASSWORD_POLICY_MESSAGE } from '../../common/utils/hash.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
 
@@ -98,7 +98,7 @@ export const updateUser = async (
 
 export const setUserPassword = async (targetUserId: string, newPassword: string, actorId: string) => {
   if (!isPasswordPolicyCompliant(newPassword)) {
-    throw { statusCode: 400, code: 'WEAK_PASSWORD', message: 'Password does not meet policy requirements' };
+    throw { statusCode: 400, code: 'WEAK_PASSWORD', message: PASSWORD_POLICY_MESSAGE };
   }
   const user = await prisma.user.findUniqueOrThrow({ where: { id: targetUserId } });
   const newHash = await hashPassword(newPassword);
@@ -119,7 +119,7 @@ export const createUser = async (data: {
   lineManagerId?: string | null;
 }, actorId: string) => {
   if (!isPasswordPolicyCompliant(data.password)) {
-    throw { statusCode: 400, code: 'WEAK_PASSWORD', message: 'Password does not meet policy requirements' };
+    throw { statusCode: 400, code: 'WEAK_PASSWORD', message: PASSWORD_POLICY_MESSAGE };
   }
   if (data.lineManagerId) {
     await assertUserIsLineManager(data.lineManagerId);
