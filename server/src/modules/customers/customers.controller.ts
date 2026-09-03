@@ -80,9 +80,9 @@ export const decideInfoUpdateHandler = wrap((req) =>
   customersService.decideInfoUpdate(asString(req.params.id), req.body.approve, req.user!.id)
 );
 export const updateFollowUpHandler = wrap((req) => customersService.updateFollowUp(asString(req.params.id), req.body, req.user!.id));
-export const updateFinalProfileHandler = wrap((req) => customersService.updateFinalProfile(asString(req.params.id), req.body, req.user!.id));
-export const setAccountConfigModeHandler = wrap((req) => customersService.setAccountConfigMode(asString(req.params.id), req.body.mode, req.user!.id));
-export const submitFinalOnboardingRegularHandler = wrap((req) => customersService.submitFinalOnboardingRegular(asString(req.params.id), req.user!.id));
+export const updateFinalProfileHandler = wrap((req) => customersService.updateFinalProfile(asString(req.params.id), req.body, req.user!.id, req.user!.role));
+export const setAccountConfigModeHandler = wrap((req) => customersService.setAccountConfigMode(asString(req.params.id), req.body.mode, req.user!.id, req.user!.role));
+export const submitFinalOnboardingRegularHandler = wrap((req) => customersService.submitFinalOnboardingRegular(asString(req.params.id), req.user!.id, req.user!.role));
 
 export const requestFieldChangeHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -92,7 +92,8 @@ export const requestFieldChangeHandler = async (req: Request, res: Response, nex
       req.body.newValue,
       req.body.reason,
       req.body.documentType,
-      req.user!.id
+      req.user!.id,
+      req.user!.role
     );
     return sendSuccess(res, { request }, 201);
   } catch (err: any) {
@@ -114,7 +115,8 @@ export const requestDocumentChangeHandler = async (req: Request, res: Response, 
       reason,
       file.buffer,
       file.originalname,
-      req.user!.id
+      req.user!.id,
+      req.user!.role
     );
     return sendSuccess(res, { request }, 201);
   } catch (err: any) {
@@ -134,9 +136,13 @@ export const getEditableFieldDefsHandler = async (req: Request, res: Response, n
 
 export const listFieldChangeRequestsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const items = await customersService.listFieldChangeRequests(asString(req.params.id));
+    const items = await customersService.listFieldChangeRequests(asString(req.params.id), {
+      id: req.user!.id,
+      role: req.user!.role,
+    });
     return sendSuccess(res, { items });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };

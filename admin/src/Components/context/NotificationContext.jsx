@@ -11,7 +11,7 @@ import { request } from "../services/api";
 export const NotificationContext = createContext(null);
 
 const REFRESH_INTERVAL_MS = 15000;
-
+ 
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
 

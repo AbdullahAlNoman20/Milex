@@ -1,8 +1,9 @@
-// server/src/modules/daily-reports/dailyReports.controller.ts 
+// server/src/modules/daily-reports/dailyReports.controller.ts
 import { Request, Response, NextFunction } from 'express';
 import * as dailyReportsService from './dailyReports.service';
-import { sendSuccess } from '../../common/utils/apiResponse.util';
+import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 import { asString } from '../../common/utils/requestParams.util';
+import { assertLineManagerOwnsKam } from '../../common/utils/scopeGuard.util';
 
 export const getByDateHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -24,9 +25,14 @@ export const upsertReportHandler = async (req: Request, res: Response, next: Nex
 
 export const listForKamHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const reports = await dailyReportsService.listReportsForKam(asString(req.params.kamId));
+    const kamId = asString(req.params.kamId);
+    if (req.user!.role === 'LINE_MANAGER') {
+      await assertLineManagerOwnsKam(kamId, req.user!.id);
+    }
+    const reports = await dailyReportsService.listReportsForKam(kamId);
     return sendSuccess(res, { reports });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };

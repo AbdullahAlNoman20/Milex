@@ -17,4 +17,4 @@ describe('POST /api/v1/auth/login', () => {
       .send({ email: 'a@b.com', password: 'Passw0rd!123', evilField: 'x' });
     expect(res.status).toBe(400);
   });
-});
+}); 

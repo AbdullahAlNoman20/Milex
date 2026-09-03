@@ -1,24 +1,6 @@
 // src/Components/services/api.js
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 const REQUEST_TIMEOUT_MS = 10000;
-const TOKEN_KEY = 'milex_token';
-
-export const getToken = () => {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
-
-export const setToken = (token) => {
-  try {
-    if (token) sessionStorage.setItem(TOKEN_KEY, token);
-    else sessionStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* storage unavailable */
-  }
-};
 
 const STATE_CHANGING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -30,7 +12,6 @@ const getCsrfToken = () => {
 export const request = async (path, { method = 'GET', body, headers = {}, _retried = false } = {}) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const token = getToken();
   const csrfToken = STATE_CHANGING_METHODS.includes(method) ? getCsrfToken() : null;
 
   try {
@@ -40,7 +21,6 @@ export const request = async (path, { method = 'GET', body, headers = {}, _retri
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
         ...headers,
       },

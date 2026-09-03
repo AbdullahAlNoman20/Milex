@@ -15,4 +15,4 @@ describe('CUSTOMER_STATUS_TRANSITIONS', () => {
   it('has no outgoing transitions from a terminal expired state', () => {
     expect(CUSTOMER_STATUS_TRANSITIONS[CUSTOMER_STATUS.PROVISIONAL_EXPIRED]).toEqual([]);
   });
-});
+}); 

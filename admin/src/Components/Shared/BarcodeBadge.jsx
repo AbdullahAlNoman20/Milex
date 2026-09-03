@@ -1,7 +1,7 @@
 // src/Components/Shared/BarcodeBadge.jsx
 import React, { useMemo } from 'react';
 import { FileDigit } from 'lucide-react';
-
+ 
 const BARCODE_PATTERN = /^(REF-)?[A-Z0-9]{5,20}(-R[0-9]+)?$/;
 
 const BarcodeBadge = ({ value, variant = 'default', className = '', showBars = true }) => {

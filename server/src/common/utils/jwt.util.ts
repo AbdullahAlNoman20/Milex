@@ -5,7 +5,6 @@ import { env } from '../../config/env';
 export interface AccessTokenPayload {
   sub: string;
   role: string;
-  permissions: string[];
 }
 
 export const signAccessToken = (payload: AccessTokenPayload): string =>

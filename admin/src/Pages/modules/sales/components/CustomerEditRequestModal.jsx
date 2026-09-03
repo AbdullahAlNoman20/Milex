@@ -81,6 +81,28 @@ const CustomerEditRequestModal = ({
     const fieldTargets = fieldDefs.filter(
       (f) => selectedFields[f.key] && values[f.key]?.toString().trim(),
     );
+
+    const invalidCreditPeriod = fieldTargets.find((f) => {
+      if (!isCreditPeriodField(f.key, f.label)) return false;
+      const n = Number(values[f.key]);
+      return Number.isNaN(n) || n < 0 || n > MAX_CREDIT_PERIOD_DAYS;
+    });
+    if (invalidCreditPeriod) {
+      return showToast(
+        `Credit period must be between 0 and ${MAX_CREDIT_PERIOD_DAYS} days`,
+        "warning",
+      );
+    }
+
+    const blockedUnlimitedTarget = fieldTargets.find((f) =>
+      isUnlimitedCreditLimitField(f.key, f.label),
+    );
+    if (blockedUnlimitedTarget) {
+      return showToast(
+        "Unlimited Credit Limit cannot be changed through this form",
+        "warning",
+      );
+    }
     const docTargets = DOCUMENT_CATEGORIES.filter(
       (d) => selectedDocs[d.key] && docFiles[d.key],
     );
@@ -141,7 +163,37 @@ const CustomerEditRequestModal = ({
     }
   };
 
+  const MAX_CREDIT_PERIOD_DAYS = 90;
+
+  const isCreditPeriodField = (key, label = "") => {
+    const k = (key || "").toLowerCase();
+    const l = (label || "").toLowerCase();
+    return (
+      k.includes("creditperiod") ||
+      k.includes("credit_period") ||
+      (k.includes("credit") && k.includes("period")) ||
+      (l.includes("credit") && l.includes("period"))
+    );
+  };
+  const isUnlimitedCreditLimitField = (key, label = "") => {
+    const k = (key || "").toLowerCase();
+    const l = (label || "").toLowerCase();
+    return (
+      k.includes("unlimited") ||
+      (l.includes("unlimited") && l.includes("credit"))
+    );
+  };
+
   const renderFieldInput = (f) => {
+    if (isUnlimitedCreditLimitField(f.key, f.label)) {
+      // Unlimited Credit Limit must never be settable through the generic
+      // edit/request flow — same restriction as initial entry.
+      return (
+        <p className="mt-2 text-[11px] text-red-600 font-semibold">
+          Unlimited Credit Limit cannot be changed here. Contact system admin.
+        </p>
+      );
+    }
     if (f.type === "select") {
       return (
         <select
@@ -173,15 +225,30 @@ const CustomerEditRequestModal = ({
       );
     }
     return (
-      <input
-        type={f.type === "number" ? "number" : "text"}
-        className="w-full mt-2 border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500"
-        placeholder={`New ${f.label}`}
-        value={values[f.key] ?? ""}
-        onChange={(e) =>
-          setValues((prev) => ({ ...prev, [f.key]: e.target.value }))
-        }
-      />
+      <>
+        <input
+          type={isCreditPeriodField(f.key, f.label) ? "text" : f.type === "number" ? "number" : "text"}
+          inputMode={isCreditPeriodField(f.key, f.label) ? "numeric" : undefined}
+          min={isCreditPeriodField(f.key, f.label) ? 0 : undefined}
+          max={isCreditPeriodField(f.key, f.label) ? MAX_CREDIT_PERIOD_DAYS : undefined}
+          className="w-full mt-2 border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500"
+          placeholder={`New ${f.label}`}
+          value={values[f.key] ?? ""}
+          onChange={(e) => {
+            let val = e.target.value;
+            if (isCreditPeriodField(f.key, f.label)) {
+              if (val !== "" && !/^\d*$/.test(val)) return;
+              if (val !== "" && Number(val) > MAX_CREDIT_PERIOD_DAYS) val = String(MAX_CREDIT_PERIOD_DAYS);
+            }
+            setValues((prev) => ({ ...prev, [f.key]: val }));
+          }}
+        />
+        {isCreditPeriodField(f.key, f.label) && (
+          <p className="mt-1 text-[10px] text-slate-400">
+            Maximum allowed credit period is {MAX_CREDIT_PERIOD_DAYS} days.
+          </p>
+        )}
+      </>
     );
   };
 

@@ -23,9 +23,16 @@ export const verifyCsrf = (req: Request, res: Response, next: NextFunction) => {
   if (!STATE_CHANGING_METHODS.includes(req.method)) return next();
 
   const cookieToken = (req as any).cookies?.[CSRF_COOKIE_NAME];
-  const headerToken = req.headers[CSRF_HEADER_NAME];
+  const rawHeaderToken = req.headers[CSRF_HEADER_NAME];
+  const headerToken = Array.isArray(rawHeaderToken) ? rawHeaderToken[0] : rawHeaderToken;
 
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  const isValid =
+    typeof cookieToken === 'string' &&
+    typeof headerToken === 'string' &&
+    cookieToken.length === headerToken.length &&
+    crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken));
+
+  if (!isValid) {
     return sendError(res, 403, 'CSRF_VALIDATION_FAILED', 'CSRF token missing or invalid');
   }
   next();

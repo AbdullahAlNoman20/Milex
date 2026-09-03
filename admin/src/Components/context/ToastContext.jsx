@@ -18,7 +18,7 @@ export const ToastProvider = ({ children }) => {
   const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
-
+ 
   const showToast = useCallback(
     (message, type = 'success', duration = DEFAULT_DURATION_MS) => {
       const safeMessage = sanitizeMessage(message);
@@ -34,4 +34,4 @@ export const ToastProvider = ({ children }) => {
   const value = useMemo(() => ({ toasts, showToast, removeToast }), [toasts, showToast, removeToast]);
 
   return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
-}; 
+};

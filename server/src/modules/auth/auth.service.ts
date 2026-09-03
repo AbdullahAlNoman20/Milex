@@ -86,8 +86,7 @@ export const login = async (
     data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() },
   });
 
-  const permissions = user.role.permissions.map((rp) => rp.permission.key);
-  const accessToken = signAccessToken({ sub: user.id, role: user.role.name, permissions });
+  const accessToken = signAccessToken({ sub: user.id, role: user.role.name });
   const refreshTokenRaw = signRefreshToken(user.id);
 
   await prisma.refreshToken.create({
@@ -148,8 +147,7 @@ export const refreshAccessToken = async (refreshTokenRaw: string) => {
     },
   });
 
-  const permissions = user.role.permissions.map((rp) => rp.permission.key);
-  const accessToken = signAccessToken({ sub: user.id, role: user.role.name, permissions });
+  const accessToken = signAccessToken({ sub: user.id, role: user.role.name });
 
   return { accessToken, refreshToken: newRefreshTokenRaw };
 };

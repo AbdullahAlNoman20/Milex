@@ -40,6 +40,7 @@ const STEPS = [
 
 const DRAFT_KEY_PREFIX = "milex_recommendation_draft_";
 const MAX_NOTE_LENGTH = 2000;
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // discard abandoned drafts after 7 days
 
 const buildInitialState = () => ({
   form: {
@@ -163,7 +164,10 @@ const NewRecommendationWizard = () => {
       const raw = localStorage.getItem(draftKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object" && parsed.form) {
+        const isExpired = parsed?.savedAt && Date.now() - parsed.savedAt > DRAFT_TTL_MS;
+        if (isExpired) {
+          localStorage.removeItem(draftKey);
+        } else if (parsed && typeof parsed === "object" && parsed.form) {
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setState(parsed);
           showToast("Draft restored", "info");
@@ -257,7 +261,7 @@ const NewRecommendationWizard = () => {
 
   const handleSaveDraft = () => {
     try {
-      localStorage.setItem(draftKey, JSON.stringify(state));
+      localStorage.setItem(draftKey, JSON.stringify({ ...state, savedAt: Date.now() }));
       showToast("Draft saved locally", "success");
     } catch {
       showToast("Could not save draft (storage unavailable)", "error");

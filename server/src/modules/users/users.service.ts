@@ -4,6 +4,13 @@ import { hashPassword, isPasswordPolicyCompliant } from '../../common/utils/hash
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
 
+const assertUserIsLineManager = async (userId: string) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
+  if (!user || user.role.name !== 'LINE_MANAGER') {
+    throw { statusCode: 400, code: 'INVALID_LINE_MANAGER', message: 'Selected user is not a Line Manager' };
+  }
+};
+
 const toSafeUser = (user: any) => ({
   id: user.id,
   name: user.name,
@@ -52,6 +59,10 @@ export const updateUser = async (
   actorId: string
 ) => {
   const before = await prisma.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
+
+  if (updates.lineManagerId) {
+    await assertUserIsLineManager(updates.lineManagerId);
+  }
 
   const data: any = {};
   if (updates.name) data.name = updates.name;
@@ -109,6 +120,9 @@ export const createUser = async (data: {
 }, actorId: string) => {
   if (!isPasswordPolicyCompliant(data.password)) {
     throw { statusCode: 400, code: 'WEAK_PASSWORD', message: 'Password does not meet policy requirements' };
+  }
+  if (data.lineManagerId) {
+    await assertUserIsLineManager(data.lineManagerId);
   }
   const role = await prisma.role.findUniqueOrThrow({ where: { name: data.role as any } });
   const passwordHash = await hashPassword(data.password);

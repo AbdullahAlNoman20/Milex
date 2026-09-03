@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Search, X } from 'lucide-react';
 import { searchCustomers } from '../services/customerService';
 
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 300;
 
 const CustomerSearchSelect = ({ value, onSelect, placeholder = 'Search customer...', disabled = false }) => {
   const [query, setQuery] = useState(value || '');
