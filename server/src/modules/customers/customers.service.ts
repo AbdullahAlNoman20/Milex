@@ -12,9 +12,16 @@ import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { emitNotificationToUser } from '../../config/socket';
 import { assertLineManagerOwnsCustomer, assertKamOwnsCustomerIfKam } from '../../common/utils/scopeGuard.util';
 import { assertValidCreditPeriodValue, isCreditPeriodField } from '../../common/utils/creditRules.util';
+import { createNotificationsForUsers } from '../notifications/notifications.service';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
 export const generateRateRef = () => `MLX${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+// Every returned Customer object that might get merged into the frontend's
+// customer list must include this — otherwise the Assigned KAM column
+// silently disappears for that row (this was the exact "majhe majhe dekha
+// jay jayna" bug).
+const CUSTOMER_WITH_HANDLER = { handledBy: { select: { name: true } } } as const;
 
 const MAX_ID_GENERATION_ATTEMPTS = 5;
 
@@ -140,11 +147,16 @@ export const createRecommendation = async (data: any, kamId: string) => {
 
   await logAudit({ entity: 'Customer', entityId: customer.id, action: 'RECOMMENDATION_CREATED', actorId: kamId, afterState: { barcode } });
 
-  // Notify every Line Manager instantly instead of waiting for their next
-  // poll cycle. Kept lightweight — just a "check your list" ping, not the
-  // full payload, since the bell/page still fetch the real data over REST.
-  const lineManagers = await prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' } }, select: { id: true } });
-  lineManagers.forEach((lm) => emitNotificationToUser(lm.id));
+  // Notify every active Line Manager that a new recommendation needs rate
+  // approval — persisted so it shows up in their notification bell/page,
+  // not just a silent socket ping.
+  const lineManagers = await prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' }, isActive: true }, select: { id: true } });
+  await createNotificationsForUsers(
+    lineManagers.map((lm) => lm.id),
+    { label: `${customer.accountName} — New recommendation submitted, needs rate approval`, link: `/app/customers/${barcode}` },
+  );
+
+
 
   // Persist any new "Others" carrier name(s) typed in this submission so
   // they show up as normal dropdown options on every future recommendation
@@ -221,6 +233,7 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
     const customer = await tx.customer.update({
       where: { id: customerId },
       data: { offerText: clean.offerText, offerSent: true, offerAccepted: false },
+      include: CUSTOMER_WITH_HANDLER,
     });
     await tx.customerHistoryEntry.updateMany({
       where: { customerId, status: 'active' },
@@ -232,7 +245,11 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
     return customer;
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_LETTER_SENT', actorId: scId, afterState: { offerSent: true } });
-  await notifyCustomerWorkflowUsers(updated.handledById);
+  await notifyCustomerWorkflowUsers(
+    updated.handledById,
+    { label: `${updated.accountName} — Offer letter sent, awaiting customer feedback`, link: `/app/customers/${updated.barcode}` },
+    scId,
+  );
   return updated;
 };
 
@@ -242,6 +259,7 @@ export const sendAgreement = async (customerId: string, agreementText: string, s
     const customer = await tx.customer.update({
       where: { id: customerId },
       data: { agreementText: clean.agreementText, agreementSent: true },
+      include: CUSTOMER_WITH_HANDLER,
     });
     await tx.customerHistoryEntry.updateMany({
       where: { customerId, status: 'active' },
@@ -264,7 +282,11 @@ export const sendAgreement = async (customerId: string, agreementText: string, s
     actorId: scId,
     afterState: { agreementSent: true },
   });
-  await notifyCustomerWorkflowUsers(updated.handledById);
+  await notifyCustomerWorkflowUsers(
+    updated.handledById,
+    { label: `${updated.accountName} — Agreement sent to customer`, link: `/app/customers/${updated.barcode}` },
+    scId,
+  );
   return updated;
 };
 
@@ -275,7 +297,11 @@ export const submitClientFeedback = async (
 ) => {
   if (data.accepted) {
     const updated = await prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.update({ where: { id: customerId }, data: { offerAccepted: true } });
+      const customer = await tx.customer.update({
+        where: { id: customerId },
+        data: { offerAccepted: true },
+        include: CUSTOMER_WITH_HANDLER,
+      });
       await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
       await tx.customerHistoryEntry.create({
         data: { customerId, action: 'OFFER ACCEPTED BY CUSTOMER', subText: 'Awaiting Sales Coordinator to send the Agreement', status: 'active' },
@@ -283,7 +309,11 @@ export const submitClientFeedback = async (
       return customer;
     });
     await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_ACCEPTED', actorId: kamId, afterState: { offerAccepted: true } });
-    await notifyCustomerWorkflowUsers(updated.handledById);
+    await notifyCustomerWorkflowUsers(
+      updated.handledById,
+      { label: `${updated.accountName} — Customer accepted the offer, please prepare the agreement`, link: `/app/customers/${updated.barcode}` },
+      kamId,
+    );
     return updated;
   }
 
@@ -295,6 +325,7 @@ export const submitClientFeedback = async (
     const c = await tx.customer.update({
       where: { id: customerId },
       data: { offerSent: false, offerAccepted: false, rejectReason: clean.r, revision: customer.revision + 1 },
+      include: CUSTOMER_WITH_HANDLER,
     });
     await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
     await tx.customerHistoryEntry.create({
@@ -303,7 +334,11 @@ export const submitClientFeedback = async (
     return c;
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_REJECTED', actorId: kamId, afterState: { rejectReason: clean.r } });
-  await notifyCustomerWorkflowUsers(updated.handledById);
+  await notifyCustomerWorkflowUsers(
+    updated.handledById,
+    { label: `${updated.accountName} — Customer rejected the offer, please revise`, link: `/app/customers/${updated.barcode}` },
+    kamId,
+  );
   return updated;
 };
 
@@ -414,6 +449,7 @@ export const updateFollowUp = async (
       followUpDate: data.followUpDate ? new Date(data.followUpDate) : null,
       followUpNote: data.followUpNote ? sanitizeAndEscape({ n: data.followUpNote }).n : undefined,
     },
+    include: CUSTOMER_WITH_HANDLER,
   });
   await logAudit({
     entity: 'Customer',
@@ -452,6 +488,7 @@ export const updateFinalProfile = async (customerId: string, data: any, actorId:
   const updated = await prisma.customer.update({
     where: { id: customerId },
     data: { ...clean, finalProfileCompleted: true },
+    include: CUSTOMER_WITH_HANDLER,
   });
   await logAudit({
     entity: 'Customer',
@@ -465,7 +502,11 @@ export const updateFinalProfile = async (customerId: string, data: any, actorId:
 
 export const setAccountConfigMode = async (customerId: string, mode: 'REGULAR' | 'PROVISIONAL', actorId: string, actorRole: string) => {
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
-  const updated = await prisma.customer.update({ where: { id: customerId }, data: { accountConfigMode: mode } });
+  const updated = await prisma.customer.update({
+    where: { id: customerId },
+    data: { accountConfigMode: mode },
+    include: CUSTOMER_WITH_HANDLER,
+  });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'ACCOUNT_CONFIG_MODE_SET', actorId, afterState: { accountConfigMode: mode } });
   return updated;
 };
@@ -629,8 +670,17 @@ export const requestFieldChange = async (
     beforeState: isDocRequest ? undefined : { [label]: oldValue },
     afterState: isDocRequest ? { [label]: 'Re-upload requested' } : { [label]: clean.v },
   });
-  const ownerForRequest = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
-  if (ownerForRequest) await notifyCustomerWorkflowUsers(ownerForRequest.handledById);
+  const ownerForRequest = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { handledById: true, accountName: true, barcode: true },
+  });
+  if (ownerForRequest) {
+    await notifyCustomerWorkflowUsers(
+      ownerForRequest.handledById,
+      { label: `${ownerForRequest.accountName} — Edit request: ${label}`, link: `/app/customers/${ownerForRequest.barcode}` },
+      requesterId,
+    );
+  }
   return request;
 };
 
@@ -665,8 +715,17 @@ export const requestDocumentChange = async (
     },
   });
   await logAudit({ entity: 'Customer', entityId: customerId, action: 'DOCUMENT_REUPLOAD_REQUESTED', actorId: requesterId, afterState: { documentType } });
-  const ownerForDocRequest = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
-  if (ownerForDocRequest) await notifyCustomerWorkflowUsers(ownerForDocRequest.handledById);
+  const ownerForDocRequest = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { handledById: true, accountName: true, barcode: true },
+  });
+  if (ownerForDocRequest) {
+    await notifyCustomerWorkflowUsers(
+      ownerForDocRequest.handledById,
+      { label: `${ownerForDocRequest.accountName} — Edit request: ${label}`, link: `/app/customers/${ownerForDocRequest.barcode}` },
+      requesterId,
+    );
+  }
   return request;
 };
 
@@ -771,13 +830,25 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
       afterState: { [request.fieldLabel]: request.newValue },
     });
   }
-  const decidedCustomer = await prisma.customer.findUniqueOrThrow({ where: { id: request.customerId } });
-  // Broadcast to the whole workflow group (handling KAM + every LM + every
-  // SC) instead of only the single original requester — a broadcast can't
-  // be missed by one stale/disconnected session the way a single targeted
-  // emit can.
-  await notifyCustomerWorkflowUsers(decidedCustomer.handledById);
-  emitNotificationToUser(request.requestedById);
+  const decidedCustomer = await prisma.customer.findUniqueOrThrow({
+    where: { id: request.customerId },
+    include: CUSTOMER_WITH_HANDLER,
+  });
+
+  // The requester gets a specific, personal message about their own
+  // request's outcome...
+  await createNotificationsForUsers([request.requestedById], {
+    label: `${decidedCustomer.accountName} — Your edit request for "${request.fieldLabel}" was ${approve ? 'approved' : 'rejected'}`,
+    link: `/app/customers/${decidedCustomer.barcode}`,
+  });
+  // ...and the rest of the workflow group (excluding the LM who just
+  // decided, and the requester who already got their own message above)
+  // gets a general heads-up that this record changed.
+  await notifyCustomerWorkflowUsers(
+    decidedCustomer.handledById,
+    { label: `${decidedCustomer.accountName} — Edit request ${approve ? 'approved' : 'rejected'}: ${request.fieldLabel}`, link: `/app/customers/${decidedCustomer.barcode}` },
+    lmId,
+  );
   return decidedCustomer;
 };
 
@@ -811,8 +882,17 @@ export const directFieldEdit = async (
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
 
-  const isKamOrSc = actorRole === 'KAM' || actorRole === 'SALES_COORDINATOR';
-  if (isKamOrSc) {
+  // Sales Coordinators no longer get direct-edit access at all — every
+  // change they make must go through an edit request for the Line Manager
+  // to approve, regardless of the customer's current status.
+  if (actorRole === 'SALES_COORDINATOR') {
+    throw {
+      statusCode: 403,
+      code: 'REQUEST_REQUIRED',
+      message: 'As a Sales Coordinator, changes to customer details must be submitted as a request for your Line Manager to approve.',
+    };
+  }
+  if (actorRole === 'KAM') {
     if (customer.status === 'ACTIVE_ACCOUNT') {
       throw {
         statusCode: 403,
@@ -820,7 +900,7 @@ export const directFieldEdit = async (
         message: 'This account is already active. To change anything now, please submit an edit request for your Line Manager to review.',
       };
     }
-  if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
+    if (!parseContactKey(fieldKey) && !RECOMMENDATION_FIELD_KEYS.includes(fieldKey)) {
       throw {
         statusCode: 403,
         code: 'FIELD_NOT_DIRECTLY_EDITABLE',
@@ -869,13 +949,18 @@ if (contactRef) {
       where: { id: customerId },
       data: {
         approvedRate: clean.v,
-        rateRef: generateRateRef(),
+        rateRef: await generateUniqueRateRef(),
         revision: { increment: 1 },
         rateHistory: { push: previousEntry },
       },
+      include: CUSTOMER_WITH_HANDLER,
     });
   } else {
-    updated = await prisma.customer.update({ where: { id: customerId }, data: { [fieldKey]: clean.v } });
+    updated = await prisma.customer.update({
+      where: { id: customerId },
+      data: { [fieldKey]: clean.v },
+      include: CUSTOMER_WITH_HANDLER,
+    });
   }
 
   await logAudit({
@@ -968,7 +1053,11 @@ export const reassignCustomer = async (customerId: string, newKamId: string, act
     throw { statusCode: 400, code: 'INVALID_ASSIGNEE', message: 'Customers can only be reassigned to a Key Account Manager.' };
   }
   const previousKamId = customer.handledById;
-  const updated = await prisma.customer.update({ where: { id: customerId }, data: { handledById: newKamId } });
+  const updated = await prisma.customer.update({
+    where: { id: customerId },
+    data: { handledById: newKamId },
+    include: CUSTOMER_WITH_HANDLER,
+  });
   await logAudit({
     entity: 'Customer',
     entityId: customerId,

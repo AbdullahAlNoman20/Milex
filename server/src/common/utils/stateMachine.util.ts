@@ -3,14 +3,27 @@ import { prisma } from '../../config/db';
 import { logAudit } from './auditLog.util';
 import { CUSTOMER_STATUS_TRANSITIONS } from '../constants/status.constant';
 import { emitNotificationToUser } from '../../config/socket';
+import { createNotificationsForUsers } from '../../modules/notifications/notifications.service';
 
 import { humanizeStatus } from './humanize.util';
+
+// "RATE APPROVED BY LM" -> "Rate approved by lm" — plain, readable sentence
+// case for notification text. Not perfect grammar for acronyms like "LM",
+// but far more readable than shouting-caps for a non-technical reader.
+const toSentenceCase = (s: string): string => {
+  const lower = s.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+};
 
 // Fires an instant realtime ping to everyone who works this customer's
 // pipeline (the handling KAM/SC, plus every Line Manager and Sales
 // Coordinator, since they all share the same queue). A push failure here
 // must never break the actual data-changing action, hence the try/catch.
-export const notifyCustomerWorkflowUsers = async (handledById: string) => {
+export const notifyCustomerWorkflowUsers = async (
+  handledById: string,
+  notification?: { label: string; link: string; isOverdue?: boolean },
+  excludeUserId?: string,
+) => {
   try {
     const notifyIds = new Set<string>([handledById]);
 
@@ -36,7 +49,15 @@ export const notifyCustomerWorkflowUsers = async (handledById: string) => {
     });
     scs.forEach((u) => notifyIds.add(u.id));
 
-    notifyIds.forEach((id) => emitNotificationToUser(id));
+    // Don't notify the person who just performed the action about their
+    // own action.
+    if (excludeUserId) notifyIds.delete(excludeUserId);
+
+    if (notification) {
+      await createNotificationsForUsers(Array.from(notifyIds), notification);
+    } else {
+      notifyIds.forEach((id) => emitNotificationToUser(id));
+    }
   } catch (err) {
     console.warn('[socket] notifyCustomerWorkflowUsers failed (non-fatal):', (err as Error)?.message);
   }
@@ -92,7 +113,13 @@ export const transitionCustomerStatus = async ({
     if (count === 0) {
       throw new InvalidTransitionError(customer.status, toStatus);
     }
-    const updated = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
+    // Always include handledBy so every caller that merges this returned
+    // object into a customer list (frontend SalesContext) keeps showing the
+    // Assigned KAM column instead of it silently disappearing after an action.
+    const updated = await tx.customer.findUniqueOrThrow({
+      where: { id: customerId },
+      include: { handledBy: { select: { name: true } } },
+    });
 
     await tx.customerHistoryEntry.updateMany({
       where: { customerId, status: 'active' },
@@ -121,6 +148,10 @@ export const transitionCustomerStatus = async ({
     return updated;
   });
 
-  await notifyCustomerWorkflowUsers(updated.handledById);
+  await notifyCustomerWorkflowUsers(
+    updated.handledById,
+    { label: `${updated.accountName} — ${toSentenceCase(historyAction)}`, link: `/app/customers/${updated.barcode}` },
+    actorId,
+  );
   return updated;
 };

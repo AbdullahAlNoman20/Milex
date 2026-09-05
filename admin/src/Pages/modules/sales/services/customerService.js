@@ -164,10 +164,12 @@ export const searchCustomers = async (search) => {
 
 export const getDocumentSignedUrl = async (storageKey) => {
   const { data } = await request(`/files/${encodeURIComponent(storageKey)}/signed-url`);
-  // Backend now returns a relative path (self-hosted file server), not a
-  // full external URL like Supabase used to give — prefix the API origin
-  // so window.open() actually hits the API server, not the frontend's own.
-  return data.url.startsWith('http') ? data.url : `${API_BASE_URL.replace(/\/api\/v1$/, '')}${data.url}`;
+  if (data.url.startsWith('http')) return data.url;
+  // Backend returns a path relative to the API's own origin, already
+  // including the /api/v1 prefix (e.g. "/api/v1/files/download/...") — so
+  // only the scheme+host needs to be prefixed here.
+  const apiOrigin = new URL(API_BASE_URL).origin;
+  return `${apiOrigin}${data.url}`;
 };
 
 export const updateFinalProfile = async (id, payload) => {

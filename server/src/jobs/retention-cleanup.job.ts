@@ -3,6 +3,7 @@ import { prisma } from "../config/db";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Not wired to a scheduler (no cron/queue infra in this project yet) — call
 // manually or hook into a cron job when one is added. Only deletes rows that
@@ -25,6 +26,11 @@ export const runRetentionCleanup = async () => {
   const oldNotificationReads = await prisma.notificationRead.deleteMany({
     where: { readAt: { lt: new Date(now - THIRTY_DAYS_MS) } },
   });
+  // Notifications shown in the bell/notifications page are auto-deleted
+  // after 7 days, per product requirement.
+  const oldNotifications = await prisma.notification.deleteMany({
+    where: { createdAt: { lt: new Date(now - SEVEN_DAYS_MS) } },
+  });
 
   return {
     revokedTokens: revokedTokens.count,
@@ -32,5 +38,6 @@ export const runRetentionCleanup = async () => {
     oldAuditLogs: oldAuditLogs.count,
     usedResetTokens: usedResetTokens.count,
     oldNotificationReads: oldNotificationReads.count,
+    oldNotifications: oldNotifications.count,
   };
 };

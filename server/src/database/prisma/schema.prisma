@@ -104,6 +104,7 @@ model User {
   refreshTokens      RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   loginLogs          LoginLog[]
+  notifications      Notification[]
 
   @@index([lineManagerId])
 }
@@ -401,6 +402,25 @@ model ReportVisit {
   dailyReport            DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
 
   @@index([dailyReportId])
+}
+
+// Real, persisted notifications — one row per user per event. Replaces the
+// old "derive from live entity state" approach, which is why users could
+// see nothing (very limited coverage) and why 7-day auto-delete wasn't
+// possible before (nothing was actually stored).
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  label     String
+  link      String
+  isOverdue Boolean  @default(false)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
 }
 
 model AuditLog {

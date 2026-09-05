@@ -116,7 +116,9 @@ const CustomerDetail = () => {
   // ACTIVE does it become request-only (account-profile fields are always
   // request-only for them, enforced server-side).
   const isActiveAccount = customer.status === STATUS.ACTIVE;
-  const canDirectEdit = isLmOrAdmin || ((role === ROLES.KAM || role === ROLES.SALES_COORDINATOR) && !isActiveAccount);
+  // Sales Coordinators never get direct edit — their changes always route
+  // through an LM-approved edit request, matching the server-side rule.
+  const canDirectEdit = isLmOrAdmin || (role === ROLES.KAM && !isActiveAccount);
   const restrictToRecommendationFields = !isLmOrAdmin && canDirectEdit;
   const canEditProfile = role === ROLES.SALES_COORDINATOR || role === ROLES.KAM || isLmOrAdmin;
   const isProvisionalActive =

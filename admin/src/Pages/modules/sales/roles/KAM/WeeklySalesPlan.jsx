@@ -253,6 +253,35 @@ const WeeklySalesPlan = () => {
     setPlan((prev) => ({ ...prev, [key]: [...prev[key], visitData] }));
   };
 
+  // Saves the visit to the server immediately when added from the modal,
+  // instead of leaving it only in local state until the person separately
+  // presses "Save Weekly Plan". AddVisitModal already validates date/name/
+  // purpose before calling this, so it's safe to persist right away.
+  const addVisitAndSave = async (section, visitData) => {
+    const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
+    const updatedPlan = { ...plan, [key]: [...plan[key], visitData] };
+    setIsSaving(true);
+    try {
+      const sanitizedPlan = {
+        ...updatedPlan,
+        existingVisits: updatedPlan.existingVisits.map(sanitizeVisit),
+        prospectVisits: updatedPlan.prospectVisits.map(sanitizeVisit),
+      };
+      const saved = await savePlan(sanitizedPlan);
+      setPlan(saved);
+      setEditingRowIds(new Set());
+      setAllPlans((prev) => {
+        const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
+        return [saved, ...others].sort((a, b) => (a.weekStartDate < b.weekStartDate ? 1 : -1));
+      });
+      showToast("Visit added", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to add visit", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const updateVisit = (section, id, updated) => {
     const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
     setPlan((prev) => ({ ...prev, [key]: prev[key].map((v) => (v.id === id ? updated : v)) }));
@@ -534,8 +563,8 @@ const sanitizeVisit = (v) => ({
           section={activeTab}
           onClose={() => setShowAddModal(false)}
           onSave={(visitData) => {
-            addVisit(activeTab, visitData);
             setShowAddModal(false);
+            addVisitAndSave(activeTab, visitData);
           }}
         />
       )}
