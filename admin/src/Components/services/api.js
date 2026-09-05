@@ -1,5 +1,5 @@
 // src/Components/services/api.js
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 const REQUEST_TIMEOUT_MS = 10000;
 
 const STATE_CHANGING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];

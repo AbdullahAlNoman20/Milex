@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/services/customerService.js
-import { request } from '../../../../Components/services/api';
+import { request, API_BASE_URL } from '../../../../Components/services/api';
 
 export const fetchCustomers = async (params = {}) => {
   const query = new URLSearchParams(params).toString();
@@ -164,7 +164,10 @@ export const searchCustomers = async (search) => {
 
 export const getDocumentSignedUrl = async (storageKey) => {
   const { data } = await request(`/files/${encodeURIComponent(storageKey)}/signed-url`);
-  return data.url;
+  // Backend now returns a relative path (self-hosted file server), not a
+  // full external URL like Supabase used to give — prefix the API origin
+  // so window.open() actually hits the API server, not the frontend's own.
+  return data.url.startsWith('http') ? data.url : `${API_BASE_URL.replace(/\/api\/v1$/, '')}${data.url}`;
 };
 
 export const updateFinalProfile = async (id, payload) => {
