@@ -1,11 +1,9 @@
 -- DropIndex
-DROP INDEX "customer_account_name_trgm_idx";
-
+DROP INDEX IF EXISTS "customer_account_name_trgm_idx";
 -- DropIndex
-DROP INDEX "customer_barcode_trgm_idx";
-
+DROP INDEX IF EXISTS "customer_barcode_trgm_idx";
 -- DropIndex
-DROP INDEX "customer_rate_ref_trgm_idx";
+DROP INDEX IF EXISTS "customer_rate_ref_trgm_idx";
 
 -- AlterTable
 ALTER TABLE "Customer" ADD COLUMN     "isDeleted" BOOLEAN NOT NULL DEFAULT false,

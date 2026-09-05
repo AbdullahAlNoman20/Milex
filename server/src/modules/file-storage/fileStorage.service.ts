@@ -66,7 +66,10 @@ export const getSignedDownloadUrl = async (storageKey: string, expiresInSeconds 
     .update(`${storageKey}.${exp}`)
     .digest('hex');
 
-  return `/files/download/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
+  // Must include the /api/v1 prefix — this route is mounted at
+  // /api/v1/files in app.ts, and the earlier version of this returned a
+  // path missing that prefix, which caused every "View" click to 404.
+  return `/api/v1/files/download/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
 };
 
 export const verifyDownloadSignature = (storageKey: string, exp: string, sig: string): boolean => {

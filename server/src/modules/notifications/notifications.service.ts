@@ -1,146 +1,69 @@
-// server/src/modules/notifications/notifications.service.ts
+// server/src/modules/notifications/notifications.service.ts — FULL REPLACE
 import { prisma } from '../../config/db';
-import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
-import { humanizeStatus } from '../../common/utils/humanize.util';
+import { emitNotificationToUser } from '../../config/socket';
 
-export const getNotificationsForUser = async (userId: string, role: string, limit = 8) => {
-  const items: { id: string; label: string; link: string; isOverdue?: boolean }[] = [];
+const NOTIFICATION_RETENTION_DAYS = 7;
 
- if (role === 'LINE_MANAGER') {
-    const [pending, pendingFieldRequests, recentPlanChanges] = await Promise.all([
-      prisma.customer.findMany({
-        where: {
-          status: {
-            in: [
-              CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
-              CUSTOMER_STATUS.INFO_UPDATE_PENDING_LM_APPROVAL,
-              CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED,
-              CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
-            ],
-          },
-          handledBy: { lineManagerId: userId },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 20,
-      }),
-      // Field-edit requests from KAM/SC waiting on this Line Manager's decision.
-      prisma.fieldChangeRequest.findMany({
-        where: { approved: null, customer: { handledBy: { lineManagerId: userId } } },
-        include: { customer: { select: { accountName: true, barcode: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }),
-      // Weekly plans recently created/edited/submitted by KAMs under this LM.
-      prisma.weeklyPlan.findMany({
-        where: {
-          kam: { lineManagerId: userId },
-          updatedAt: { gte: new Date(Date.now() - 3 * 86400000) },
-        },
-        include: { kam: { select: { name: true } } },
-        orderBy: { updatedAt: 'desc' },
-        take: 20,
-      }),
-    ]);
+export interface NotificationInput {
+  label: string;
+  link: string;
+  isOverdue?: boolean;
+  type?: string;
+}
 
-    recentPlanChanges.forEach((p) => {
-      items.push({
-        id: `wp-${p.id}-${p.updatedAt.getTime()}`,
-        label: `${p.kam.name} — Weekly Plan Updated (Week of ${p.weekStartDate})`,
-        link: `/app/team-reports`,
-      });
+// Central place every workflow action calls to (a) persist a real
+// notification row per recipient and (b) push the realtime socket ping that
+// triggers the bell + sound on the frontend. Never blocks/throws into the
+// caller's main operation — a notification failure must never break the
+// actual business action.
+export const createNotificationsForUsers = async (userIds: string[], data: NotificationInput): Promise<void> => {
+  const uniqueIds = [...new Set(userIds)].filter(Boolean);
+  if (uniqueIds.length === 0) return;
+  try {
+    await prisma.notification.createMany({
+      data: uniqueIds.map((userId) => ({
+        userId,
+        type: data.type || 'WORKFLOW',
+        label: data.label.slice(0, 300),
+        link: data.link,
+        isOverdue: !!data.isOverdue,
+      })),
     });
-
-    pending.forEach((c) => {
-      const ageDays = (Date.now() - c.updatedAt.getTime()) / 86400000;
-      items.push({
-        id: `cust-${c.id}`,
-        label: `${c.accountName} — ${humanizeStatus(c.status)}`,
-        link: `/app/customers/${c.barcode}`,
-        isOverdue: ageDays > 2,
-      });
-    });
-
-    pendingFieldRequests.forEach((r) => {
-      const ageDays = (Date.now() - r.createdAt.getTime()) / 86400000;
-      items.push({
-        id: `fcr-${r.id}`,
-        label: `${r.customer.accountName} — Edit Request: ${r.fieldLabel}`,
-        link: `/app/customers/${r.customer.barcode}`,
-        isOverdue: ageDays > 2,
-      });
-    });
+    uniqueIds.forEach((id) => emitNotificationToUser(id));
+  } catch (err) {
+    console.warn('[notifications] createNotificationsForUsers failed (non-fatal):', (err as Error)?.message);
   }
+};
 
-  if (role === 'KAM') {
-    const mine = await prisma.customer.findMany({
-      where: {
-        handledById: userId,
-        status: {
-          in: [
-            CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
-            CUSTOMER_STATUS.AGREEMENT_SENT_AWAITING_SIGNATURE,
-            CUSTOMER_STATUS.PROVISIONAL_DOCS_PENDING,
-          ],
-        },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 20,
-    });
-    mine.forEach((c) => {
-      const ageDays = (Date.now() - c.updatedAt.getTime()) / 86400000;
-      items.push({
-        id: `cust-${c.id}`,
-        label: `${c.accountName} — ${humanizeStatus(c.status)}`,
-        link: `/app/customers/${c.barcode}`,
-        isOverdue: ageDays > 2,
-      });
-    });
-  }
+export const getNotificationsForUser = async (userId: string, _role: string, limit = 8) => {
+  const cutoff = new Date(Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const [items, unreadCount] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId, createdAt: { gte: cutoff } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    }),
+    prisma.notification.count({ where: { userId, createdAt: { gte: cutoff }, isRead: false } }),
+  ]);
 
-  // Any role that can request field edits (KAM/SC) sees the Line Manager's
-  // decision on their own requests, with the customer name attached.
-  if (role === 'KAM' || role === 'SALES_COORDINATOR') {
-    const decided = await prisma.fieldChangeRequest.findMany({
-      where: {
-        requestedById: userId,
-        approved: { not: null },
-        decidedAt: { gte: new Date(Date.now() - 3 * 86400000) },
-      },
-      include: { customer: { select: { accountName: true, barcode: true } } },
-      orderBy: { decidedAt: 'desc' },
-      take: 20,
-    });
-    decided.forEach((r) => {
-      items.push({
-        id: `fcr-decided-${r.id}`,
-        label: `${r.customer.accountName} — Edit Request ${r.approved ? 'Approved' : 'Rejected'}: ${r.fieldLabel}`,
-        link: `/app/customers/${r.customer.barcode}`,
-      });
-    });
-  }
-
-  const reads = items.length
-    ? await prisma.notificationRead.findMany({ where: { userId, notificationId: { in: items.map((i) => i.id) } } })
-    : [];
-  const readIds = new Set(reads.map((r) => r.notificationId));
-  const withRead = items.map((i) => ({ ...i, isRead: readIds.has(i.id) }));
-  const unreadCount = withRead.filter((i) => !i.isRead).length;
-
-  return { items: withRead.slice(0, limit), unreadCount };
+  return {
+    items: items.map((n) => ({
+      id: n.id,
+      label: n.label,
+      link: n.link,
+      isOverdue: n.isOverdue,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+    })),
+    unreadCount,
+  };
 };
 
 export const markNotificationRead = async (userId: string, notificationId: string) => {
-  await prisma.notificationRead.upsert({
-    where: { userId_notificationId: { userId, notificationId } },
-    update: {},
-    create: { userId, notificationId },
-  });
+  await prisma.notification.updateMany({ where: { id: notificationId, userId }, data: { isRead: true } });
 };
 
 export const markNotificationsRead = async (userId: string, ids: string[]) => {
   if (ids.length === 0) return;
-  await prisma.notificationRead.createMany({
-    data: ids.map((notificationId) => ({ userId, notificationId })),
-    skipDuplicates: true,
-  });
+  await prisma.notification.updateMany({ where: { id: { in: ids }, userId }, data: { isRead: true } });
 };

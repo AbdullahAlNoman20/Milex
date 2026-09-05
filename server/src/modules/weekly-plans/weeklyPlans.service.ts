@@ -1,16 +1,22 @@
 // server/src/modules/weekly-plans/weeklyPlans.service.ts — REPLACE ENTIRE FILE
 import { prisma } from '../../config/db';
 import { logAudit } from '../../common/utils/auditLog.util';
-import { emitNotificationToUser } from '../../config/socket';
+import { createNotificationsForUsers } from '../notifications/notifications.service';
 
-// Pings the KAM's assigned Line Manager any time a weekly plan is created,
-// edited, or submitted — a failure here must never break the actual save.
-export const notifyLineManagerOfPlanChange = async (kamId: string) => {
+// Notifies the KAM's assigned Line Manager any time a weekly plan is
+// created, edited, or submitted — a failure here must never break the
+// actual save.
+export const notifyLineManagerOfPlanChange = async (kamId: string, label?: string) => {
   try {
-    const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
-    if (kam?.lineManagerId) emitNotificationToUser(kam.lineManagerId);
+    const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true, name: true } });
+    if (kam?.lineManagerId) {
+      await createNotificationsForUsers([kam.lineManagerId], {
+        label: label || `${kam.name} updated their weekly plan`,
+        link: '/app/team-reports',
+      });
+    }
   } catch (err) {
-    console.warn('[socket] notifyLineManagerOfPlanChange failed (non-fatal):', (err as Error)?.message);
+    console.warn('[notifications] notifyLineManagerOfPlanChange failed (non-fatal):', (err as Error)?.message);
   }
 };
 
@@ -143,6 +149,12 @@ export const reviewPlan = async (planId: string, approved: boolean, comments: st
     actorId: lmId,
     beforeState: { status: before.status },
     afterState: { status: updated.status },
+  });
+  await createNotificationsForUsers([updated.kamId], {
+    label: approved
+      ? `Your weekly plan for week of ${updated.weekStartDate} was approved`
+      : `Your weekly plan for week of ${updated.weekStartDate} needs revision`,
+    link: '/app/weekly-plans',
   });
   const [withOutcomes] = await attachVisitOutcomes([updated]);
   return withOutcomes;

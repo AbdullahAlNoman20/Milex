@@ -451,10 +451,11 @@ const TeamReportsPage = () => {
                       <div key={r.id} className="border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-700 mb-2">{r.date}</p>
                         <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse min-w-[520px]">
+                          <table className="w-full text-left border-collapse min-w-[620px]">
                             <thead>
                               <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
                                 <th className="py-2 pr-3">Customer Name</th>
+                                <th className="py-2 pr-3">Purpose</th>
                                 <th className="py-2 pr-3">Status</th>
                                 <th className="py-2 pr-3">Reason (if not completed)</th>
                                 <th className="py-2">Outcome / Notes</th>
@@ -464,6 +465,7 @@ const TeamReportsPage = () => {
                               {r.visits.map((v) => (
                                 <tr key={v.id} className="text-xs align-top">
                                   <td className="py-2.5 pr-3 font-semibold text-slate-700">{v.customerName}</td>
+                                  <td className="py-2.5 pr-3 text-slate-500">{v.purpose || "—"}</td>
                                   <td className="py-2.5 pr-3">
                                     <StatusPill status={v.completed ? "Completed" : "Not Completed"} />
                                   </td>
