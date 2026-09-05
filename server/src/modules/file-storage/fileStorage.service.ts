@@ -1,85 +1,87 @@
-// server/src/modules/file-storage/fileStorage.service.ts
-
-import { createClient } from '@supabase/supabase-js';
-
+// server/src/modules/file-storage/fileStorage.service.ts (FULL REPLACEMENT — Supabase → local disk)
+// NOTE: function names/signatures kept identical (uploadFileToSupabase, deleteFileFromSupabase,
+// getSignedDownloadUrl) so onboarding.controller.ts / any other caller needs ZERO changes.
+import fs from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-
 import { env } from '../../config/env';
-
 import { validateUploadedFile } from '../../common/utils/fileValidation.util';
 
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+const UPLOAD_DIR = path.resolve(env.UPLOAD_DIR);
 
-// Files renamed on upload: UUID-based key, original name kept in DB only.
+const ensureUploadDir = async () => {
+  await fs.mkdir(UPLOAD_DIR, { recursive: true, mode: 0o750 });
+};
+
+const resolveWithinUploadDir = (storageKey: string): string => {
+  const full = path.join(UPLOAD_DIR, path.basename(storageKey));
+  const resolved = path.resolve(full);
+  if (!resolved.startsWith(UPLOAD_DIR + path.sep)) {
+    throw { statusCode: 400, code: 'INVALID_PATH', message: 'Invalid file reference' };
+  }
+  return resolved;
+};
 
 export const uploadFileToSupabase = async (buffer: Buffer, originalName: string) => {
-
   const validation = await validateUploadedFile(buffer, originalName);
-
   if (!validation.valid) {
-
     throw { statusCode: 400, code: 'INVALID_FILE', message: validation.reason };
-
   }
 
   const ext = originalName.includes('.') ? originalName.slice(originalName.lastIndexOf('.')) : '';
-
   const key = `${uuidv4()}-${Date.now()}${ext}`;
 
-  const { error } = await supabase.storage.from(env.SUPABASE_BUCKET).upload(key, buffer, {
-
-    contentType: validation.detectedMime,
-
-    upsert: false,
-
-  });
-
-  if (error) {
-
-    throw { statusCode: 502, code: 'UPLOAD_FAILED', message: 'File upload failed, please try again' };
-
-  }
+  await ensureUploadDir();
+  const destPath = resolveWithinUploadDir(key);
+  await fs.writeFile(destPath, buffer, { mode: 0o640 });
 
   return { storageKey: key, mimeType: validation.detectedMime!, sizeBytes: buffer.length };
-
 };
 
-// Best-effort cleanup for replaced/superseded files — never blocks the
-
-// calling operation if the delete fails (e.g. key already gone).
-
+// Best-effort cleanup — never blocks the calling operation if delete fails.
 export const deleteFileFromSupabase = async (storageKey: string): Promise<void> => {
-
   try {
-
-    await supabase.storage.from(env.SUPABASE_BUCKET).remove([storageKey]);
-
+    const fullPath = resolveWithinUploadDir(storageKey);
+    await fs.unlink(fullPath);
   } catch {
-
     /* non-fatal — orphaned file cleanup is best-effort */
-
   }
-
 };
 
-
-
-// Access via signed expiring URLs only — bucket stays private, never a public permanent link.
-
+// HMAC-signed, time-limited download reference. No public/permanent link —
+// same security property the old Supabase signed URL gave us.
+// Returns a RELATIVE path; the frontend already prefixes VITE_API_BASE_URL.
 export const getSignedDownloadUrl = async (storageKey: string, expiresInSeconds = 300) => {
-
-  const { data, error } = await supabase.storage
-
-    .from(env.SUPABASE_BUCKET)
-
-    .createSignedUrl(storageKey, expiresInSeconds);
-
-  if (error || !data) {
-
-    throw { statusCode: 502, code: 'SIGN_FAILED', message: 'Could not generate a download link' };
-
+  const fullPath = resolveWithinUploadDir(storageKey);
+  try {
+    await fs.access(fullPath);
+  } catch {
+    throw { statusCode: 404, code: 'FILE_NOT_FOUND', message: 'File not found' };
   }
 
-  return data.signedUrl;
+  const exp = Date.now() + expiresInSeconds * 1000;
+  const sig = crypto
+    .createHmac('sha256', env.JWT_ACCESS_SECRET)
+    .update(`${storageKey}.${exp}`)
+    .digest('hex');
 
+  return `/files/download/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
 };
+
+export const verifyDownloadSignature = (storageKey: string, exp: string, sig: string): boolean => {
+  const expNum = Number(exp);
+  if (!expNum || Date.now() > expNum) return false;
+
+  const expected = crypto
+    .createHmac('sha256', env.JWT_ACCESS_SECRET)
+    .update(`${storageKey}.${exp}`)
+    .digest('hex');
+
+  const a = Buffer.from(sig, 'hex');
+  const b = Buffer.from(expected, 'hex');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+};
+
+export const streamFile = (storageKey: string) => resolveWithinUploadDir(storageKey);
