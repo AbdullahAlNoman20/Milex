@@ -1,6 +1,7 @@
 // src/Pages/modules/sales/layout/SalesLayout.jsx
 import { Outlet } from 'react-router-dom';
 import { SalesProvider } from '../context/SalesContext';
+import { NotificationProvider } from '../../../../Components/context/NotificationContext';
 import SalesSidebar from './SalesSidebar';
 import React,{ useEffect, useState } from 'react';
 import Toast from '../../../../Components/Shared/Toast';
@@ -97,7 +98,9 @@ const SalesLayoutInner = () => {
 
 const SalesLayout = () => (
   <SalesProvider>
-    <SalesLayoutInner />
+    <NotificationProvider>
+      <SalesLayoutInner />
+    </NotificationProvider>
   </SalesProvider>
 );
 

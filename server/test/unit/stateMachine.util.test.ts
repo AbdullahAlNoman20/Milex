@@ -12,7 +12,13 @@ describe('CUSTOMER_STATUS_TRANSITIONS', () => {
     expect(allowed).toContain(CUSTOMER_STATUS.PROVISIONAL_EXPIRED);
   });
 
-  it('has no outgoing transitions from a terminal expired state', () => {
-    expect(CUSTOMER_STATUS_TRANSITIONS[CUSTOMER_STATUS.PROVISIONAL_EXPIRED]).toEqual([]);
+  it('allows requesting an extension even after the provisional period has expired (grace period)', () => {
+    const allowed = CUSTOMER_STATUS_TRANSITIONS[CUSTOMER_STATUS.PROVISIONAL_EXPIRED];
+    expect(allowed).toContain(CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED);
   });
-}); 
+
+  it('does not allow an expired account to jump straight to active', () => {
+    const allowed = CUSTOMER_STATUS_TRANSITIONS[CUSTOMER_STATUS.PROVISIONAL_EXPIRED];
+    expect(allowed).not.toContain(CUSTOMER_STATUS.ACTIVE_ACCOUNT);
+  });
+});

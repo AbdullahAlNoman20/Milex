@@ -34,6 +34,7 @@ const PROVISIONAL_COUNTDOWN_STATUSES = [
   STATUS.PROVISIONAL_ACTIVE,
   STATUS.PROVISIONAL_EXTENSION_REQUESTED,
   STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+  STATUS.PROVISIONAL_EXPIRED,
 ];
 
 const Waiting = ({ children }) => (
@@ -124,6 +125,9 @@ const CustomerDetail = () => {
   const isProvisionalActive =
     customer.accountProfileType === "PROVISIONAL" &&
     customer.status === STATUS.PROVISIONAL_ACTIVE;
+  const isProvisionalExpired =
+    customer.accountProfileType === "PROVISIONAL" &&
+    customer.status === STATUS.PROVISIONAL_EXPIRED;
   const canUploadDocs =
     isProvisionalActive && customer.offerAccepted && customer.agreementSent;
   const isEditingProfile = canUploadDocs && isDocHandler;
@@ -146,7 +150,10 @@ const CustomerDetail = () => {
       return <RateApprovalPanel customer={customer} />;
     }
 
-    if (isProvisionalActive) {
+    // Even after the 21-day window auto-expires, the same offer/agreement/
+    // extension panels still apply — the account isn't dead, it's just
+    // waiting on a Line-Manager-approved extension to reopen the window.
+    if (isProvisionalActive || isProvisionalExpired) {
       if (role === ROLES.SALES_COORDINATOR) {
         if (!customer.offerSent)
           return <OfferLetterPanel customer={customer} />;

@@ -57,6 +57,8 @@ export const getWorkflowStageLabel = (customer) => {
       if (!customer.offerAccepted) return "Waiting for Customer's Feedback (via KAM)";
       if (!customer.agreementSent) return 'Waiting for Sales Coordinator to Collect Agreement';
       return 'Waiting for Document Upload & Final Onboarding';
+    case STATUS.PROVISIONAL_EXPIRED:
+      return 'Provisional Period Expired — KAM Can Request a 5-Day Extension';
     case STATUS.ACTIVE:
       return 'Completed — Active Customer';
     default:
