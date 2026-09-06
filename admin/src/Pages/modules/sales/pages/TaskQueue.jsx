@@ -31,7 +31,7 @@ const TaskQueue = () => {
   if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
 
   return (
-    <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+    <div className="max-w-7xl mx-3 sm:mx-auto animate-in fade-in duration-300">
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Task Queue & In-Progress Workflows</h2>
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[720px]">
@@ -56,7 +56,15 @@ const TaskQueue = () => {
               pagedCustomers.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
-                  <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
+                  <td className="p-4 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => openCustomer(c)}
+                      className="text-slate-800 hover:text-emerald-700 hover:underline transition text-left"
+                    >
+                      {c.accountName}
+                    </button>
+                  </td>
                   <td className="p-4">
                     <StatusBadge status={c.status} size="sm" />
                   </td>

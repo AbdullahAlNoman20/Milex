@@ -1,12 +1,9 @@
-// admin/src/Components/Shared/NotificationBell.jsx
-import { useState, useRef, useEffect, useCallback } from 'react';
+// admin/src/Components/Shared/NotificationBell.jsx — FULL REPLACE
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
-import { listNotifications, markNotificationRead } from '../services/notificationService';
-import { getSocket } from '../services/socketService';
-
-const REFRESH_MS = 60000; // fallback poll only — socket handles instant updates
-const BELL_LIMIT = 8;
+import { markNotificationRead } from '../services/notificationService';
+import { useNotifications } from '../hooks/useNotifications';
 
 // Put a file named notification-ping.mp3 in admin/public/sounds/ — a short
 // (under 1 second) soft "ping"/"pop" style sound works best; avoid long or
@@ -25,37 +22,20 @@ const playNotificationSound = () => {
 };
 
 const NotificationBell = () => {
-  const [items, setItems] = useState([]);
-  const [count, setCount] = useState(0);
+  const { items, count, refresh, markReadLocally } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
+  const prevCountRef = useRef(count);
 
-  const refresh = useCallback(() => {
-    listNotifications(BELL_LIMIT)
-      .then((data) => {
-        setItems(data.items || []);
-        setCount(data.count || 0);
-      })
-      .catch(() => {});
-  }, []);
-
+  // Play the sound the moment the shared unread count goes UP — this fires
+  // regardless of which component triggered the refresh (bell's own poll,
+  // socket push, or the Notifications page), so a brand-new item is never
+  // silently missed.
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, REFRESH_MS);
-
-    const socket = getSocket();
-    const handleNew = () => {
-      playNotificationSound();
-      refresh();
-    };
-    socket.on('notification:new', handleNew);
-
-    return () => {
-      clearInterval(id);
-      socket.off('notification:new', handleNew);
-    };
-  }, [refresh]);
+    if (count > prevCountRef.current) playNotificationSound();
+    prevCountRef.current = count;
+  }, [count]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -68,9 +48,8 @@ const NotificationBell = () => {
   const handleSelect = async (n) => {
     setOpen(false);
     if (!n.isRead) {
-      setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, isRead: true } : i)));
-      setCount((c) => Math.max(0, c - 1));
-      markNotificationRead(n.id).catch(() => {});
+      markReadLocally([n.id]);
+      markNotificationRead(n.id).catch(() => refresh());
     }
     navigate(n.link);
   };

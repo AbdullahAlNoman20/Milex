@@ -51,24 +51,24 @@ const SalesDashboard = () => {
   if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
 
   return (
-    <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-      <div className="mb-6 flex flex-wrap justify-between items-end gap-3">
+    <div className="max-w-7xl mx-3 sm:mx-auto animate-in fade-in duration-300">
+      <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-end gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Overview</h2>
-          <p className="text-sm text-slate-500 mt-1">Key Account Performance & Activity</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Overview</h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">Key Account Performance & Activity</p>
         </div>
         {hasPermission(currentUser?.role, PERMISSIONS.CREATE_RECOMMENDATION) && (
           <button
             type="button"
             onClick={() => navigate('/app/recommendations/new')}
-            className="bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition flex items-center"
+            className="w-full sm:w-auto bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm shadow-md hover:bg-emerald-800 transition flex items-center justify-center"
           >
             <Plus size={16} className="mr-2" /> New Recommendation
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <button
           type="button"
           onClick={() => navigate('/app/customers?tab=customer')}
@@ -132,18 +132,22 @@ const SalesDashboard = () => {
             <div className="p-8 text-center text-slate-400 font-medium">No tasks pending for your role</div>
           ) : (
             pendingTasks.map((task) => (
-              <div key={task.id} className="p-4 hover:bg-slate-50 transition flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-800 truncate">{task.accountName}</p>
+              <div key={task.id} className="p-3 sm:p-4 hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                <button
+                  type="button"
+                  onClick={() => openCustomer(task)}
+                  className="min-w-0 text-left"
+                >
+                  <p className="font-bold text-slate-800 truncate hover:text-emerald-700 transition">{task.accountName}</p>
                   <div className="flex items-center mt-1 gap-3 flex-wrap">
                     <span className="font-mono text-xs text-slate-500 border rounded px-1.5">{task.barcode}</span>
                     <StatusBadge status={task.status} size="sm" />
                   </div>
-                </div>
+                </button>
                 <button
                   type="button"
                   onClick={() => openCustomer(task)}
-                  className="shrink-0 text-emerald-600 font-semibold text-sm hover:underline border px-4 py-1.5 rounded border-emerald-200 hover:bg-emerald-50 transition"
+                  className="shrink-0 text-emerald-600 font-semibold text-sm hover:underline border px-4 py-1.5 rounded border-emerald-200 hover:bg-emerald-50 transition w-full sm:w-auto text-center"
                 >
                   Process Task
                 </button>
