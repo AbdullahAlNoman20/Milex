@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/LineManager/WeeklyPlanReviewList.jsx
-import  { useState, useEffect, useCallback } from 'react';
+import  { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { listPlansForReview, reviewPlan } from '../../services/weeklyPlanService';
@@ -11,6 +11,8 @@ const WeeklyPlanReviewList = () => {
   const [plans, setPlans] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [comments, setComments] = useState({});
+  const [reviewingIds, setReviewingIds] = useState(() => new Set());
+  const inFlightIdsRef = useRef(new Set());
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
 
@@ -29,12 +31,22 @@ const WeeklyPlanReviewList = () => {
   }, [refresh]);
 
   const handleReview = async (id, approved) => {
+    if (inFlightIdsRef.current.has(id)) return;
+    inFlightIdsRef.current.add(id);
+    setReviewingIds((prev) => new Set(prev).add(id));
     try {
       await reviewPlan(id, { approved, comments: comments[id] || '' });
       showToast(approved ? 'Plan approved' : 'Feedback sent to KAM for revision', 'success');
       refresh();
     } catch (err) {
       showToast(err?.message || 'Failed to update plan', 'error');
+    } finally {
+      inFlightIdsRef.current.delete(id);
+      setReviewingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -134,15 +146,17 @@ const WeeklyPlanReviewList = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
+                    disabled={reviewingIds.has(p.id)}
                     onClick={() => handleReview(p.id, true)}
-                    className="bg-emerald-500 text-white font-bold py-2.5 rounded-lg flex justify-center items-center text-sm shadow hover:bg-emerald-600 transition"
+                    className="bg-emerald-500 text-white font-bold py-2.5 rounded-lg flex justify-center items-center text-sm shadow hover:bg-emerald-600 transition disabled:opacity-50"
                   >
                     <CheckCircle size={16} className="mr-1.5" /> Approve
                   </button>
                   <button
                     type="button"
+                    disabled={reviewingIds.has(p.id)}
                     onClick={() => handleReview(p.id, false)}
-                    className="bg-white border border-red-400 text-red-500 font-bold py-2.5 rounded-lg flex justify-center items-center text-sm hover:bg-red-50 transition"
+                    className="bg-white border border-red-400 text-red-500 font-bold py-2.5 rounded-lg flex justify-center items-center text-sm hover:bg-red-50 transition disabled:opacity-50"
                   >
                     <XCircle size={16} className="mr-1.5" /> Request Revision
                   </button>

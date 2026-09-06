@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/Admin/AdminOverview.jsx — REPLACE ENTIRE FILE
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Users,
   Plus,
@@ -154,10 +154,12 @@ const AdminOverview = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [isCreating, setIsCreating] = useState(false);
+  const createLockRef = useRef(false);
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
   const [passwordTargetId, setPasswordTargetId] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const savePasswordLockRef = useRef(false);
   const [requireChangeOnLogin, setRequireChangeOnLogin] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -218,10 +220,11 @@ const AdminOverview = () => {
   const pagedUsers = filteredUsers.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   const handleCreate = async () => {
-    if (isCreating) return;
+    if (createLockRef.current) return;
     if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
       return showToast('Name, email and password are required', 'warning');
     }
+    createLockRef.current = true;
     setIsCreating(true);
     try {
       await createUserAdmin({
@@ -239,6 +242,7 @@ const AdminOverview = () => {
     } catch (err) {
       showToast(err?.message || 'Failed to create user', 'error');
     } finally {
+      createLockRef.current = false;
       setIsCreating(false);
     }
   };
@@ -275,7 +279,9 @@ const AdminOverview = () => {
   };
 
   const handleSavePassword = async () => {
+    if (savePasswordLockRef.current) return;
     if (!newPassword.trim()) return showToast('Enter a new password', 'warning');
+    savePasswordLockRef.current = true;
     setIsSavingPassword(true);
     try {
       await setUserPasswordAdmin(passwordTargetId, newPassword);
@@ -286,6 +292,7 @@ const AdminOverview = () => {
     } catch (err) {
       showToast(err?.message || 'Failed to set password', 'error');
     } finally {
+      savePasswordLockRef.current = false;
       setIsSavingPassword(false);
     }
   };

@@ -158,6 +158,7 @@ const NewRecommendationWizard = () => {
       .catch(() => setCarrierOptions(['DHL', 'FedEx', 'UPS', 'Aramex', 'TNT Express']));
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -389,7 +390,8 @@ const NewRecommendationWizard = () => {
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setIsSubmitting(true);
     const flatContacts = [
       { type: "SENIOR_MANAGEMENT", ...contacts.senior },
@@ -418,6 +420,7 @@ const NewRecommendationWizard = () => {
     } catch {
       /* toast already shown by addCustomer */
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

@@ -219,7 +219,7 @@ const CustomerDetail = () => {
   };
 
   return (
-    <div className="max-w-[1400px] mx-3 sm:mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="max-w-[1400px] px-3 mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
       <button
         type="button"
         onClick={() => navigate(-1)}

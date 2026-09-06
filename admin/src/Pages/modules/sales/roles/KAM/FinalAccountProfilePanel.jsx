@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/KAM/FinalAccountProfilePanel.jsx
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { ClipboardEdit, FileCheck, Loader2 } from 'lucide-react';
 import { updateFinalProfile, setAccountConfigMode, submitFinalOnboardingRegular, submitFinalOnboarding } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -50,6 +50,7 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
   });
   const [isSavingField, setIsSavingField] = useState(null);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
+  const submitFinalLockRef = useRef(false);
 
   const handleModeChange = async (newMode) => {
     if (newMode === mode) return;
@@ -85,7 +86,8 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
   const hasAnyDocs = documents.length > 0;
 
   const handleSubmitFinal = async () => {
-    if (isSubmittingFinal) return;
+    if (submitFinalLockRef.current) return;
+    submitFinalLockRef.current = true;
     setIsSubmittingFinal(true);
     try {
       if (mode === 'REGULAR') {
@@ -101,6 +103,7 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
     } catch (err) {
       showToast(err?.message || 'Submission failed', 'error');
     } finally {
+      submitFinalLockRef.current = false;
       setIsSubmittingFinal(false);
     }
   };

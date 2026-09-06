@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/LineManager/FinalOnboardingReviewPanel.jsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { decideFinalOnboarding, decideTimeExtension } from '../../services/customerService';
@@ -10,17 +10,19 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
   const [comments, setComments] = useState('');
   const [grantedDays, setGrantedDays] = useState('5');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const pendingExtension = (customer.extensionRequests || []).find((r) => r.approved === null);
   const isFinalReview = customer.status === 'PROVISIONAL_FINAL_REVIEW_PENDING';
   const isExtensionRequested = customer.status === 'PROVISIONAL_EXTENSION_REQUESTED';
 
   const handleExtensionDecision = async (approve) => {
-    if (!pendingExtension) return;
+    if (submitLockRef.current || !pendingExtension) return;
     const days = Number(grantedDays);
     if (approve && (!Number.isFinite(days) || days < 1)) {
       return showToast('Enter valid granted days', 'warning');
     }
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = await decideTimeExtension(pendingExtension.id, approve, approve ? days : undefined);
@@ -29,14 +31,17 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
     } catch (err) {
       showToast(err?.message || 'Failed to record decision', 'error');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleFinalDecision = async (approve) => {
+    if (submitLockRef.current) return;
     if (!approve && !isRequired(comments)) {
       return showToast('Comments are required when rejecting', 'warning');
     }
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = await decideFinalOnboarding(customer.id, approve, comments);
@@ -46,6 +51,7 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
     } catch (err) {
       showToast(err?.message || 'Failed to record decision', 'error');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

@@ -1,5 +1,5 @@
-// admin/src/Components/Shared/ChangePasswordModal.jsx 
-import { useState } from 'react';
+// admin/src/Components/Shared/ChangePasswordModal.jsx
+import { useState, useRef } from 'react';
 import { X, KeyRound, Loader2 } from 'lucide-react';
 import { changePassword } from '../services/authService';
 import { useToast } from '../hooks/useToast';
@@ -12,15 +12,17 @@ const ChangePasswordModal = ({ onClose }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
     if (!currentPassword || !newPassword) {
       return showToast('Fill in all fields', 'warning');
     }
     if (newPassword !== confirmPassword) {
       return showToast('New password and confirmation do not match', 'warning');
     }
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       await changePassword(currentPassword, newPassword);
@@ -30,6 +32,7 @@ const ChangePasswordModal = ({ onClose }) => {
     } catch (err) {
       showToast(err?.message || 'Failed to change password', 'error');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

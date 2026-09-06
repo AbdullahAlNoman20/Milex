@@ -1,5 +1,5 @@
 // FILE: admin/src/Pages/modules/sales/roles/KAM/WeeklySalesPlan.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Trash2, Save, Pencil, ChevronDown, Loader2, X } from "lucide-react";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import { todayLocalISO } from "../../../../../Components/utils/date";
@@ -223,6 +223,7 @@ const WeeklySalesPlan = () => {
   const [editingRowIds, setEditingRowIds] = useState(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const saveLockRef = useRef(false);
   const [activeTab, setActiveTab] = useState(VISIT_SECTIONS.EXISTING);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPreviousPlans, setShowPreviousPlans] = useState(false);
@@ -258,6 +259,8 @@ const WeeklySalesPlan = () => {
   // presses "Save Weekly Plan". AddVisitModal already validates date/name/
   // purpose before calling this, so it's safe to persist right away.
   const addVisitAndSave = async (section, visitData) => {
+    if (saveLockRef.current) return;
+    saveLockRef.current = true;
     const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
     const updatedPlan = { ...plan, [key]: [...plan[key], visitData] };
     setIsSaving(true);
@@ -278,6 +281,7 @@ const WeeklySalesPlan = () => {
     } catch (err) {
       showToast(err?.message || "Failed to add visit", "error");
     } finally {
+      saveLockRef.current = false;
       setIsSaving(false);
     }
   };
@@ -315,8 +319,9 @@ const sanitizeVisit = (v) => ({
   });
 
   const handleSave = async () => {
-    if (isSaving) return;
+    if (saveLockRef.current) return;
     if (!validate()) return;
+    saveLockRef.current = true;
     setIsSaving(true);
     try {
       const sanitizedPlan = {
@@ -335,6 +340,7 @@ const sanitizeVisit = (v) => ({
     } catch (err) {
       showToast(err?.message || "Failed to save plan", "error");
     } finally {
+      saveLockRef.current = false;
       setIsSaving(false);
     }
   };

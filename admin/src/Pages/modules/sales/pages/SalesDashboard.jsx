@@ -51,7 +51,7 @@ const SalesDashboard = () => {
   if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
 
   return (
-    <div className="max-w-7xl mx-3 sm:mx-auto animate-in fade-in duration-300">
+    <div className="max-w-7xl px-3 sm:mx-auto animate-in fade-in duration-300">
       <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-end gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Overview</h2>

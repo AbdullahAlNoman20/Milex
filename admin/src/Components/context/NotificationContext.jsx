@@ -11,8 +11,22 @@ import { getSocket } from "../services/socketService";
 
 export const NotificationContext = createContext(null);
 
-const REFRESH_INTERVAL_MS = 60000; // fallback poll only — socket handles instant updates
+const REFRESH_INTERVAL_MS = 60000;
 const BELL_LIMIT = 8;
+
+// Put a file named notification-ping.mp3 in admin/public/sounds/.
+const NOTIFICATION_SOUND_URL = '/sounds/notification-ping.mp3';
+
+let sharedAudio = null;
+const playNotificationSound = () => {
+  try {
+    if (!sharedAudio) sharedAudio = new Audio(NOTIFICATION_SOUND_URL);
+    sharedAudio.currentTime = 0;
+    sharedAudio.play().catch(() => {});
+  } catch {
+    /* ignore autoplay restrictions */
+  }
+};
 
 export const NotificationProvider = ({ children }) => {
   const [items, setItems] = useState([]);
@@ -33,7 +47,14 @@ export const NotificationProvider = ({ children }) => {
     const id = setInterval(refresh, REFRESH_INTERVAL_MS);
 
     const socket = getSocket();
-    const handleNew = () => refresh();
+    // Play the sound the INSTANT the push arrives — don't wait for the
+    // follow-up refresh() network round-trip to finish first. Waiting for
+    // that round-trip before playing the sound is exactly what caused the
+    // 1–2 second delay.
+    const handleNew = () => {
+      playNotificationSound();
+      refresh();
+    };
     socket.on('notification:new', handleNew);
 
     window.addEventListener("focus", refresh);
@@ -44,18 +65,26 @@ export const NotificationProvider = ({ children }) => {
     };
   }, [refresh]);
 
-  // Optimistic local update so the bell's unread count drops immediately
-  // when something is marked read from anywhere in the app (the bell
-  // dropdown itself, or the full Notifications page), instead of waiting
-  // up to 60s for the next poll.
+  // Fixed: the previous version computed the new unread count using a
+  // stale `items` closure captured at hook-creation time, and depended on
+  // `items` in its own dependency array (recreating the function on every
+  // change, defeating the purpose). This version computes the count
+  // change as a side effect of the setItems updater itself, which React
+  // runs synchronously, so it's always correct and needs no dependencies.
   const markReadLocally = useCallback((ids) => {
     const idSet = new Set(ids);
-    setItems((prev) => prev.map((i) => (idSet.has(i.id) ? { ...i, isRead: true } : i)));
-    setCount((prev) => Math.max(0, prev - ids.filter((id) => {
-      const item = items.find((i) => i.id === id);
-      return item && !item.isRead;
-    }).length));
-  }, [items]);
+    let unreadMarkedCount = 0;
+    setItems((prev) =>
+      prev.map((i) => {
+        if (idSet.has(i.id) && !i.isRead) {
+          unreadMarkedCount += 1;
+          return { ...i, isRead: true };
+        }
+        return i;
+      })
+    );
+    setCount((prev) => Math.max(0, prev - unreadMarkedCount));
+  }, []);
 
   const value = useMemo(
     () => ({ items, count, refresh, markReadLocally }),

@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/components/AdminCustomerActions.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from 'react';
 import { UserCog, Trash2, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { listKams } from "../services/teamService";
@@ -14,6 +14,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
   const [isReassigning, setIsReassigning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showReassign, setShowReassign] = useState(false);
+  const actionLockRef = useRef(false);
 
   useEffect(() => {
     if (showReassign && kams.length === 0) {
@@ -24,35 +25,35 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
   }, [showReassign, kams.length]);
 
   const handleReassign = async () => {
-    if (!selectedKam)
-      return showToast("Select a KAM to reassign to", "warning");
+    if (actionLockRef.current) return;
+    if (!selectedKam) return showToast('Select a KAM to reassign to', 'warning');
+    actionLockRef.current = true;
     setIsReassigning(true);
     try {
       await reassignCustomer(customer.id, selectedKam);
-      showToast("Customer reassigned", "success");
+      showToast('Customer reassigned', 'success');
       setShowReassign(false);
       onChanged?.();
     } catch (err) {
-      showToast(err?.message || "Failed to reassign", "error");
+      showToast(err?.message || 'Failed to reassign', 'error');
     } finally {
+      actionLockRef.current = false;
       setIsReassigning(false);
     }
   };
 
   const handleDelete = async () => {
-    if (
-      !window.confirm(
-        `Delete customer "${customer.accountName}"? This cannot be undone from the UI.`,
-      )
-    )
-      return;
+    if (actionLockRef.current) return;
+    if (!window.confirm(`Delete customer "${customer.accountName}"? This cannot be undone from the UI.`)) return;
+    actionLockRef.current = true;
     setIsDeleting(true);
     try {
       await deleteCustomer(customer.id);
-      showToast("Customer deleted", "success");
-      navigate("/app/customers");
+      showToast('Customer deleted', 'success');
+      navigate('/app/customers');
     } catch (err) {
-      showToast(err?.message || "Failed to delete", "error");
+      showToast(err?.message || 'Failed to delete', 'error');
+      actionLockRef.current = false;
       setIsDeleting(false);
     }
   };

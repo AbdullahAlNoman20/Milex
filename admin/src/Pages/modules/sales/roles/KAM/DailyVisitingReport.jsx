@@ -1,5 +1,5 @@
 // FILE: admin/src/Pages/modules/sales/roles/KAM/DailyVisitingReport.jsx
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Plus,
   CheckCircle2,
@@ -235,8 +235,12 @@ const DailyVisitingReport = () => {
   const updateLocal = (id, updated) => setVisits((prev) => prev.map((v) => (v.id === id ? updated : v)));
   const addManualVisit = () => setVisits((prev) => [...prev, buildManualEntry()]);
 
-   const persist = useCallback(
+  const savingLockRef = useRef(false);
+
+  const persist = useCallback(
     async (nextVisits, id) => {
+      if (savingLockRef.current) return;
+      savingLockRef.current = true;
       setSavingId(id);
       try {
         const saved = await saveReport({ date, visits: nextVisits });
@@ -247,6 +251,7 @@ const DailyVisitingReport = () => {
       } catch (err) {
         showToast(err?.message || 'Failed to save', 'error');
       } finally {
+        savingLockRef.current = false;
         setSavingId(null);
       }
     },

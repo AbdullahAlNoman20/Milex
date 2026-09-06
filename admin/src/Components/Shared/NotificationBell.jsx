@@ -4,40 +4,17 @@ import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { markNotificationRead } from '../services/notificationService';
 import { useNotifications } from '../hooks/useNotifications';
+import { formatRelativeTime } from '../utils/format';
 
-// Put a file named notification-ping.mp3 in admin/public/sounds/ — a short
-// (under 1 second) soft "ping"/"pop" style sound works best; avoid long or
-// loud clips since this can fire during active work.
-const NOTIFICATION_SOUND_URL = '/sounds/notification-ping.mp3';
-
-let sharedAudio = null;
-const playNotificationSound = () => {
-  try {
-    if (!sharedAudio) sharedAudio = new Audio(NOTIFICATION_SOUND_URL);
-    sharedAudio.currentTime = 0;
-    sharedAudio.play().catch(() => {});
-  } catch {
-    /* ignore autoplay restrictions */
-  }
-};
-
+// NOTE: sound now plays inside NotificationContext the instant the push
+// arrives — it is intentionally NOT played here anymore. Playing it again
+// here (based on count changes after the fetch completes) would cause a
+// second, delayed "ding" on top of the immediate one.
 const NotificationBell = () => {
   const { items, count, refresh, markReadLocally } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
-  // Starts at null (not the current count) so the very first successful
-  // load — right after logging in — never plays a sound just for showing
-  // whatever unread notifications already existed. Sound only plays when
-  // the count genuinely increases after that first known value.
-  const prevCountRef = useRef(null);
-
-  useEffect(() => {
-    if (prevCountRef.current !== null && count > prevCountRef.current) {
-      playNotificationSound();
-    }
-    prevCountRef.current = count;
-  }, [count]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -86,7 +63,8 @@ const NotificationBell = () => {
                   n.isOverdue ? 'text-red-600 font-bold' : n.isRead ? 'text-slate-400' : 'text-slate-800 font-semibold'
                 }`}
               >
-                {n.isOverdue && '⚠ '}{n.label}
+                <span className="block">{n.isOverdue && '⚠ '}{n.label}</span>
+                <span className="block mt-0.5 text-[10px] font-normal text-slate-400">{formatRelativeTime(n.createdAt)}</span>
               </button>
             ))
           )}
