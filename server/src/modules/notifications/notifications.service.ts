@@ -11,14 +11,16 @@ export interface NotificationInput {
   type?: string;
 }
 
-// Central place every workflow action calls to (a) persist a real
-// notification row per recipient and (b) push the realtime socket ping that
-// triggers the bell + sound on the frontend. Never blocks/throws into the
-// caller's main operation — a notification failure must never break the
-// actual business action.
+// Persistence (DB write) and the realtime socket ping are handled in
+// SEPARATE try/catch blocks on purpose. If the database write fails for any
+// reason (e.g. a migration wasn't applied yet), the live socket ping must
+// still fire — otherwise a single DB issue silently kills both the stored
+// notification AND the instant bell/sound update at the same time, which is
+// exactly the kind of "everything just stopped working" bug this avoids.
 export const createNotificationsForUsers = async (userIds: string[], data: NotificationInput): Promise<void> => {
   const uniqueIds = [...new Set(userIds)].filter(Boolean);
   if (uniqueIds.length === 0) return;
+
   try {
     await prisma.notification.createMany({
       data: uniqueIds.map((userId) => ({
@@ -29,34 +31,52 @@ export const createNotificationsForUsers = async (userIds: string[], data: Notif
         isOverdue: !!data.isOverdue,
       })),
     });
+  } catch (err) {
+    console.error(
+      '[notifications] Failed to save notification to the database. ' +
+        'If this keeps happening, check that the "add_notifications" Prisma migration has been applied and the Prisma Client was regenerated:',
+      (err as Error)?.message,
+    );
+  }
+
+  try {
     uniqueIds.forEach((id) => emitNotificationToUser(id));
   } catch (err) {
-    console.warn('[notifications] createNotificationsForUsers failed (non-fatal):', (err as Error)?.message);
+    console.warn('[notifications] Failed to emit realtime notification (non-fatal):', (err as Error)?.message);
   }
 };
 
 export const getNotificationsForUser = async (userId: string, _role: string, limit = 8) => {
   const cutoff = new Date(Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-  const [items, unreadCount] = await Promise.all([
-    prisma.notification.findMany({
-      where: { userId, createdAt: { gte: cutoff } },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    }),
-    prisma.notification.count({ where: { userId, createdAt: { gte: cutoff }, isRead: false } }),
-  ]);
+  try {
+    const [items, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId, createdAt: { gte: cutoff } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      prisma.notification.count({ where: { userId, createdAt: { gte: cutoff }, isRead: false } }),
+    ]);
 
-  return {
-    items: items.map((n) => ({
-      id: n.id,
-      label: n.label,
-      link: n.link,
-      isOverdue: n.isOverdue,
-      isRead: n.isRead,
-      createdAt: n.createdAt,
-    })),
-    unreadCount,
-  };
+    return {
+      items: items.map((n) => ({
+        id: n.id,
+        label: n.label,
+        link: n.link,
+        isOverdue: n.isOverdue,
+        isRead: n.isRead,
+        createdAt: n.createdAt,
+      })),
+      unreadCount,
+    };
+  } catch (err) {
+    console.error(
+      '[notifications] Failed to load notifications from the database. ' +
+        'If this keeps happening, check that the "add_notifications" Prisma migration has been applied and the Prisma Client was regenerated:',
+      (err as Error)?.message,
+    );
+    return { items: [], unreadCount: 0 };
+  }
 };
 
 export const markNotificationRead = async (userId: string, notificationId: string) => {

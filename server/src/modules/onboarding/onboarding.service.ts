@@ -281,12 +281,16 @@ export const expireOverdueProvisionalAccounts = async () => {
     },
   });
   for (const c of overdue) {
+    // eslint-disable-next-line no-await-in-loop
     await transitionCustomerStatus({
       customerId: c.id,
       toStatus: CUSTOMER_STATUS.PROVISIONAL_EXPIRED,
       actorId: c.handledById,
       historyAction: "PROVISIONAL ACCOUNT EXPIRED",
       historySubText: "Auto-deactivated by system",
+      // This is a system/cron action, not the KAM clicking a button — the
+      // KAM must still be notified that their own account just expired.
+      notifyExcludeActor: false,
     });
   }
   return overdue.length;

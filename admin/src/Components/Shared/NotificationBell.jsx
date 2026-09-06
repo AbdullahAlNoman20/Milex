@@ -26,14 +26,16 @@ const NotificationBell = () => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
-  const prevCountRef = useRef(count);
+  // Starts at null (not the current count) so the very first successful
+  // load — right after logging in — never plays a sound just for showing
+  // whatever unread notifications already existed. Sound only plays when
+  // the count genuinely increases after that first known value.
+  const prevCountRef = useRef(null);
 
-  // Play the sound the moment the shared unread count goes UP — this fires
-  // regardless of which component triggered the refresh (bell's own poll,
-  // socket push, or the Notifications page), so a brand-new item is never
-  // silently missed.
   useEffect(() => {
-    if (count > prevCountRef.current) playNotificationSound();
+    if (prevCountRef.current !== null && count > prevCountRef.current) {
+      playNotificationSound();
+    }
     prevCountRef.current = count;
   }, [count]);
 
