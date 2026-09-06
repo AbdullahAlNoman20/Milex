@@ -97,7 +97,15 @@ const CustomersList = () => {
               pagedRows.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
-                  <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
+                  <td className="p-4 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => openCustomer(c)}
+                      className="text-slate-800 hover:text-emerald-700 hover:underline transition text-left"
+                    >
+                      {c.accountName}
+                    </button>
+                  </td>
                   <td className="p-4"><StatusBadge status={c.status} size="sm" /></td>
                   <td className="p-4 text-xs font-bold text-slate-500">{formatRevision(c.revision)}</td>
                   <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>
@@ -125,5 +133,5 @@ const CustomersList = () => {
     </div>
   );
 };
- 
+
 export default CustomersList;

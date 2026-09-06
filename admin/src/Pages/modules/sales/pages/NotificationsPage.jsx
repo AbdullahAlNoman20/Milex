@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Search, RefreshCw, CheckCheck, ExternalLink, AlertTriangle } from 'lucide-react';
 import { listNotifications, markAllNotificationsRead } from '../../../../Components/services/notificationService';
+import { useNotifications } from '../../../../Components/hooks/useNotifications';
 import Pagination from '../../../../Components/Shared/Pagination';
 
 const Donut = ({ segments, size = 84, thickness = 14 }) => {
@@ -38,6 +39,7 @@ const KpiCard = ({ icon: Icon, label, value, iconBg }) => (
 
 const NotificationsPage = () => {
   const navigate = useNavigate();
+  const { refresh: refreshBell, markReadLocally } = useNotifications();
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -59,7 +61,13 @@ const NotificationsPage = () => {
         const unreadIds = (data.items || []).filter((i) => !i.isRead).map((i) => i.id);
         if (!hasMarkedRef.current && unreadIds.length > 0) {
           hasMarkedRef.current = true;
-          markAllNotificationsRead(unreadIds).catch(() => {});
+          markAllNotificationsRead(unreadIds)
+            .then(() => {
+              // Keep the shared bell context in sync so its badge count
+              // drops immediately instead of waiting for its own poll.
+              markReadLocally(unreadIds);
+            })
+            .catch(() => {});
         }
       })
       .finally(() => setIsLoading(false));
@@ -68,14 +76,15 @@ const NotificationsPage = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleMarkAll = () => {
     const unreadIds = items.filter((i) => !i.isRead).map((i) => i.id);
     if (unreadIds.length === 0) return;
     setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
-    markAllNotificationsRead(unreadIds).catch(() => {});
+    markReadLocally(unreadIds);
+    markAllNotificationsRead(unreadIds).catch(() => refreshBell());
   };
 
   const totalCount = items.length;

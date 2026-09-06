@@ -212,7 +212,7 @@ const CustomerDetail = () => {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="max-w-[1400px] mx-3 sm:mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
       <button
         type="button"
         onClick={() => navigate(-1)}
@@ -221,9 +221,9 @@ const CustomerDetail = () => {
         <ArrowLeft size={14} className="mr-1.5" /> Back
       </button>
 
-      <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+      <div className="bg-white p-5 sm:p-8 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-800 mb-2">
+          <h2 className="text-xl sm:text-3xl font-black text-slate-800 mb-2 break-words">
             {customer.accountName}
           </h2>
           <div className="flex items-center gap-3 flex-wrap">
@@ -237,7 +237,7 @@ const CustomerDetail = () => {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setIsHistoryModalOpen(true)}
@@ -281,8 +281,8 @@ const CustomerDetail = () => {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         <div className="flex-1 min-w-0 space-y-6">
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
+          <div className="bg-white p-5 sm:p-8 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 pb-4 mb-6">
               <h3 className="font-bold text-base text-slate-800 flex items-center">
                 <Building size={18} className="mr-2 text-slate-400" /> Account
                 Info
