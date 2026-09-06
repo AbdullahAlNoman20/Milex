@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/KAM/InfoUpdateRequestPanel.jsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { STATUS } from '../../constants/salesStatus';
@@ -14,26 +14,37 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
   const [rejectReason, setRejectReason] = useState('');
 
   const [isSubmitting, setIsSubmittingLocal] = useState(false);
+  const submitLockRef = useRef(false);
 
   if (mode === 'offer-feedback') {
 
     const handleAccept = async () => {
-      if (isSubmitting) return;
+      if (submitLockRef.current) return;
+      submitLockRef.current = true;
       setIsSubmittingLocal(true);
-      await updateStatus(customer.id, customer.status, {}, 'OFFER ACCEPTED BY CUSTOMER', 'Proceed to Agreement');
-      setIsSubmittingLocal(false);
+      try {
+        await updateStatus(customer.id, customer.status, {}, 'OFFER ACCEPTED BY CUSTOMER', 'Proceed to Agreement');
+      } finally {
+        submitLockRef.current = false;
+        setIsSubmittingLocal(false);
+      }
     };
     const handleReject = async () => {
-      if (isSubmitting) return;
+      if (submitLockRef.current) return;
       if (!isRequired(rejectReason)) return showToast('Provide a reason for rejection', 'warning');
+      submitLockRef.current = true;
       setIsSubmittingLocal(true);
-      await updateStatus(
-        customer.id,
-        STATUS.OFFER_REJECTED,
-        { rejectReason: sanitizeText(rejectReason, { maxLength: 500 }), revision: (customer.revision || 0) + 1 },
-        'OFFER REJECTED BY CUSTOMER'
-      );
-      setIsSubmittingLocal(false);
+      try {
+        await updateStatus(
+          customer.id,
+          STATUS.OFFER_REJECTED,
+          { rejectReason: sanitizeText(rejectReason, { maxLength: 500 }), revision: (customer.revision || 0) + 1 },
+          'OFFER REJECTED BY CUSTOMER'
+        );
+      } finally {
+        submitLockRef.current = false;
+        setIsSubmittingLocal(false);
+      }
     };
 
     return (
@@ -68,23 +79,31 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
     );
   }
 
-  const handleRequestUpdate = () => {
+  const handleRequestUpdate = async () => {
+    if (submitLockRef.current) return;
     if (!isRequired(field) || !isRequired(newValue)) return showToast('Field and new value are required', 'warning');
-    updateStatus(
-      customer.id,
-      STATUS.INFO_UPDATE_PENDING,
-      {
-        pendingInfoUpdate: {
-          field: sanitizeText(field, { maxLength: 100 }),
-          newValue: sanitizeText(newValue, { maxLength: 500 }),
-          requestedAt: new Date().toISOString(),
+    submitLockRef.current = true;
+    setIsSubmittingLocal(true);
+    try {
+      await updateStatus(
+        customer.id,
+        STATUS.INFO_UPDATE_PENDING,
+        {
+          pendingInfoUpdate: {
+            field: sanitizeText(field, { maxLength: 100 }),
+            newValue: sanitizeText(newValue, { maxLength: 500 }),
+            requestedAt: new Date().toISOString(),
+          },
         },
-      },
-      'INFO UPDATE REQUESTED BY KAM',
-      'Awaiting Line Manager approval'
-    );
-    setField('');
-    setNewValue('');
+        'INFO UPDATE REQUESTED BY KAM',
+        'Awaiting Line Manager approval'
+      );
+      setField('');
+      setNewValue('');
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmittingLocal(false);
+    }
   };
 
   return (
@@ -106,8 +125,9 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
       />
       <button
         type="button"
+        disabled={isSubmitting}
         onClick={handleRequestUpdate}
-        className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm shadow-md hover:bg-blue-700 transition"
+        className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm shadow-md hover:bg-blue-700 transition disabled:opacity-50"
       >
         Submit for LM Approval
       </button>

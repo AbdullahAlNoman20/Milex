@@ -1,5 +1,5 @@
 // src/Pages/Login/Login.jsx
-import  { useState, useEffect, useCallback } from "react";
+import  { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../Components/hooks/useAuth";
 import { useToast } from "../../Components/hooks/useToast";
@@ -22,10 +22,15 @@ const Login = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
- 
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // A plain state check can still let two near-simultaneous clicks through
+  // because state updates aren't guaranteed to be visible before the
+  // second click's handler runs. A ref updates synchronously, closing that
+  // race window.
+  const isSubmittingRef = useRef(false);
 
   useEffect(() => {
     // Deliberately ignore location.state?.from here — that value can be a
@@ -41,26 +46,30 @@ const Login = () => {
 
   const doLogin = useCallback(
     async (loginEmail, loginPassword) => {
+      if (isSubmittingRef.current) return;
       if (!isValidEmail(loginEmail))
         return showToast("Enter a valid email address", "warning");
       if (!isRequired(loginPassword))
         return showToast("Password is required", "warning");
 
+      isSubmittingRef.current = true;
       setIsSubmitting(true);
-      const result = await login(loginEmail, loginPassword);
-      setIsSubmitting(false);
+      try {
+        const result = await login(loginEmail, loginPassword);
 
-      if (!result.ok) {
-        showToast(
-          result.error?.slice(0, MAX_ATTEMPTS_MSG_LENGTH) || "Login failed",
-          "error",
-        );
-        return;
+        if (!result.ok) {
+          showToast(
+            result.error?.slice(0, MAX_ATTEMPTS_MSG_LENGTH) || "Login failed",
+            "error",
+          );
+          return;
+        }
+
+        navigate("/app", { replace: true });
+      } finally {
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
       }
-
-      // Always go to the dashboard root, ignoring any stale
-      // location.state.from — see the redirect useEffect above for why.
-      navigate("/app", { replace: true });
     },
     [login, showToast, navigate],
   );

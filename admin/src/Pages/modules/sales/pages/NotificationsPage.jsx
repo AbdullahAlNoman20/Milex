@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Search, RefreshCw, CheckCheck, ExternalLink, AlertTriangle } from 'lucide-react';
 import { listNotifications, markAllNotificationsRead } from '../../../../Components/services/notificationService';
 import { useNotifications } from '../../../../Components/hooks/useNotifications';
+import { formatRelativeTime } from '../../../../Components/utils/format';
 import Pagination from '../../../../Components/Shared/Pagination';
 
 const Donut = ({ segments, size = 84, thickness = 14 }) => {
@@ -45,6 +46,7 @@ const NotificationsPage = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const hasMarkedRef = useRef(false);
+  const markAllLockRef = useRef(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 15;
 
@@ -79,12 +81,18 @@ const NotificationsPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleMarkAll = () => {
+  const handleMarkAll = async () => {
+    if (markAllLockRef.current) return;
     const unreadIds = items.filter((i) => !i.isRead).map((i) => i.id);
     if (unreadIds.length === 0) return;
-    setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
-    markReadLocally(unreadIds);
-    markAllNotificationsRead(unreadIds).catch(() => refreshBell());
+    markAllLockRef.current = true;
+    try {
+      setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
+      markReadLocally(unreadIds);
+      await markAllNotificationsRead(unreadIds).catch(() => refreshBell());
+    } finally {
+      markAllLockRef.current = false;
+    }
   };
 
   const totalCount = items.length;
@@ -209,14 +217,17 @@ const NotificationsPage = () => {
                             n.isOverdue ? 'bg-red-500' : !n.isRead ? 'bg-emerald-500' : 'bg-slate-300'
                           }`}
                         />
-                        <span
-                          className={`text-sm truncate ${
-                            n.isOverdue ? 'text-red-600 font-bold' : n.isRead ? 'text-slate-400' : 'text-slate-800 font-semibold'
-                          }`}
-                        >
-                          {n.isOverdue && '⚠ '}
-                          {n.label}
-                        </span>
+                        <div className="min-w-0">
+                          <span
+                            className={`text-sm truncate block ${
+                              n.isOverdue ? 'text-red-600 font-bold' : n.isRead ? 'text-slate-400' : 'text-slate-800 font-semibold'
+                            }`}
+                          >
+                            {n.isOverdue && '⚠ '}
+                            {n.label}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{formatRelativeTime(n.createdAt)}</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span

@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/components/FieldEditControl.jsx
-import  { useState } from "react";
+import  { useState, useRef } from "react";
 import { Pencil, X, Check } from "lucide-react";
 import {
   requestFieldChange,
@@ -22,9 +22,11 @@ const FieldEditControl = ({
   const [value, setValue] = useState(currentValue || "");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const handleSubmit = async () => {
-    if (isSubmitting || !value.trim()) return;
+    if (submitLockRef.current || !value.trim()) return;
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       if (isLineManager) {
@@ -44,6 +46,7 @@ const FieldEditControl = ({
     } catch (err) {
       showToast(err?.message || "Failed to submit", "error");
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

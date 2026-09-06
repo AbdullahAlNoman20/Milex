@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/components/CustomerEditRequestModal.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Send, Check, PencilLine, FileUp, Loader2 } from "lucide-react";
 import {
   requestFieldChange,
@@ -47,6 +47,7 @@ const CustomerEditRequestModal = ({
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tab, setTab] = useState("fields");
+  const submitLockRef = useRef(false);
 
    useEffect(() => {
     getEditableFields(restrictToRecommendationFields ? 'recommendation' : undefined)
@@ -77,7 +78,7 @@ const CustomerEditRequestModal = ({
   }, {});
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
     const fieldTargets = fieldDefs.filter(
       (f) => selectedFields[f.key] && values[f.key]?.toString().trim(),
     );
@@ -123,6 +124,7 @@ const CustomerEditRequestModal = ({
       );
     }
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       for (const f of fieldTargets) {
@@ -159,6 +161,7 @@ const CustomerEditRequestModal = ({
     } catch (err) {
       showToast(err?.message || "Failed to submit", "error");
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

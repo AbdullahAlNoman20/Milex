@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx
-import  { useState } from 'react';
+import  { useState, useRef } from 'react';
 import { Mail, Printer, PenTool } from 'lucide-react';
 import { sendAgreement } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -14,9 +14,11 @@ const AgreementPanel = ({ customer, onSent }) => {
       `This agreement is made between MILEX and ${customer.accountName}.\n\nThe customer agrees to the rates defined in Annexure ${customer.rateRef || ''} with a credit limit of BDT ${customer.creditLimitTk}.\n\n${SIGNATURE_LIBRARY.SALES}`
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const handleSend = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       await sendAgreement(customer.id, agreementText);
@@ -25,6 +27,7 @@ const AgreementPanel = ({ customer, onSent }) => {
     } catch (err) {
       showToast(err?.message || 'Failed to send agreement', 'error');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

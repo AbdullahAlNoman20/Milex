@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/LineManager/RateApprovalPanel.jsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { CheckCircle, FileOutput } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -14,29 +14,34 @@ const RateApprovalPanel = ({ customer }) => {
   const [lmNote, setLmNote] = useState('');
   const [creditPeriod, setCreditPeriod] = useState(customer.creditPeriodDays || String(CREDIT_RULES.DEFAULT_PERIOD_DAYS));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const handleApprove = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
     if (!isRequired(approvedRate)) return showToast('Approved rate is required', 'warning');
     if (!isValidCreditPeriod(creditPeriod)) {
       return showToast(`Credit period must be between 1 and ${CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS} days`, 'warning');
     }
+    submitLockRef.current = true;
     setIsSubmitting(true);
-    await updateStatus(
-      customer.id,
-      STATUS.APPROVED_PENDING_OFFER,
-      {
-        approvedRate: sanitizeText(approvedRate, { maxLength: 300 }),
-        lmNote: sanitizeText(lmNote, { maxLength: 500 }),
-        creditPeriodDays: creditPeriod,
-        creditPeriodExtendedByLM: Number(creditPeriod) > CREDIT_RULES.DEFAULT_PERIOD_DAYS,
-      },
-      'RATE APPROVED BY LM',
-      'Waiting for SC Offer letter'
-    );
-    setIsSubmitting(false);
+    try {
+      await updateStatus(
+        customer.id,
+        STATUS.APPROVED_PENDING_OFFER,
+        {
+          approvedRate: sanitizeText(approvedRate, { maxLength: 300 }),
+          lmNote: sanitizeText(lmNote, { maxLength: 500 }),
+          creditPeriodDays: creditPeriod,
+          creditPeriodExtendedByLM: Number(creditPeriod) > CREDIT_RULES.DEFAULT_PERIOD_DAYS,
+        },
+        'RATE APPROVED BY LM',
+        'Waiting for SC Offer letter'
+      );
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
   };
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-emerald-600 p-6 space-y-4">
       <h3 className="font-bold text-slate-900 text-base">Rate Approval</h3>

@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/KAM/DocumentUploadPanel.jsx
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Loader2, UploadCloud, Printer, Eye,  FileCheck } from 'lucide-react';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { uploadOnboardingDocument, getDocumentSignedUrl, submitFinalOnboarding } from '../../services/customerService';
@@ -174,6 +174,7 @@ const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
   const { setPrintData } = useSales();
   const [uploadingKey, setUploadingKey] = useState(null);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
+  const submitFinalLockRef = useRef(false);
 
   const docsByType = (customer.documents || []).reduce((acc, d) => {
     acc[d.documentType] = d;
@@ -200,7 +201,8 @@ const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
   const hasAnyDocs = (customer.documents || []).length > 0;
 
   const handleSubmitFinal = async () => {
-    if (isSubmittingFinal) return;
+    if (submitFinalLockRef.current) return;
+    submitFinalLockRef.current = true;
     setIsSubmittingFinal(true);
     try {
       await submitFinalOnboarding(customer.id);
@@ -209,6 +211,7 @@ const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
     } catch (err) {
       showToast(err?.message || 'Submission failed', 'error');
     } finally {
+      submitFinalLockRef.current = false;
       setIsSubmittingFinal(false);
     }
   };

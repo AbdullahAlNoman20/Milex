@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/components/FieldChangeRequestsPanel.jsx
-import  { useEffect, useState, useCallback } from "react";
+import  { useEffect, useState, useCallback, useRef } from "react";
 import { CheckCircle, XCircle, GitPullRequestDraft } from "lucide-react";
 import {
   listFieldChangeRequests,
@@ -10,6 +10,8 @@ import { useToast } from "../../../../Components/hooks/useToast";
 const FieldChangeRequestsPanel = ({ customer, onDecided }) => {
   const { showToast } = useToast();
   const [items, setItems] = useState([]);
+  const [decidingIds, setDecidingIds] = useState(() => new Set());
+  const inFlightIdsRef = useRef(new Set());
 
   const load = useCallback(() => {
     listFieldChangeRequests(customer.id)
@@ -25,6 +27,9 @@ const FieldChangeRequestsPanel = ({ customer, onDecided }) => {
   if (pending.length === 0) return null;
 
   const decide = async (id, approve) => {
+    if (inFlightIdsRef.current.has(id)) return;
+    inFlightIdsRef.current.add(id);
+    setDecidingIds((prev) => new Set(prev).add(id));
     try {
       await decideFieldChangeRequest(id, approve);
       showToast(approve ? "Change applied" : "Request rejected", "success");
@@ -32,6 +37,13 @@ const FieldChangeRequestsPanel = ({ customer, onDecided }) => {
       onDecided?.();
     } catch (err) {
       showToast(err?.message || "Failed", "error");
+    } finally {
+      inFlightIdsRef.current.delete(id);
+      setDecidingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -56,15 +68,17 @@ const FieldChangeRequestsPanel = ({ customer, onDecided }) => {
           <div className="flex gap-2">
             <button
               type="button"
+              disabled={decidingIds.has(r.id)}
               onClick={() => decide(r.id, true)}
-              className="flex-1 bg-emerald-600 text-white font-bold py-1.5 rounded flex items-center justify-center gap-1"
+              className="flex-1 bg-emerald-600 text-white font-bold py-1.5 rounded flex items-center justify-center gap-1 disabled:opacity-50"
             >
               <CheckCircle size={12} /> Approve
             </button>
             <button
               type="button"
+              disabled={decidingIds.has(r.id)}
               onClick={() => decide(r.id, false)}
-              className="flex-1 bg-white border border-red-300 text-red-500 font-bold py-1.5 rounded flex items-center justify-center gap-1"
+              className="flex-1 bg-white border border-red-300 text-red-500 font-bold py-1.5 rounded flex items-center justify-center gap-1 disabled:opacity-50"
             >
               <XCircle size={12} /> Reject
             </button>

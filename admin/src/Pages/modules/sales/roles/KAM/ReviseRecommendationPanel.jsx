@@ -1,5 +1,5 @@
 // src/Pages/modules/sales/roles/KAM/ReviseRecommendationPanel.jsx
-import  { useState } from 'react';
+import  { useState, useRef } from 'react';
 import { XCircle } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -11,17 +11,27 @@ const ReviseRecommendationPanel = ({ customer }) => {
   const { updateStatus } = useSales();
   const { showToast } = useToast();
   const [proposedRate, setProposedRate] = useState(customer.proposedRate || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const isRejectedFlow = customer.status === STATUS.OFFER_REJECTED;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (submitLockRef.current) return;
     if (!isRequired(proposedRate)) return showToast('Enter a proposed rate', 'warning');
-    updateStatus(
-      customer.id,
-      STATUS.PENDING_APPROVAL,
-      { proposedRate: sanitizeText(proposedRate, { maxLength: 300 }), revision: (customer.revision || 0) + 1 },
-      isRejectedFlow ? 'REVISED RATE SUBMITTED TO LM' : 'RATE SUBMITTED BY KAM'
-    );
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await updateStatus(
+        customer.id,
+        STATUS.PENDING_APPROVAL,
+        { proposedRate: sanitizeText(proposedRate, { maxLength: 300 }), revision: (customer.revision || 0) + 1 },
+        isRejectedFlow ? 'REVISED RATE SUBMITTED TO LM' : 'RATE SUBMITTED BY KAM'
+      );
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -46,8 +56,9 @@ const ReviseRecommendationPanel = ({ customer }) => {
       />
       <button
         type="button"
+        disabled={isSubmitting}
         onClick={handleSubmit}
-        className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg shadow-sm text-sm hover:bg-emerald-700 transition"
+        className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg shadow-sm text-sm hover:bg-emerald-700 transition disabled:opacity-50"
       >
         Forward to Line Manager
       </button>

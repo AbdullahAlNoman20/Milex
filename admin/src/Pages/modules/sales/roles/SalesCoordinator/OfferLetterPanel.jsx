@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Mail, Printer, PenTool, FileSpreadsheet, X } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { uploadOnboardingDocument } from '../../services/customerService';
@@ -17,10 +17,12 @@ const OfferLetterPanel = ({ customer }) => {
   );
   const [excelFile, setExcelFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
   const isResend = customer.revision > 0 && !!customer.rejectReason;
 
   const handleSend = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       await updateStatus(customer.id, customer.status, { offerText }, 'OFFER LETTER SENT', `Emailed to ${customer.email}`);
@@ -29,6 +31,7 @@ const OfferLetterPanel = ({ customer }) => {
       }
       showToast('Offer letter sent', 'success');
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };

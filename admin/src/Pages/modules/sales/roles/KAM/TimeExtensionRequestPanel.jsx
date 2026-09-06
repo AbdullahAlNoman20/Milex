@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/KAM/TimeExtensionRequestPanel.jsx
-import  { useState } from "react";
+import  { useState, useRef } from "react";
 import { Clock3 } from "lucide-react";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import { requestTimeExtension } from "../../services/customerService";
@@ -12,9 +12,10 @@ const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
   const [requestedDays, setRequestedDays] = useState("5");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const handleRequestExtension = async () => {
-    if (isSubmitting) return;
+    if (submitLockRef.current) return;
     const days = Number(requestedDays);
     if (!Number.isFinite(days) || days < 1 || days > MAX_REQUESTABLE_DAYS) {
       return showToast(
@@ -24,6 +25,7 @@ const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
     }
     if (!isRequired(reason)) return showToast("Reason is required", "warning");
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       const updated = await requestTimeExtension(customer.id, days, reason);
@@ -36,6 +38,7 @@ const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
     } catch (err) {
       showToast(err?.message || "Request failed", "error");
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
