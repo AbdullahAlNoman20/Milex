@@ -319,27 +319,65 @@ export const submitClientFeedback = async (
 
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const clean = sanitizeAndEscape({ r: data.rejectReason || '' });
-  // Reject re-opens the offer step for the SC to revise and resend — it does
-  // NOT go back through Line Manager, matching 2.1.3.1's direct loop to 2.1.4.
-  const updated = await prisma.$transaction(async (tx) => {
-    const c = await tx.customer.update({
-      where: { id: customerId },
-      data: { offerSent: false, offerAccepted: false, rejectReason: clean.r, revision: customer.revision + 1 },
-      include: CUSTOMER_WITH_HANDLER,
-    });
-    await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
-    await tx.customerHistoryEntry.create({
-      data: { customerId, action: 'OFFER REJECTED BY CUSTOMER', subText: clean.r, status: 'active' },
-    });
-    return c;
+  // A rejection now routes back through the Line Manager for a fresh
+  // approved rate — the Sales Coordinator can no longer resend without
+  // that re-approval. transitionCustomerStatus already handles the
+  // history entry, audit log, and notification for us.
+  const updated = await transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
+    actorId: kamId,
+    extraUpdates: {
+      offerSent: false,
+      offerAccepted: false,
+      rejectReason: clean.r,
+      revision: customer.revision + 1,
+    },
+    historyAction: 'OFFER REJECTED BY CUSTOMER',
+    historySubText: clean.r,
   });
-  await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_REJECTED', actorId: kamId, afterState: { rejectReason: clean.r } });
-  await notifyCustomerWorkflowUsers(
-    updated.handledById,
-    { label: `${updated.accountName} — Customer rejected the offer, please revise`, link: `/app/customers/${updated.barcode}` },
-    kamId,
-  );
   return updated;
+};
+
+export const reapproveRateAfterRejection = async (
+  customerId: string,
+  approvedRate: string,
+  lmNote: string | undefined,
+  lmId: string,
+) => {
+  await assertLineManagerOwnsCustomer(customerId, lmId);
+  const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+  const clean = sanitizeAndEscape({ approvedRate, lmNote: lmNote || '' });
+
+  const previousEntry = {
+    rate: customer.approvedRate || customer.proposedRate || '',
+    rateRef: customer.rateRef || '',
+    changedAt: new Date().toISOString(),
+  };
+  const newRateRef = await generateUniqueRateRef();
+
+  await transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
+    actorId: lmId,
+    extraUpdates: {
+      approvedRate: clean.approvedRate,
+      lmNote: clean.lmNote || null,
+      rateRef: newRateRef,
+      rejectReason: null,
+    },
+    historyAction: 'NEW RATE APPROVED BY LM',
+    historySubText: 'Awaiting Sales Coordinator to send the revised offer letter',
+  });
+
+  // Kept as a separate, simple update right after — pushing to a Json[]
+  // history field isn't supported inside transitionCustomerStatus's
+  // concurrency-safe updateMany, so it's appended here instead.
+  return prisma.customer.update({
+    where: { id: customerId },
+    data: { rateHistory: { push: previousEntry } },
+    include: CUSTOMER_WITH_HANDLER,
+  });
 };
 
 export const reviseRateAfterRejection = async (customerId: string, proposedRate: string, kamId: string) => {

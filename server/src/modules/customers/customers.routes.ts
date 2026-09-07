@@ -20,6 +20,7 @@ import {
   listCustomersQuerySchema,
   fieldChangeRequestSchema,
   reassignCustomerSchema,
+  reapproveRateSchema,
 
 } from './customers.schema';
 import { uploadMiddleware } from '../../common/middlewares/upload.middleware';
@@ -76,6 +77,7 @@ router.post('/field-change-request/:requestId/decision', requirePermission(PERMI
 router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE, PERMISSIONS.REQUEST_INFO_UPDATE), controller.directFieldEditHandler);
 router.post('/:id/recommendation-attachment', requirePermission(PERMISSIONS.CREATE_RECOMMENDATION, PERMISSIONS.REVISE_RECOMMENDATION), uploadMiddleware.single('file'), controller.uploadRecommendationAttachmentHandler);
 router.post('/:id/reassign', requirePermission(PERMISSIONS.REASSIGN_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), validateBody(reassignCustomerSchema), controller.reassignCustomerHandler);
+router.post('/:id/reapprove-rate', requirePermission(PERMISSIONS.APPROVE_RATE), validateBody(reapproveRateSchema), controller.reapproveRateHandler);
 router.delete('/:id', requirePermission(PERMISSIONS.DELETE_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.deleteCustomerHandler);
 router.get('/:id/edit-history', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listEditHistoryHandler);
 

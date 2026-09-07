@@ -59,6 +59,8 @@ export const getWorkflowStageLabel = (customer) => {
       return 'Waiting for Document Upload & Final Onboarding';
     case STATUS.PROVISIONAL_EXPIRED:
       return 'Provisional Period Expired — KAM Can Request a 5-Day Extension';
+    case STATUS.OFFER_REJECTED:
+      return 'Customer Rejected the Offer — Waiting for Line Manager to Approve a New Rate';
     case STATUS.ACTIVE:
       return 'Completed — Active Customer';
     default:

@@ -1,6 +1,6 @@
-// admin/src/Pages/modules/sales/pages/TeamReportsPage.jsx — REPLACE ENTIRE FILE
+// admin/src/Pages/modules/sales/pages/TeamReportsPage.jsx — FULL REPLACE
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { Eye, X, Users, Search, RefreshCw, ChevronRight, FileSpreadsheet } from "lucide-react";
+import { Eye, X, Users, Search, RefreshCw, ChevronRight, ChevronDown, FileSpreadsheet } from "lucide-react";
 import { useToast } from "../../../../Components/hooks/useToast";
 import { listKams } from "../services/teamService";
 import { listPlansForKamId } from "../services/weeklyPlanService";
@@ -48,8 +48,6 @@ const StatusPill = ({ status }) => {
   );
 };
 
-// completed === true -> Completed, false -> Skipped, null/undefined (no
-// Daily Report entry logged yet for this visit) -> Planned.
 const VisitStatusBadge = ({ completed }) => {
   const label = completed === true ? "Completed" : completed === false ? "Skipped" : "Planned";
   const cls =
@@ -65,6 +63,15 @@ const VisitStatusBadge = ({ completed }) => {
   );
 };
 
+// Plain ISO ("YYYY-MM-DD") strings sort/compare correctly lexicographically,
+// so no Date parsing is needed for range filtering.
+const isWithinDateRange = (dateStr, from, to) => {
+  if (!dateStr) return true;
+  if (from && dateStr < from) return false;
+  if (to && dateStr > to) return false;
+  return true;
+};
+
 const TeamReportsPage = () => {
   const { showToast } = useToast();
   const [kams, setKams] = useState([]);
@@ -74,13 +81,24 @@ const TeamReportsPage = () => {
   const [tab, setTab] = useState("weekly");
   const [weeklyPlans, setWeeklyPlans] = useState([]);
   const [dailyReports, setDailyReports] = useState([]);
- const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
   const [reportSearch, setReportSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [expandedPlanIds, setExpandedPlanIds] = useState(() => new Set());
+
+  const togglePlanExpanded = (id) => {
+    setExpandedPlanIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
   }, [search]);
 
@@ -103,6 +121,9 @@ const TeamReportsPage = () => {
       setActiveKam(kam);
       setTab("weekly");
       setReportSearch("");
+      setDateFrom("");
+      setDateTo("");
+      setExpandedPlanIds(new Set());
       setIsDetailLoading(true);
       try {
         const [plans, reports] = await Promise.all([listPlansForKamId(kam.id), listReportsForKam(kam.id)]);
@@ -140,21 +161,31 @@ const TeamReportsPage = () => {
 
   const filteredWeeklyPlans = useMemo(() => {
     const q = reportSearch.trim().toLowerCase();
-    if (!q) return weeklyPlans;
-    return weeklyPlans.filter(
-      (p) =>
+    return weeklyPlans.filter((p) => {
+      const matchesSearch =
+        !q ||
         p.weekStartDate?.toLowerCase().includes(q) ||
-        [...p.existingVisits, ...p.prospectVisits].some((v) => v.customerName?.toLowerCase().includes(q))
-    );
-  }, [weeklyPlans, reportSearch]);
+        [...p.existingVisits, ...p.prospectVisits].some((v) => v.customerName?.toLowerCase().includes(q));
+      const matchesDate = isWithinDateRange(p.weekStartDate, dateFrom, dateTo);
+      return matchesSearch && matchesDate;
+    });
+  }, [weeklyPlans, reportSearch, dateFrom, dateTo]);
 
   const filteredDailyReports = useMemo(() => {
     const q = reportSearch.trim().toLowerCase();
-    if (!q) return dailyReports;
-    return dailyReports.filter(
-      (r) => r.date?.toLowerCase().includes(q) || r.visits.some((v) => v.customerName?.toLowerCase().includes(q))
-    );
-  }, [dailyReports, reportSearch]);
+    return dailyReports.filter((r) => {
+      const matchesSearch =
+        !q || r.date?.toLowerCase().includes(q) || r.visits.some((v) => v.customerName?.toLowerCase().includes(q));
+      const matchesDate = isWithinDateRange(r.date, dateFrom, dateTo);
+      return matchesSearch && matchesDate;
+    });
+  }, [dailyReports, reportSearch, dateFrom, dateTo]);
+
+  const hasDateFilter = !!(dateFrom || dateTo);
+  const clearDateFilter = () => {
+    setDateFrom("");
+    setDateTo("");
+  };
 
   const exportReports = () => {
     const rows =
@@ -378,6 +409,31 @@ const TeamReportsPage = () => {
                     className="w-full pl-7 pr-2 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <label className="text-slate-400 font-semibold hidden sm:inline">From</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2 py-2 text-xs outline-none focus:border-emerald-500"
+                  />
+                  <label className="text-slate-400 font-semibold hidden sm:inline">To</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2 py-2 text-xs outline-none focus:border-emerald-500"
+                  />
+                  {hasDateFilter && (
+                    <button
+                      type="button"
+                      onClick={clearDateFilter}
+                      className="text-[11px] font-bold text-slate-400 hover:text-red-500 transition px-1"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={exportReports}
@@ -396,51 +452,72 @@ const TeamReportsPage = () => {
                     <p className="text-sm text-slate-400 text-center py-8">No weekly plans found.</p>
                   ) : (
                     <div className="space-y-3">
-                      {filteredWeeklyPlans.map((p) => (
-                        <div key={p.id} className="border border-slate-200 rounded-xl p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-bold text-slate-700">Week of {p.weekStartDate}</span>
-                            <StatusPill status={humanizeStatus(p.status)} />
+                      {filteredWeeklyPlans.map((p) => {
+                        const isExpanded = expandedPlanIds.has(p.id);
+                        const totalVisits = p.existingVisits.length + p.prospectVisits.length;
+                        return (
+                          <div key={p.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => togglePlanExpanded(p.id)}
+                              className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-slate-50 transition"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <ChevronDown
+                                  size={16}
+                                  className={`text-slate-400 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-slate-700">Week of {p.weekStartDate}</p>
+                                  <p className="text-[10px] text-slate-400">{totalVisits} visit(s)</p>
+                                </div>
+                              </div>
+                              <StatusPill status={humanizeStatus(p.status)} />
+                            </button>
+                            {isExpanded && (
+                              <div className="p-4 border-t border-slate-100 space-y-2">
+                                {p.lmComments && (
+                                  <p className="text-xs text-red-600">
+                                    <strong>Feedback:</strong> {p.lmComments}
+                                  </p>
+                                )}
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left border-collapse min-w-[560px]">
+                                    <thead>
+                                      <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                                        <th className="py-2 pr-3">Day</th>
+                                        <th className="py-2 pr-3">Customer Name</th>
+                                        <th className="py-2 pr-3">Purpose</th>
+                                        <th className="py-2 pr-3">Status</th>
+                                        <th className="py-2">Outcome / Notes</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {[...p.existingVisits, ...p.prospectVisits].map((v) => (
+                                        <tr key={v.id} className="text-xs align-top">
+                                          <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
+                                          <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
+                                          <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
+                                          <td className="py-2.5 pr-3">
+                                            <VisitStatusBadge completed={v.completed} />
+                                          </td>
+                                          <td className="py-2.5 text-slate-500">
+                                            {v.completed === false ? (
+                                              <span className="text-red-600">{v.reasonIfNotCompleted || "—"}</span>
+                                            ) : (
+                                              v.outcomeNotes || "—"
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          {p.lmComments && (
-                            <p className="text-xs text-red-600 mb-2">
-                              <strong>Feedback:</strong> {p.lmComments}
-                            </p>
-                          )}
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse min-w-[560px]">
-                              <thead>
-                                <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
-                                  <th className="py-2 pr-3">Day</th>
-                                  <th className="py-2 pr-3">Customer Name</th>
-                                  <th className="py-2 pr-3">Purpose</th>
-                                  <th className="py-2 pr-3">Status</th>
-                                  <th className="py-2">Outcome / Notes</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {[...p.existingVisits, ...p.prospectVisits].map((v) => (
-                                  <tr key={v.id} className="text-xs align-top">
-                                    <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
-                                    <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
-                                    <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
-                                    <td className="py-2.5 pr-3">
-                                      <VisitStatusBadge completed={v.completed} />
-                                    </td>
-                                    <td className="py-2.5 text-slate-500">
-                                      {v.completed === false ? (
-                                        <span className="text-red-600">{v.reasonIfNotCompleted || "—"}</span>
-                                      ) : (
-                                        v.outcomeNotes || "—"
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )
                 ) : filteredDailyReports.length === 0 ? (
@@ -451,11 +528,10 @@ const TeamReportsPage = () => {
                       <div key={r.id} className="border border-slate-200 rounded-xl p-4">
                         <p className="text-xs font-bold text-slate-700 mb-2">{r.date}</p>
                         <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse min-w-[620px]">
+                          <table className="w-full text-left border-collapse min-w-[520px]">
                             <thead>
                               <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
                                 <th className="py-2 pr-3">Customer Name</th>
-                                <th className="py-2 pr-3">Purpose</th>
                                 <th className="py-2 pr-3">Status</th>
                                 <th className="py-2 pr-3">Reason (if not completed)</th>
                                 <th className="py-2">Outcome / Notes</th>
@@ -465,7 +541,6 @@ const TeamReportsPage = () => {
                               {r.visits.map((v) => (
                                 <tr key={v.id} className="text-xs align-top">
                                   <td className="py-2.5 pr-3 font-semibold text-slate-700">{v.customerName}</td>
-                                  <td className="py-2.5 pr-3 text-slate-500">{v.purpose || "—"}</td>
                                   <td className="py-2.5 pr-3">
                                     <StatusPill status={v.completed ? "Completed" : "Not Completed"} />
                                   </td>
