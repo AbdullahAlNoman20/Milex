@@ -264,3 +264,8 @@ export const getCustomerEditHistory = async (id) => {
   const { data } = await request(`/customers/${id}/edit-history`);
   return data.items;
 };
+
+export const reapproveRateAfterRejection = async (id, approvedRate, lmNote) => {
+  const { data } = await request(`/customers/${id}/reapprove-rate`, { method: 'POST', body: { approvedRate, lmNote } });
+  return data.customer;
+};

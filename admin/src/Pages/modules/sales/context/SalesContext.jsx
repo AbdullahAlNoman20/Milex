@@ -25,6 +25,7 @@ const ACTION_TO_SERVICE_CALL = {
     customerService.requestInfoUpdate(id, updates.pendingInfoUpdate?.field, updates.pendingInfoUpdate?.newValue),
   'INFO UPDATE APPROVED BY LM': (id) => customerService.decideInfoUpdate(id, true),
   'INFO UPDATE REJECTED BY LM': (id) => customerService.decideInfoUpdate(id, false),
+  'NEW RATE APPROVED BY LM': (id, updates) => customerService.reapproveRateAfterRejection(id, updates.approvedRate, updates.lmNote),
 };
 
 export const SalesProvider = ({ children }) => {

@@ -16,6 +16,7 @@ import Loader from "../../../../Components/Shared/Loader";
 import Countdown from "../../../../Components/Shared/Countdown";
 
 import RateApprovalPanel from "../roles/LineManager/RateApprovalPanel";
+import ReviseRateApprovalPanel from "../roles/LineManager/ReviseRateApprovalPanel";
 import CustomerInfoApprovalPanel from "../roles/LineManager/CustomerInfoApprovalPanel";
 import OfferLetterPanel from "../roles/SalesCoordinator/OfferLetterPanel";
 import AgreementPanel from "../roles/SalesCoordinator/AgreementPanel";
@@ -153,7 +154,25 @@ const CustomerDetail = () => {
     // Even after the 21-day window auto-expires, the same offer/agreement/
     // extension panels still apply — the account isn't dead, it's just
     // waiting on a Line-Manager-approved extension to reopen the window.
-    if (isProvisionalActive || isProvisionalExpired) {
+    REPLACE:
+    if (customer.status === STATUS.OFFER_REJECTED) {
+      if (role === ROLES.LINE_MANAGER) {
+        return (
+          <ReviseRateApprovalPanel
+            customer={customer}
+            onUpdated={refreshCustomer}
+          />
+        );
+      }
+      return (
+        <Waiting>
+          Customer rejected the offer — waiting for Line Manager to approve a
+          new rate
+        </Waiting>
+      );
+    }
+
+    if (isProvisionalActive) {
       if (role === ROLES.SALES_COORDINATOR) {
         if (!customer.offerSent)
           return <OfferLetterPanel customer={customer} />;
@@ -163,8 +182,6 @@ const CustomerDetail = () => {
           return (
             <AgreementPanel customer={customer} onSent={refreshCustomer} />
           );
-        // Only the KAM can request the provisional-period extension — the
-        // Sales Coordinator just waits for documents to be uploaded.
         return <Waiting>Waiting for KAM to complete document upload</Waiting>;
       }
       if (role === ROLES.KAM) {
@@ -184,6 +201,14 @@ const CustomerDetail = () => {
               Waiting for the Sales Coordinator to collect the Agreement
             </Waiting>
           );
+        // Document upload happens in the main panel above while still
+        // within the 21-day window.
+        return null;
+      }
+    }
+
+    if (isProvisionalExpired) {
+      if (role === ROLES.KAM) {
         return (
           <TimeExtensionRequestPanel
             customer={customer}
@@ -191,6 +216,12 @@ const CustomerDetail = () => {
           />
         );
       }
+      return (
+        <Waiting>
+          Provisional period expired — waiting for KAM to request an
+          extension
+        </Waiting>
+      );
     }
 
      // NOTE: accountProfileType alone can't gate this — regular-mode final
@@ -338,6 +369,16 @@ const CustomerDetail = () => {
                   TK {customer.creditLimitTk} ({customer.creditPeriodDays} Days)
                 </span>
               </div>
+              {(customer.approvedRate || customer.proposedRate) && (
+                <div>
+                  <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
+                    {customer.approvedRate ? 'APPROVED RATE' : 'PROPOSED RATE'}
+                  </span>
+                  <span className="font-semibold text-slate-800">
+                    {customer.approvedRate || customer.proposedRate}
+                  </span>
+                </div>
+              )}
               <div>
                 <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
                   SERVICE / MODE / TYPE

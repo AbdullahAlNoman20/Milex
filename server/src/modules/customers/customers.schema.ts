@@ -124,3 +124,10 @@ export const listCustomersQuerySchema = z
   .strict();
 
 export const reassignCustomerSchema = z.object({ newKamId: z.string().min(1, 'Please choose a Key Account Manager to reassign to.') }).strict();
+
+export const reapproveRateSchema = z
+  .object({
+    approvedRate: z.string().min(1, 'Please enter the new approved rate.').max(300),
+    lmNote: z.string().max(500).optional(),
+  })
+  .strict();

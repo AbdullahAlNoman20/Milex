@@ -1,38 +1,27 @@
-// admin/src/Pages/modules/sales/roles/KAM/TimeExtensionRequestPanel.jsx
-import  { useState, useRef } from "react";
+// admin/src/Pages/modules/sales/roles/KAM/TimeExtensionRequestPanel.jsx — FULL REPLACE
+import { useState, useRef } from "react";
 import { Clock3 } from "lucide-react";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import { requestTimeExtension } from "../../services/customerService";
 import { isRequired } from "../../../../../Components/utils/validators";
 
-const MAX_REQUESTABLE_DAYS = 90;
+const EXTENSION_DAYS = 5;
 
 const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
   const { showToast } = useToast();
-  const [requestedDays, setRequestedDays] = useState("5");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLockRef = useRef(false);
 
   const handleRequestExtension = async () => {
     if (submitLockRef.current) return;
-    const days = Number(requestedDays);
-    if (!Number.isFinite(days) || days < 1 || days > MAX_REQUESTABLE_DAYS) {
-      return showToast(
-        `Requested days must be between 1 and ${MAX_REQUESTABLE_DAYS}`,
-        "warning",
-      );
-    }
     if (!isRequired(reason)) return showToast("Reason is required", "warning");
 
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      const updated = await requestTimeExtension(customer.id, days, reason);
-      showToast(
-        "Time extension requested — awaiting Line Manager decision",
-        "success",
-      );
+      const updated = await requestTimeExtension(customer.id, EXTENSION_DAYS, reason);
+      showToast("Extension requested — awaiting Line Manager decision", "success");
       onUpdated?.(updated);
       setReason("");
     } catch (err) {
@@ -46,20 +35,11 @@ const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-purple-300 p-6 space-y-3">
       <h3 className="font-bold text-slate-900 text-base flex items-center">
-        <Clock3 size={18} className="mr-2 text-purple-600" /> Request Time
-        Extension
+        <Clock3 size={18} className="mr-2 text-purple-600" /> Provisional Period Expired
       </h3>
       <p className="text-xs text-slate-500">
-        Default 5 days — Line Manager may grant more if needed.
+        The 21-day document upload window has ended. You can request a {EXTENSION_DAYS}-day extension from your Line Manager.
       </p>
-      <input
-        type="number"
-        min="1"
-        max={MAX_REQUESTABLE_DAYS}
-        value={requestedDays}
-        onChange={(e) => setRequestedDays(e.target.value)}
-        className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:border-purple-500"
-      />
       <textarea
         className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-purple-500 min-h-[70px]"
         placeholder="Reason for extension request"
@@ -73,7 +53,7 @@ const TimeExtensionRequestPanel = ({ customer, onUpdated }) => {
         onClick={handleRequestExtension}
         className="w-full bg-purple-600 text-white font-bold py-2.5 rounded-lg text-sm shadow hover:bg-purple-700 transition disabled:opacity-50"
       >
-        Request Extension
+        Request {EXTENSION_DAYS}-Day Extension
       </button>
     </div>
   );

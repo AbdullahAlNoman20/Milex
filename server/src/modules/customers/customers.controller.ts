@@ -182,6 +182,9 @@ export const deleteCustomerHandler = async (req: Request, res: Response, next: N
 };
 
 export const reassignCustomerHandler = wrap((req) => customersService.reassignCustomer(asString(req.params.id), req.body.newKamId, req.user!.id));
+export const reapproveRateHandler = wrap((req) =>
+  customersService.reapproveRateAfterRejection(asString(req.params.id), req.body.approvedRate, req.body.lmNote, req.user!.id)
+);
 
 export const listEditHistoryHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
