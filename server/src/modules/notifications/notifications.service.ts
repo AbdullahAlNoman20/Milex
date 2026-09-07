@@ -11,16 +11,31 @@ export interface NotificationInput {
   type?: string;
 }
 
-// Persistence (DB write) and the realtime socket ping are handled in
-// SEPARATE try/catch blocks on purpose. If the database write fails for any
-// reason (e.g. a migration wasn't applied yet), the live socket ping must
-// still fire — otherwise a single DB issue silently kills both the stored
-// notification AND the instant bell/sound update at the same time, which is
-// exactly the kind of "everything just stopped working" bug this avoids.
+// CRITICAL FOR SPEED: the realtime socket push happens FIRST, synchronously,
+// before the database write even starts. A previous version of this system
+// only ever did the socket push (no persisted table existed at all), which
+// is why it felt instant — persisting to the database is valuable for
+// history/7-day-retention/badge-counts, but it must NEVER sit in the
+// critical path of the live push, since even a fast DB commit adds real,
+// perceptible delay once you're on a VPS. Emitting first and persisting
+// second/in-parallel restores that original instant feel while still
+// keeping everything stored correctly.
 export const createNotificationsForUsers = async (userIds: string[], data: NotificationInput): Promise<void> => {
   const uniqueIds = [...new Set(userIds)].filter(Boolean);
   if (uniqueIds.length === 0) return;
 
+  // 1) Fire the live push immediately — this call is synchronous (no
+  // network/DB round trip involved), so nothing before this point should
+  // ever be an `await` that could delay it.
+  try {
+    uniqueIds.forEach((id) => emitNotificationToUser(id));
+  } catch (err) {
+    console.warn('[notifications] Failed to emit realtime notification (non-fatal):', (err as Error)?.message);
+  }
+
+  // 2) Persist afterward. This can take a little time on a busy VPS, but
+  // since the live push already went out above, that time no longer
+  // delays what the user sees/hears.
   try {
     await prisma.notification.createMany({
       data: uniqueIds.map((userId) => ({
@@ -37,12 +52,6 @@ export const createNotificationsForUsers = async (userIds: string[], data: Notif
         'If this keeps happening, check that the "add_notifications" Prisma migration has been applied and the Prisma Client was regenerated:',
       (err as Error)?.message,
     );
-  }
-
-  try {
-    uniqueIds.forEach((id) => emitNotificationToUser(id));
-  } catch (err) {
-    console.warn('[notifications] Failed to emit realtime notification (non-fatal):', (err as Error)?.message);
   }
 };
 

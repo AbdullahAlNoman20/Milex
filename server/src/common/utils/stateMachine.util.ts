@@ -20,24 +20,28 @@ export const notifyCustomerWorkflowUsers = async (
   excludeUserId?: string,
 ) => {
   try {
+    // These three lookups don't depend on each other — running them in
+    // parallel instead of one-after-another cuts the time spent figuring
+    // out "who to notify" roughly to a third, which matters because this
+    // whole function runs on the critical path before the live push fires.
+    const [handler, unassignedFallback, scs] = await Promise.all([
+      prisma.user.findUnique({ where: { id: handledById }, select: { lineManagerId: true } }),
+      prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' }, isActive: true }, select: { id: true } }),
+      prisma.user.findMany({ where: { role: { name: 'SALES_COORDINATOR' }, isActive: true }, select: { id: true } }),
+    ]);
+
     const notifyIds = new Set<string>([handledById]);
 
-    const handler = await prisma.user.findUnique({ where: { id: handledById }, select: { lineManagerId: true } });
-
     if (handler?.lineManagerId) {
+      // Scoped: only the Line Manager this KAM/SC is actually assigned to
+      // gets pinged — not every Line Manager in the system.
       notifyIds.add(handler.lineManagerId);
     } else {
-      const unassignedFallback = await prisma.user.findMany({
-        where: { role: { name: 'LINE_MANAGER' }, isActive: true },
-        select: { id: true },
-      });
+      // No LM assigned yet — fall back to notifying every active LM so
+      // nothing silently falls through the cracks.
       unassignedFallback.forEach((u) => notifyIds.add(u.id));
     }
 
-    const scs = await prisma.user.findMany({
-      where: { role: { name: 'SALES_COORDINATOR' }, isActive: true },
-      select: { id: true },
-    });
     scs.forEach((u) => notifyIds.add(u.id));
 
     if (excludeUserId) notifyIds.delete(excludeUserId);
