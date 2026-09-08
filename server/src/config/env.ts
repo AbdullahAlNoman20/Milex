@@ -36,6 +36,19 @@ export const env = Object.freeze({
   FIELD_ENCRYPTION_KEY: required("FIELD_ENCRYPTION_KEY"),
   COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || "localhost",
   IS_PRODUCTION: process.env.NODE_ENV === "production",
+  // Optional — only needed if/when this app scales to multiple PM2
+  // instances or multiple servers. Leave unset for the current
+  // single-instance deployment; Socket.IO works fine without it.
+  REDIS_URL: process.env.REDIS_URL || "",
+  // Postgres connection pool size used by the pg.Pool driver adapter (see
+  // config/db.ts). NOTE: this is NOT the same as a `connection_limit` query
+  // param on DATABASE_URL — that param only affects Prisma's own built-in
+  // pooling, which this app does not use (it uses a custom pg Pool adapter
+  // instead), so it would silently do nothing here. This is the setting
+  // that actually matters. Before raising it, check your Postgres server's
+  // own limit with `SHOW max_connections;` — this value plus every other
+  // app/tool connecting to the same database must stay comfortably under it.
+  PG_POOL_MAX: Number(process.env.PG_POOL_MAX || 10),
 });
 
 if (

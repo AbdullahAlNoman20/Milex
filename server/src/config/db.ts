@@ -8,7 +8,7 @@ import { env } from './env';
 // bare `new PrismaClient()` against a connection string alone no longer works.
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
-  max: 10,
+  max: env.PG_POOL_MAX,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });

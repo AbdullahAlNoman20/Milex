@@ -11,7 +11,9 @@ export const getSocket = () => {
     withCredentials: true,
     autoConnect: true,
     reconnection: true,
+    reconnectionAttempts: 10,
     reconnectionDelay: 2000,
+    reconnectionDelayMax: 10000,
   });
 
   // Temporary visibility — open the browser console and you'll see exactly

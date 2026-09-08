@@ -8,6 +8,7 @@ import { listReportsForKam } from "../services/dailyReportService";
 import { humanizeStatus } from "../../../../Components/utils/format";
 import Loader from "../../../../Components/Shared/Loader";
 import Pagination from "../../../../Components/Shared/Pagination";
+
 const KpiCard = ({ icon: Icon, label, value, iconBg }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center gap-3 min-w-0">
     <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
@@ -63,13 +64,52 @@ const VisitStatusBadge = ({ completed }) => {
   );
 };
 
-// Plain ISO ("YYYY-MM-DD") strings sort/compare correctly lexicographically,
-// so no Date parsing is needed for range filtering.
+// Plain ISO ("YYYY-MM-DD") strings sort/compare correctly lexicographically.
 const isWithinDateRange = (dateStr, from, to) => {
   if (!dateStr) return true;
   if (from && dateStr < from) return false;
   if (to && dateStr > to) return false;
   return true;
+};
+
+const toISODate = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const formatShortDate = (isoStr) =>
+  isoStr ? new Date(`${isoStr}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+
+// Groups a flat list of {day, ...} visits into consecutive 7-day "week set"
+// buckets, anchored at `anchorIso` (the person's chosen "From" date) instead
+// of the fixed Saturday-start work week. This is what makes "Monday to next
+// Monday" show exactly those days as one set, whatever length the final
+// partial set ends up being (10, 12, 15 days, etc.).
+const groupIntoWeekSets = (visits, anchorIso) => {
+  if (visits.length === 0) return [];
+  const anchor = anchorIso || visits.reduce((min, v) => (v.day < min ? v.day : min), visits[0].day);
+  const anchorDate = new Date(`${anchor}T00:00:00`);
+
+  const buckets = new Map();
+  visits.forEach((v) => {
+    const d = new Date(`${v.day}T00:00:00`);
+    const diffDays = Math.floor((d - anchorDate) / 86400000);
+    const bucketIndex = Math.floor(diffDays / 7);
+    if (!buckets.has(bucketIndex)) {
+      const start = new Date(anchorDate);
+      start.setDate(start.getDate() + bucketIndex * 7);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      buckets.set(bucketIndex, { key: `set_${bucketIndex}`, start: toISODate(start), end: toISODate(end), visits: [] });
+    }
+    buckets.get(bucketIndex).visits.push(v);
+  });
+
+  return Array.from(buckets.values())
+    .sort((a, b) => (a.start < b.start ? -1 : 1))
+    .map((bucket) => ({ ...bucket, visits: bucket.visits.sort((a, b) => (a.day < b.day ? -1 : 1)) }));
 };
 
 const TeamReportsPage = () => {
@@ -87,13 +127,13 @@ const TeamReportsPage = () => {
   const [reportSearch, setReportSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [expandedPlanIds, setExpandedPlanIds] = useState(() => new Set());
+  const [expandedKeys, setExpandedKeys] = useState(() => new Set());
 
-  const togglePlanExpanded = (id) => {
-    setExpandedPlanIds((prev) => {
+  const toggleExpanded = (key) => {
+    setExpandedKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -123,7 +163,7 @@ const TeamReportsPage = () => {
       setReportSearch("");
       setDateFrom("");
       setDateTo("");
-      setExpandedPlanIds(new Set());
+      setExpandedKeys(new Set());
       setIsDetailLoading(true);
       try {
         const [plans, reports] = await Promise.all([listPlansForKamId(kam.id), listReportsForKam(kam.id)]);
@@ -159,6 +199,13 @@ const TeamReportsPage = () => {
     ? Math.round((completedVisitsAcrossReports / totalVisitsAcrossReports) * 100)
     : 0;
 
+  const hasDateFilter = !!(dateFrom || dateTo);
+  const clearDateFilter = () => {
+    setDateFrom("");
+    setDateTo("");
+  };
+
+  // --- Default (no date filter) weekly view — unchanged, fixed Saturday-start week cards ---
   const filteredWeeklyPlans = useMemo(() => {
     const q = reportSearch.trim().toLowerCase();
     return weeklyPlans.filter((p) => {
@@ -166,31 +213,56 @@ const TeamReportsPage = () => {
         !q ||
         p.weekStartDate?.toLowerCase().includes(q) ||
         [...p.existingVisits, ...p.prospectVisits].some((v) => v.customerName?.toLowerCase().includes(q));
-      const matchesDate = isWithinDateRange(p.weekStartDate, dateFrom, dateTo);
+      return matchesSearch;
+    });
+  }, [weeklyPlans, reportSearch]);
+
+  // --- Date-filtered weekly view — dynamic rolling week sets ---
+  const allWeeklyVisitsFlat = useMemo(
+    () =>
+      weeklyPlans.flatMap((p) =>
+        [...p.existingVisits, ...p.prospectVisits].map((v) => ({ ...v, planStatus: p.status }))
+      ),
+    [weeklyPlans]
+  );
+
+  const filteredFlatVisits = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase();
+    return allWeeklyVisitsFlat.filter((v) => {
+      const matchesSearch = !q || v.customerName?.toLowerCase().includes(q);
+      const matchesDate = isWithinDateRange(v.day, dateFrom, dateTo);
       return matchesSearch && matchesDate;
     });
-  }, [weeklyPlans, reportSearch, dateFrom, dateTo]);
+  }, [allWeeklyVisitsFlat, reportSearch, dateFrom, dateTo]);
+
+  const weekSets = useMemo(() => {
+    if (!hasDateFilter) return [];
+    return groupIntoWeekSets(filteredFlatVisits, dateFrom || undefined);
+  }, [hasDateFilter, filteredFlatVisits, dateFrom]);
 
   const filteredDailyReports = useMemo(() => {
     const q = reportSearch.trim().toLowerCase();
     return dailyReports.filter((r) => {
-      const matchesSearch =
-        !q || r.date?.toLowerCase().includes(q) || r.visits.some((v) => v.customerName?.toLowerCase().includes(q));
+      const matchesSearch = !q || r.date?.toLowerCase().includes(q) || r.visits.some((v) => v.customerName?.toLowerCase().includes(q));
       const matchesDate = isWithinDateRange(r.date, dateFrom, dateTo);
       return matchesSearch && matchesDate;
     });
   }, [dailyReports, reportSearch, dateFrom, dateTo]);
 
-  const hasDateFilter = !!(dateFrom || dateTo);
-  const clearDateFilter = () => {
-    setDateFrom("");
-    setDateTo("");
-  };
-
   const exportReports = () => {
-    const rows =
-      tab === "weekly"
-        ? filteredWeeklyPlans.flatMap((p) =>
+    let rows = [];
+    if (tab === "weekly") {
+      rows = hasDateFilter
+        ? weekSets.flatMap((set) =>
+            set.visits.map((v) => ({
+              "Week Set": `${set.start} to ${set.end}`,
+              Date: v.day,
+              Customer: v.customerName,
+              Purpose: v.purpose,
+              Outcome: v.outcomeNotes || "",
+            }))
+          )
+        : filteredWeeklyPlans.flatMap((p) =>
             [...p.existingVisits, ...p.prospectVisits].map((v) => ({
               Week: p.weekStartDate,
               Day: v.day,
@@ -198,16 +270,18 @@ const TeamReportsPage = () => {
               Purpose: v.purpose,
               Outcome: v.outcomeNotes || "",
             }))
-          )
-        : filteredDailyReports.flatMap((r) =>
-            r.visits.map((v) => ({
-              Date: r.date,
-              Customer: v.customerName,
-              Status: v.completed ? "Completed" : "Not Completed",
-              Reason: v.reasonIfNotCompleted || "",
-              Outcome: v.outcomeNotes || "",
-            }))
           );
+    } else {
+      rows = filteredDailyReports.flatMap((r) =>
+        r.visits.map((v) => ({
+          Date: r.date,
+          Customer: v.customerName,
+          Status: v.completed ? "Completed" : "Not Completed",
+          Reason: v.reasonIfNotCompleted || "",
+          Outcome: v.outcomeNotes || "",
+        }))
+      );
+    }
     if (rows.length === 0) return showToast("Nothing to export", "warning");
     const headers = Object.keys(rows[0]);
     const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h]).replace(/"/g, '""')}"`).join(","))].join("\n");
@@ -215,7 +289,7 @@ const TeamReportsPage = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${activeKam.name.replace(/\s+/g, "_")}_${tab}.csv`;
+    a.download = `${activeKam.name.replace(/\s+/g, "_")}_${tab}${hasDateFilter ? "_filtered" : ""}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -225,7 +299,6 @@ const TeamReportsPage = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-5 sm:py-6 space-y-5">
-        {/* Header */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -255,7 +328,6 @@ const TeamReportsPage = () => {
           </div>
         </div>
 
-        {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <KpiCard icon={Users} label="Total KAM" value={kams.length} iconBg="bg-emerald-50 text-emerald-600" />
           <KpiCard icon={Users} label="Filtered Results" value={filteredKams.length} iconBg="bg-blue-50 text-blue-600" />
@@ -274,9 +346,7 @@ const TeamReportsPage = () => {
           )}
         </div>
 
-        {/* Main split layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Left: KAM list */}
           <div className={`${activeKam ? "lg:col-span-4" : "lg:col-span-12"} bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all`}>
             <div className="flex justify-between items-center px-4 sm:px-5 py-4 border-b border-slate-100">
               <h3 className="font-bold text-slate-800 text-sm">KAM Team</h3>
@@ -345,7 +415,6 @@ const TeamReportsPage = () => {
 
           {activeKam && (
             <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] overflow-hidden">
-              {/* Profile header */}
               <div className="flex flex-wrap items-center justify-between gap-4 px-4 sm:px-5 py-4 border-b border-slate-100">
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar name={activeKam.name} size="w-14 h-14 text-base" />
@@ -378,7 +447,6 @@ const TeamReportsPage = () => {
                 </button>
               </div>
 
-              {/* Tabs */}
               <div className="flex gap-2 px-4 sm:px-5 pt-3 border-b border-slate-100">
                 {[
                   { key: "weekly", label: `Weekly Plans (${totalPlans})` },
@@ -397,7 +465,6 @@ const TeamReportsPage = () => {
                 ))}
               </div>
 
-              {/* Filter bar */}
               <div className="flex flex-wrap items-center gap-2 px-4 sm:px-5 py-3 border-b border-slate-100">
                 <div className="relative flex-1 min-w-[160px]">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -405,7 +472,7 @@ const TeamReportsPage = () => {
                     value={reportSearch}
                     onChange={(e) => setReportSearch(e.target.value)}
                     maxLength={150}
-                    placeholder="Search customer or date..."
+                    placeholder="Search customer..."
                     className="w-full pl-7 pr-2 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
@@ -443,23 +510,90 @@ const TeamReportsPage = () => {
                 </button>
               </div>
 
-              {/* Content */}
               <div className="p-4 sm:p-5 overflow-y-auto max-h-[560px]">
                 {isDetailLoading ? (
                   <Loader label="Loading..." />
                 ) : tab === "weekly" ? (
-                  filteredWeeklyPlans.length === 0 ? (
+                  hasDateFilter ? (
+                    weekSets.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-8">No visits found in this date range.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {weekSets.map((set) => {
+                          const isExpanded = expandedKeys.has(set.key);
+                          return (
+                            <div key={set.key} className="border border-slate-200 rounded-xl overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpanded(set.key)}
+                                className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-slate-50 transition"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <ChevronDown
+                                    size={16}
+                                    className={`text-slate-400 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-bold text-slate-700">
+                                      {formatShortDate(set.start)} – {formatShortDate(set.end)}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">{set.visits.length} visit(s)</p>
+                                  </div>
+                                </div>
+                              </button>
+                              {isExpanded && (
+                                <div className="p-4 border-t border-slate-100">
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse min-w-[560px]">
+                                      <thead>
+                                        <tr className="text-[10px] text-slate-400 font-bold uppercase tracking-wide border-b border-slate-200">
+                                          <th className="py-2 pr-3">Date</th>
+                                          <th className="py-2 pr-3">Customer Name</th>
+                                          <th className="py-2 pr-3">Purpose</th>
+                                          <th className="py-2 pr-3">Status</th>
+                                          <th className="py-2">Outcome / Notes</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {set.visits.map((v) => (
+                                          <tr key={v.id} className="text-xs align-top">
+                                            <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
+                                            <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
+                                            <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
+                                            <td className="py-2.5 pr-3">
+                                              <VisitStatusBadge completed={v.completed} />
+                                            </td>
+                                            <td className="py-2.5 text-slate-500">
+                                              {v.completed === false ? (
+                                                <span className="text-red-600">{v.reasonIfNotCompleted || "—"}</span>
+                                              ) : (
+                                                v.outcomeNotes || "—"
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  ) : filteredWeeklyPlans.length === 0 ? (
                     <p className="text-sm text-slate-400 text-center py-8">No weekly plans found.</p>
                   ) : (
                     <div className="space-y-3">
                       {filteredWeeklyPlans.map((p) => {
-                        const isExpanded = expandedPlanIds.has(p.id);
+                        const isExpanded = expandedKeys.has(p.id);
                         const totalVisits = p.existingVisits.length + p.prospectVisits.length;
                         return (
                           <div key={p.id} className="border border-slate-200 rounded-xl overflow-hidden">
                             <button
                               type="button"
-                              onClick={() => togglePlanExpanded(p.id)}
+                              onClick={() => toggleExpanded(p.id)}
                               className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-slate-50 transition"
                             >
                               <div className="flex items-center gap-3 min-w-0">

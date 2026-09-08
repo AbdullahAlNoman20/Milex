@@ -421,6 +421,10 @@ model Notification {
 
   @@index([userId, createdAt])
   @@index([userId, isRead])
+  // Standalone index (not prefixed by userId) — the daily retention-cleanup
+  // job deletes across ALL users by createdAt alone, so it needs this to
+  // avoid a full table scan as the notifications table grows.
+  @@index([createdAt])
 }
 
 model AuditLog {
