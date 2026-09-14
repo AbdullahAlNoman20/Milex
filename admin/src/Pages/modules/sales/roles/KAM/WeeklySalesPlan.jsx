@@ -220,7 +220,23 @@ const VisitRowCard = ({ v, locked, readOnly = false, onChange, onRemove, onUnloc
       />
     )}
 
-    {!isNewRow(v.id) && <StatusBadge v={v} />}
+    {!isNewRow(v.id) && (
+      <div className="space-y-1.5">
+        <StatusBadge v={v} />
+        {v.completed === false && (
+          <p className="text-[11px] text-red-600 break-words">
+            <span className="font-semibold text-red-700">Reason for skipping: </span>
+            {v.reasonIfNotCompleted || 'No reason recorded'}
+          </p>
+        )}
+        {v.completed === true && (
+          <p className="text-[11px] text-[#6B7280] break-words">
+            <span className="font-semibold text-[#111827]">Outcome: </span>
+            {v.outcomeNotes || 'No notes added'}
+          </p>
+        )}
+      </div>
+    )}
   </div>
 );
 
@@ -480,6 +496,7 @@ const sanitizeVisit = (v) => ({
                     <th className="py-2.5 px-3">Customer</th>
                     <th className="py-2.5 px-3">Purpose</th>
                     <th className="py-2.5 px-3 w-28">Status</th>
+                    <th className="py-2.5 px-3">Outcome / Reason</th>
                     <th className="py-2.5 px-3 w-20 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -532,6 +549,18 @@ const sanitizeVisit = (v) => ({
                           )}
                         </td>
                         <td className="py-2.5 px-3">{!isNewRow(v.id) && <StatusBadge v={v} />}</td>
+                        {/* Filled in from the Daily Visiting Report for this
+                            date — the plan itself holds no outcome, so this
+                            is the only place the two views meet. */}
+                        <td className="py-2.5 px-3 text-xs">
+                          {v.completed === false ? (
+                            <span className="text-red-600 break-words">{v.reasonIfNotCompleted || 'No reason recorded'}</span>
+                          ) : v.completed === true ? (
+                            <span className="text-[#6B7280] break-words">{v.outcomeNotes || 'No notes added'}</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           {!isReadOnly && locked && (
                             <button

@@ -102,7 +102,10 @@ const SalesLayoutInner = () => {
             </div>
           </header>
           {isChangePasswordOpen && <ChangePasswordModal onClose={() => setIsChangePasswordOpen(false)} />}
-          <main className="flex-1 overflow-x-hidden overflow-y-auto md:p-6 relative">
+          {/* A small amount of breathing room on phones too — going straight
+              from zero to md:p-6 left every page's first element touching
+              the top edge on mobile. */}
+          <main className="flex-1 overflow-x-hidden overflow-y-auto p-0 sm:p-2 md:p-6 relative">
             <Toast />
             <ErrorBoundary>
               <Outlet />

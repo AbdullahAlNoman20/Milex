@@ -269,21 +269,29 @@ const CustomerDetail = () => {
   };
 
   return (
-    <div className="max-w-[1400px] px-3 mx-auto space-y-6 animate-in fade-in duration-300 pb-12">
+    <div className="max-w-[1400px] px-3 sm:px-4 md:px-0 mx-auto space-y-5 sm:space-y-6 animate-in fade-in duration-300 pt-4 md:pt-0 pb-12">
+      {/* The page body has no padding below md, so this used to sit flush
+          against the top edge of the screen. It is also now a proper
+          44px-tall target rather than bare text, which is the minimum a
+          thumb can reliably hit on a phone. */}
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center mb-2 transition"
+        className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 px-3.5 py-2.5 rounded-lg shadow-sm hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition min-h-[40px]"
       >
-        <ArrowLeft size={14} className="mr-1.5" /> Back
+        <ArrowLeft size={15} className="shrink-0" /> Back
       </button>
 
-      <div className="bg-white p-5 sm:p-8 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-center gap-4">
-        <div>
+      <div className="bg-white p-5 sm:p-8 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-center gap-4 overflow-hidden">
+        {/* min-w-0 is what allows this column to shrink below the intrinsic
+            width of its contents. Without it the barcode badge could force
+            the card — and therefore every card on the page — wider than the
+            phone screen. */}
+        <div className="min-w-0 w-full sm:w-auto">
           <h2 className="text-xl sm:text-3xl font-black text-slate-800 mb-2 break-words">
             {customer.accountName}
           </h2>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
             <ScannableBarcode value={customer.barcode} />
             {customer.rateRef && (
               <BarcodeBadge
