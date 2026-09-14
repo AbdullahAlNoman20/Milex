@@ -1,6 +1,6 @@
 // FILE: admin/src/Pages/modules/sales/roles/KAM/WeeklySalesPlan.jsx
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Trash2, Save, Pencil, ChevronDown, Loader2, X } from "lucide-react";
+import { Plus, Trash2, Save, Pencil, Loader2, X, CalendarCheck, Lock } from "lucide-react";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import { todayLocalISO } from "../../../../../Components/utils/date";
 import {
@@ -132,39 +132,48 @@ const AddVisitModal = ({ section, onClose, onSave }) => {
   );
 };
 
-const PreviousPlansModal = ({ plans, onClose, onSelect }) => (
-  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-    <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-[12px] p-5 space-y-3 max-h-[80vh] flex flex-col">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-[#111827] text-sm">Previous Plans</h3>
-        <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
-          <X size={16} />
-        </button>
-      </div>
-      <div className="overflow-y-auto divide-y divide-[#E5E7EB]">
-        {plans.length === 0 && <p className="text-xs text-[#6B7280] py-4">No previous plans found.</p>}
-        {plans.map((p) => {
-          const total = p.existingVisits.length + p.prospectVisits.length;
-          return (
-            <button
-              type="button"
-              key={p.id}
-              onClick={() => onSelect(p)}
-              className="w-full flex items-center justify-between py-3 text-left hover:bg-slate-50 transition px-1"
-            >
-              <span className="text-xs font-semibold text-[#111827]">
-                {formatDateRange(p.weekStartDate, getWeekEnd(p.weekStartDate))}
-              </span>
-              <span className="text-[10px] text-[#6B7280]">{total} visit(s)</span>
-            </button>
-          );
-        })}
+// Only weeks other than the current one are listed here — the current week
+// is always one tap away via the "Current Week" button and is what the page
+// opens on, so repeating it in this list was only ever confusing.
+const PreviousPlansModal = ({ plans, currentWeekStart, onClose, onSelect }) => {
+  const previous = plans.filter((p) => p.weekStartDate !== currentWeekStart);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-[12px] p-5 space-y-3 max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-[#111827] text-sm">Previous Plans</h3>
+            <p className="text-[10px] text-[#6B7280] mt-0.5">Past weeks are shown for reference and can't be edited.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="overflow-y-auto divide-y divide-[#E5E7EB]">
+          {previous.length === 0 && <p className="text-xs text-[#6B7280] py-4">No previous plans yet.</p>}
+          {previous.map((p) => {
+            const total = p.existingVisits.length + p.prospectVisits.length;
+            return (
+              <button
+                type="button"
+                key={p.id}
+                onClick={() => onSelect(p)}
+                className="w-full flex items-center justify-between py-3 text-left hover:bg-slate-50 transition px-1"
+              >
+                <span className="text-xs font-semibold text-[#111827]">
+                  {formatDateRange(p.weekStartDate, getWeekEnd(p.weekStartDate))}
+                </span>
+                <span className="text-[10px] text-[#6B7280]">{total} visit(s)</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-const VisitRowCard = ({ v, locked, onChange, onRemove, onUnlock, searchableCustomer }) => (
+const VisitRowCard = ({ v, locked, readOnly = false, onChange, onRemove, onUnlock, searchableCustomer }) => (
   <div className="bg-white border border-[#E5E7EB] rounded-[12px] p-4 space-y-2">
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
@@ -186,12 +195,12 @@ const VisitRowCard = ({ v, locked, onChange, onRemove, onUnlock, searchableCusto
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {locked && (
+        {!readOnly && locked && (
           <button type="button" onClick={() => onUnlock(v.id)} className="text-slate-300 hover:text-[#059669] transition" aria-label="Edit">
             <Pencil size={14} />
           </button>
         )}
-        {isNewRow(v.id) && (
+        {!readOnly && isNewRow(v.id) && (
           <button type="button" onClick={() => onRemove(v.id)} className="text-slate-300 hover:text-red-500 transition" aria-label="Delete">
             <Trash2 size={14} />
           </button>
@@ -365,7 +374,12 @@ const sanitizeVisit = (v) => ({
     );
   }
 
+  // A past week is a record of what happened, not a plan to change. Making
+  // it read-only removes the whole class of "I edited last week by mistake"
+  // problems, and makes it obvious that adding a visit belongs to the week
+  // currently being planned.
   const isEditingCurrentWeek = plan.weekStartDate === currentWeekStart;
+  const isReadOnly = !isEditingCurrentWeek;
   const totalExisting = plan.existingVisits.length;
   const totalProspect = plan.prospectVisits.length;
   const totalVisits = totalExisting + totalProspect;
@@ -382,18 +396,21 @@ const sanitizeVisit = (v) => ({
           </div>
           <div className="flex flex-col items-start md:items-end gap-2">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={goToCurrentWeek}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#111827] border border-[#E5E7EB] bg-white px-3 py-2 rounded-[10px]"
-              >
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#111827] border border-[#E5E7EB] bg-white px-3 py-2 rounded-[10px]">
                 {formatDateRange(plan.weekStartDate, getWeekEnd(plan.weekStartDate))}
-                <ChevronDown size={14} className="text-[#6B7280]" />
-              </button>
-              {isEditingCurrentWeek && (
+              </span>
+              {isEditingCurrentWeek ? (
                 <span className="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1.5 text-[10px] font-bold bg-[#059669] text-white">
                   Current Week
                 </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goToCurrentWeek}
+                  className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] font-bold bg-[#059669] text-white hover:bg-[#0D8A68] transition"
+                >
+                  <CalendarCheck size={12} /> Go to Current Week
+                </button>
               )}
             </div>
             <div className="flex items-center gap-3">
@@ -404,18 +421,29 @@ const sanitizeVisit = (v) => ({
               >
                 Previous Plans
               </button>
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={handleSave}
-                className="hidden md:inline-flex items-center gap-1.5 px-4 py-2 bg-[#059669] text-white rounded-[10px] text-xs font-bold hover:bg-[#0D8A68] transition disabled:opacity-50"
-              >
-                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                Save Weekly Plan
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleSave}
+                  className="hidden md:inline-flex items-center gap-1.5 px-4 py-2 bg-[#059669] text-white rounded-[10px] text-xs font-bold hover:bg-[#0D8A68] transition disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  Save Weekly Plan
+                </button>
+              )}
             </div>
           </div>
         </div>
+
+        {isReadOnly && (
+          <div className="flex items-center gap-2 bg-slate-100 border border-[#E5E7EB] rounded-[12px] px-4 py-2.5">
+            <Lock size={13} className="text-[#6B7280] shrink-0" />
+            <p className="text-xs text-[#6B7280]">
+              You're viewing a past week. Visits can only be added or changed in the current week.
+            </p>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex items-center gap-1 border-b border-[#E5E7EB]">
@@ -457,7 +485,7 @@ const sanitizeVisit = (v) => ({
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB]">
                   {activeVisits.map((v) => {
-                    const locked = !isNewRow(v.id) && !editingRowIds.has(v.id);
+                    const locked = isReadOnly || (!isNewRow(v.id) && !editingRowIds.has(v.id));
                     return (
                       <tr key={v.id} className="align-top">
                         <td className="py-2.5 px-4">
@@ -505,7 +533,7 @@ const sanitizeVisit = (v) => ({
                         </td>
                         <td className="py-2.5 px-3">{!isNewRow(v.id) && <StatusBadge v={v} />}</td>
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          {locked && (
+                          {!isReadOnly && locked && (
                             <button
                               type="button"
                               onClick={() => unlockRow(v.id)}
@@ -515,7 +543,7 @@ const sanitizeVisit = (v) => ({
                               <Pencil size={13} />
                             </button>
                           )}
-                          {isNewRow(v.id) && (
+                          {!isReadOnly && isNewRow(v.id) && (
                             <button
                               type="button"
                               onClick={() => removeVisit(activeTab, v.id)}
@@ -525,6 +553,7 @@ const sanitizeVisit = (v) => ({
                               <Trash2 size={13} />
                             </button>
                           )}
+                          {isReadOnly && <span className="text-slate-300 text-xs">—</span>}
                         </td>
                       </tr>
                     );
@@ -539,7 +568,8 @@ const sanitizeVisit = (v) => ({
                 <VisitRowCard
                   key={v.id}
                   v={v}
-                  locked={!isNewRow(v.id) && !editingRowIds.has(v.id)}
+                  readOnly={isReadOnly}
+                  locked={isReadOnly || (!isNewRow(v.id) && !editingRowIds.has(v.id))}
                   onChange={(updated) => updateVisit(activeTab, v.id, updated)}
                   onRemove={(id) => removeVisit(activeTab, id)}
                   onUnlock={unlockRow}
@@ -550,13 +580,15 @@ const sanitizeVisit = (v) => ({
           </>
         )}
 
-        <button
-          type="button"
-          onClick={() => setShowAddModal(true)}
-          className="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-[#E5E7EB] text-[#059669] rounded-[12px] px-4 py-3 text-xs font-bold hover:bg-emerald-50/50 transition"
-        >
-          <Plus size={14} /> Add Visit
-        </button>
+        {!isReadOnly && (
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="w-full inline-flex items-center justify-center gap-1.5 border border-dashed border-[#E5E7EB] text-[#059669] rounded-[12px] px-4 py-3 text-xs font-bold hover:bg-emerald-50/50 transition"
+          >
+            <Plus size={14} /> Add Visit
+          </button>
+        )}
 
         {/* Small Summary */}
         <p className="text-xs text-[#6B7280] text-center">
@@ -578,22 +610,33 @@ const sanitizeVisit = (v) => ({
       {showPreviousPlans && (
         <PreviousPlansModal
           plans={allPlans}
+          currentWeekStart={currentWeekStart}
           onClose={() => setShowPreviousPlans(false)}
           onSelect={loadWeekIntoForm}
         />
       )}
 
-      {/* Mobile Sticky Save */}
+      {/* Mobile Sticky Save / Return */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-[#E5E7EB] p-3">
-        <button
-          type="button"
-          disabled={isSaving}
-          onClick={handleSave}
-          className="w-full inline-flex items-center justify-center gap-2 py-3 bg-[#059669] text-white rounded-[12px] text-sm font-bold hover:bg-[#0D8A68] transition disabled:opacity-50"
-        >
-          {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          SAVE WEEKLY PLAN
-        </button>
+        {isReadOnly ? (
+          <button
+            type="button"
+            onClick={goToCurrentWeek}
+            className="w-full inline-flex items-center justify-center gap-2 py-3 bg-[#059669] text-white rounded-[12px] text-sm font-bold hover:bg-[#0D8A68] transition"
+          >
+            <CalendarCheck size={16} /> GO TO CURRENT WEEK
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={handleSave}
+            className="w-full inline-flex items-center justify-center gap-2 py-3 bg-[#059669] text-white rounded-[12px] text-sm font-bold hover:bg-[#0D8A68] transition disabled:opacity-50"
+          >
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            SAVE WEEKLY PLAN
+          </button>
+        )}
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import {
   UploadCloud,
   HardDrive,
   AlertTriangle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -31,13 +32,21 @@ import {
   setUserPasswordAdmin,
 } from '../../services/userAdminService';
 import { getBackupStats, downloadBackup, restoreBackup } from '../../services/backupService';
+import BulkImportKamModal from './BulkImportKamModal';
 
+// Used only for displaying an existing account's role.
 const ROLE_OPTIONS = [
   { value: 'KAM', label: 'KAM' },
   { value: 'SALES_COORDINATOR', label: 'Sales Coordinator' },
   { value: 'LINE_MANAGER', label: 'Line Manager' },
   { value: 'SUPER_ADMIN', label: 'Super Admin' },
 ];
+
+// Roles that may actually be assigned. Super Admin is absent on purpose:
+// the system's Super Admin is provisioned once at setup and no further one
+// is ever created or promoted from this console. The server enforces the
+// same rule, so removing it here is presentation, not the safeguard.
+const ASSIGNABLE_ROLE_OPTIONS = ROLE_OPTIONS.filter((r) => r.value !== 'SUPER_ADMIN');
 
 const ROLE_BADGE_STYLE = {
   SUPER_ADMIN: 'bg-violet-100 text-violet-700 ring-violet-200',
@@ -221,6 +230,7 @@ const AdminOverview = () => {
   const [restoreFile, setRestoreFile] = useState(null);
   const [restoreConfirm, setRestoreConfirm] = useState('');
   const [isRestorePanelOpen, setIsRestorePanelOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const backupLockRef = useRef(false);
 
   const loadAll = useCallback(async () => {
@@ -481,6 +491,13 @@ const AdminOverview = () => {
             </button>
             <button
               type="button"
+              onClick={() => setIsBulkImportOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition"
+            >
+              <FileSpreadsheet size={14} /> Import KAMs
+            </button>
+            <button
+              type="button"
               onClick={() => setIsCreatePanelOpen(true)}
               className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-emerald-800 transition"
             >
@@ -601,9 +618,12 @@ const AdminOverview = () => {
                                 ROLE_BADGE_STYLE[u.role] || 'bg-slate-100 text-slate-600 ring-slate-200'
                               }`}
                               value={u.role}
+                              disabled={u.role === 'SUPER_ADMIN'}
                               onChange={(e) => handleRoleChange(u, e.target.value)}
                             >
-                              {ROLE_OPTIONS.map((r) => (
+                              {/* An existing Super Admin's own role is shown but
+                                  locked; no other account can be promoted to it. */}
+                              {(u.role === 'SUPER_ADMIN' ? ROLE_OPTIONS : ASSIGNABLE_ROLE_OPTIONS).map((r) => (
                                 <option key={r.value} value={r.value}>{r.label}</option>
                               ))}
                             </select>
@@ -858,7 +878,7 @@ const AdminOverview = () => {
                     }))
                   }
                 >
-                  {ROLE_OPTIONS.map((r) => (
+                  {ASSIGNABLE_ROLE_OPTIONS.map((r) => (
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
@@ -989,6 +1009,14 @@ const AdminOverview = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {isBulkImportOpen && (
+        <BulkImportKamModal
+          lineManagers={lineManagers}
+          onClose={() => setIsBulkImportOpen(false)}
+          onImported={loadAll}
+        />
       )}
 
       {/* Restore Modal */}

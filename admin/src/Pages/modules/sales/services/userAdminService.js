@@ -21,6 +21,14 @@ export const updateUserAdmin = async (id, payload) => {
   return data.user;
 };
 
+export const bulkImportKams = async (rows, lineManagerId = null) => {
+  const { data } = await request('/users/bulk-import', {
+    method: 'POST',
+    body: { rows, lineManagerId },
+  });
+  return data;
+};
+
 export const setUserPasswordAdmin = async (id, newPassword, requirePasswordChange = true) => {
   const { data } = await request(`/users/${id}/password`, {
     method: 'PATCH',

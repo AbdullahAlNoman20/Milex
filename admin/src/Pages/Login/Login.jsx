@@ -1,6 +1,6 @@
-// src/Pages/Login/Login.jsx
-import  { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+// admin/src/Pages/Login/Login.jsx
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../Components/hooks/useAuth";
 import { useToast } from "../../Components/hooks/useToast";
 import { isValidEmail, isRequired } from "../../Components/utils/validators";
@@ -9,19 +9,10 @@ import Toast from "../../Components/Shared/Toast";
 
 const MAX_ATTEMPTS_MSG_LENGTH = 200;
 
-const DEMO_CREDENTIALS = Object.freeze([
-  { label: "Sales Coordinator", email: "sc@milex.local" },
-  { label: "Kam", email: "kam@milex.local" },
-  { label: "Admin", email: "admin@milex.local" },
-  { label: "Line Manager", email: "lm@milex.local" },
-]);
-const DEMO_PASSWORD = "Test@Pass123!";
-
 const Login = () => {
   const { login, isAuthenticated, isInitializing } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,7 +31,7 @@ const Login = () => {
     // root instead of re-playing a stale path that may not even be valid
     // for the new role.
     if (!isInitializing && isAuthenticated) {
-      navigate('/app', { replace: true });
+      navigate("/app", { replace: true });
     }
   }, [isInitializing, isAuthenticated, navigate]);
 
@@ -82,19 +73,6 @@ const Login = () => {
     [email, password, doLogin],
   );
 
-  const handleDemoSelect = useCallback(
-    (e) => {
-      const selectedEmail = e.target.value;
-      if (!selectedEmail) return;
-      const match = DEMO_CREDENTIALS.find((c) => c.email === selectedEmail);
-      if (!match) return;
-      setEmail(match.email);
-      setPassword(DEMO_PASSWORD);
-      doLogin(match.email, DEMO_PASSWORD);
-    },
-    [doLogin],
-  );
-
   if (isInitializing) {
     return <Loader fullScreen label="Checking session..." />;
   }
@@ -110,31 +88,6 @@ const Login = () => {
           <p className="text-emerald-600 text-xs font-bold tracking-widest mt-1">
             WITH YOU EVERY MILE
           </p>
-        </div>
-
-        <div className="mb-5">
-          <label
-            htmlFor="demo-credential"
-            className="block text-sm font-semibold text-slate-700 mb-2"
-          >
-            Quick Login (Demo)
-          </label>
-          <select
-            id="demo-credential"
-            className="w-full border border-slate-300 p-3 rounded-lg focus:border-emerald-500 outline-none bg-slate-50"
-            defaultValue=""
-            disabled={isSubmitting}
-            onChange={handleDemoSelect}
-          >
-            <option value="" disabled>
-              Select a role...
-            </option>
-            {DEMO_CREDENTIALS.map((c) => (
-              <option key={c.email} value={c.email}>
-                {c.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5" autoComplete="off">
@@ -182,6 +135,11 @@ const Login = () => {
             {isSubmitting ? "Signing in..." : "Login"}
           </button>
         </form>
+
+        <p className="text-center text-[11px] text-slate-400 mt-6">
+          Forgot your password? Please contact your administrator to have it
+          reset.
+        </p>
       </div>
     </div>
   );

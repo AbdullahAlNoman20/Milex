@@ -106,7 +106,14 @@ const CustomersList = () => {
                       {c.accountName}
                     </button>
                   </td>
-                  <td className="p-4"><StatusBadge status={c.status} size="sm" /></td>
+                  <td className="p-4">
+                    <StatusBadge status={c.status} size="sm" />
+                    {c.offerRejected && (
+                      <span className="block mt-1 text-[9px] font-bold uppercase text-red-600">
+                        Offer rejected
+                      </span>
+                    )}
+                  </td>
                   <td className="p-4 text-xs font-bold text-slate-500">{formatRevision(c.revision)}</td>
                   <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>
                   {activeTab === 'provisional' && (
