@@ -99,7 +99,15 @@ const WeeklyPlanReviewList = () => {
                               <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
                               <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
                               <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
-                              <td className="py-2.5 text-slate-500">{v.outcomeNotes || '—'}</td>
+                              {/* A skipped visit's reason matters more to a
+                                  reviewer than a blank outcome column did. */}
+                              <td className="py-2.5 text-slate-500 break-words">
+                                {v.completed === false ? (
+                                  <span className="text-red-600">{v.reasonIfNotCompleted || 'Skipped — no reason recorded'}</span>
+                                ) : (
+                                  v.outcomeNotes || '—'
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -128,7 +136,13 @@ const WeeklyPlanReviewList = () => {
                               <td className="py-2.5 pr-3 font-bold text-slate-700">{v.day}</td>
                               <td className="py-2.5 pr-3 text-slate-700">{v.customerName}</td>
                               <td className="py-2.5 pr-3 text-slate-500">{v.purpose}</td>
-                              <td className="py-2.5 text-slate-500">{v.outcomeNotes || '—'}</td>
+                              <td className="py-2.5 text-slate-500 break-words">
+                                {v.completed === false ? (
+                                  <span className="text-red-600">{v.reasonIfNotCompleted || 'Skipped — no reason recorded'}</span>
+                                ) : (
+                                  v.outcomeNotes || '—'
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
