@@ -2,4 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-body { background-color: #f8fafc; }
+html {
+  /* Stops iOS from re-flowing text to its own chosen size when the phone is
+     turned sideways, which made columns jump around mid-read. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background-color: #f8fafc;
+  /* Nothing in this app is wider than the screen by design, so a horizontal
+     scrollbar is always a layout accident. Tables that genuinely need width
+     scroll inside their own container instead. */
+  overflow-x: hidden;
+}
+
+/* iOS Safari zooms the whole page in whenever a focused field's text is
+   smaller than 16px. Every field here is 12-14px for density, so tapping one
+   zoomed the page and pushed fixed-position elements (the toast, the sidebar
+   overlay) off-screen with no way to scroll back to them.
+   Forcing 16px only on touch devices keeps the compact desktop sizing intact
+   while removing the zoom trigger entirely on phones and tablets. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* A long unbroken string (an email, a rate reference, a pasted URL) used to
+   stretch its container past the edge of the screen. */
+body {
+  overflow-wrap: break-word;
+}

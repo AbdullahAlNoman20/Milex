@@ -5,9 +5,7 @@ import { changePassword } from '../services/authService';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
 
-// `forced` is set when an administrator required a password change on next
-// login — the modal then cannot be dismissed until a new password is set.
-const ChangePasswordModal = ({ onClose, forced = false }) => {
+const ChangePasswordModal = ({ onClose }) => {
   const { showToast } = useToast();
   const { logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -46,17 +44,10 @@ const ChangePasswordModal = ({ onClose, forced = false }) => {
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <KeyRound size={16} className="text-emerald-600" /> Change Password
           </h3>
-          {!forced && (
-            <button type="button" onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-700 transition">
-              <X size={16} />
-            </button>
-          )}
+          <button type="button" onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-700 transition">
+            <X size={16} />
+          </button>
         </div>
-        {forced && (
-          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-            Your administrator set a temporary password for you. Please choose your own password to continue.
-          </p>
-        )}
         <input
           type="password"
           className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
@@ -91,11 +82,9 @@ const ChangePasswordModal = ({ onClose, forced = false }) => {
           >
             {isSubmitting ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Change Password'}
           </button>
-          {!forced && (
-            <button type="button" onClick={onClose} className="px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold">
-              Cancel
-            </button>
-          )}
+          <button type="button" onClick={onClose} className="px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold">
+            Cancel
+          </button>
         </div>
       </div>
     </div>

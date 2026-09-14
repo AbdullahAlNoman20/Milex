@@ -26,6 +26,24 @@ const SalesLayoutInner = () => {
 
   const { items: notificationItems } = useNotifications();
   const prevLatestIdRef = React.useRef(null);
+  const passwordReminderShownRef = React.useRef(false);
+
+  // Accounts created from the spreadsheet import start with their own email
+  // address as the password. They are reminded once per session to set a
+  // real one, but nothing is blocked — every part of the system stays fully
+  // usable until they choose to change it from the key icon in the header.
+  useEffect(() => {
+    if (!currentUser?.mustChangePassword || passwordReminderShownRef.current) return;
+    passwordReminderShownRef.current = true;
+    const timer = setTimeout(() => {
+      showToast(
+        'You are still using your temporary password. Please set your own from the key icon at the top of the page.',
+        'warning',
+        10000,
+      );
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [currentUser, showToast]);
 
   useEffect(() => {
     const latest = notificationItems?.[0];
@@ -83,12 +101,7 @@ const SalesLayoutInner = () => {
               </button>
             </div>
           </header>
-          {(isChangePasswordOpen || currentUser?.mustChangePassword) && (
-        <ChangePasswordModal
-          forced={!!currentUser?.mustChangePassword}
-          onClose={() => setIsChangePasswordOpen(false)}
-        />
-      )}
+          {isChangePasswordOpen && <ChangePasswordModal onClose={() => setIsChangePasswordOpen(false)} />}
           <main className="flex-1 overflow-x-hidden overflow-y-auto md:p-6 relative">
             <Toast />
             <ErrorBoundary>
