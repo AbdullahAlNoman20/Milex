@@ -26,6 +26,19 @@ export const errorHandlerMiddleware = (logger: Logger) => (
     return sendError(res, 409, 'INVALID_STATE_TRANSITION', err.message);
   }
 
+  // Multer surfaces upload problems as codes like LIMIT_FILE_SIZE. Without
+  // this the person saw a raw code instead of being told what to do.
+  const multerCode = err && typeof err === 'object' ? (err as any).code : undefined;
+  if (multerCode === 'LIMIT_FILE_SIZE') {
+    return sendError(res, 413, 'FILE_TOO_LARGE', 'This file is too large. Please upload a file smaller than 10MB.');
+  }
+  if (multerCode === 'LIMIT_FILE_COUNT' || multerCode === 'LIMIT_UNEXPECTED_FILE') {
+    return sendError(res, 400, 'INVALID_UPLOAD', 'Too many files were sent at once. Please upload one file at a time.');
+  }
+  if (err && typeof err === 'object' && (err as any).type === 'entity.too.large') {
+    return sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'The information you sent is too large. Please reduce it and try again.');
+  }
+
   if (err && typeof err === 'object' && 'name' in err && (err as any).name === 'ZodError') {
     const first = (err as any).issues?.[0];
     const message = first ? humanizeZodMessage(first.message, first.path) : FRIENDLY_MESSAGES.GENERIC_VALIDATION;

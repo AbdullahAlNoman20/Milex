@@ -112,8 +112,9 @@ export const requestTimeExtension = async (
   requestedDays: number,
   reason: string,
   kamId: string,
+  actorRole = 'KAM',
 ) => {
-  await assertKamOwnsCustomerIfKam(customerId, kamId, 'KAM');
+  await assertKamOwnsCustomerIfKam(customerId, kamId, actorRole);
   const clean = sanitizeAndEscape({ reason });
   const request = await prisma.timeExtensionRequest.create({
     data: {

@@ -89,6 +89,7 @@ model User {
   kams               User[]    @relation("LineManagerKams")
   mfaSecret          String?
   mfaEnabled         Boolean   @default(false)
+  mustChangePassword Boolean   @default(false)
   failedLoginCount   Int       @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
@@ -144,6 +145,7 @@ model LoginLog {
   createdAt DateTime @default(now())
 
   @@index([email])
+  @@index([userId, createdAt])
 }
 
 model Customer {
@@ -225,6 +227,7 @@ model Customer {
   @@index([followUpDate])
   @@index([status, provisionalExpiryDate])
   @@index([isDeleted])
+  @@index([isDeleted, createdAt])
 }
 
 model Contact {
@@ -288,6 +291,7 @@ model FieldChangeRequest {
   @@index([customerId])
   @@index([approved])
   @@index([pendingFileStorageKey])
+  @@index([requestedById])
 }
 
 model NotificationRead {
@@ -329,6 +333,7 @@ model OnboardingDocument {
 
   @@index([customerId])
   @@index([storageKey])
+  @@index([customerId, documentType])
 }
 
 model TimeExtensionRequest {
@@ -375,6 +380,7 @@ model Visit {
 
   @@index([existingPlanId])
   @@index([prospectPlanId])
+  @@index([day])
 }
 
 model DailyReport {
@@ -387,6 +393,7 @@ model DailyReport {
   updatedAt DateTime     @updatedAt
 
   @@unique([kamId, date])
+  @@index([kamId, date])
 }
 
 model ReportVisit {
@@ -402,6 +409,7 @@ model ReportVisit {
   dailyReport            DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
 
   @@index([dailyReportId])
+  @@index([sourceVisitId])
 }
 
 // Real, persisted notifications — one row per user per event. Replaces the
@@ -441,4 +449,5 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([actorId])
+  @@index([entity, entityId, action])
 }

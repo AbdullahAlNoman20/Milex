@@ -154,7 +154,7 @@ const CustomerDetail = () => {
     // Even after the 21-day window auto-expires, the same offer/agreement/
     // extension panels still apply — the account isn't dead, it's just
     // waiting on a Line-Manager-approved extension to reopen the window.
-    REPLACE:
+
     if (customer.status === STATUS.OFFER_REJECTED) {
       if (role === ROLES.LINE_MANAGER) {
         return (
@@ -357,7 +357,7 @@ const CustomerDetail = () => {
                   MOBILE / EMAIL
                 </span>
                 <span className="font-semibold text-slate-800 block mb-0.5">
-                  {customer.mobile}
+                  {customer.phone || '—'}
                 </span>
                 <span className="text-slate-500 text-sm">{customer.email}</span>
               </div>

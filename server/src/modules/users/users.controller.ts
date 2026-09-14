@@ -28,7 +28,12 @@ export const listLineManagersHandler = async (_req: Request, res: Response, next
 
 export const setUserPasswordHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await usersService.setUserPassword(asString(req.params.id), req.body.newPassword, req.user!.id);
+    await usersService.setUserPassword(
+      asString(req.params.id),
+      req.body.newPassword,
+      req.user!.id,
+      req.body.requirePasswordChange !== false
+    );
     return sendSuccess(res, { updated: true });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);

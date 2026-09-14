@@ -21,7 +21,10 @@ export const updateUserAdmin = async (id, payload) => {
   return data.user;
 };
 
-export const setUserPasswordAdmin = async (id, newPassword) => {
-  const { data } = await request(`/users/${id}/password`, { method: 'PATCH', body: { newPassword } });
+export const setUserPasswordAdmin = async (id, newPassword, requirePasswordChange = true) => {
+  const { data } = await request(`/users/${id}/password`, {
+    method: 'PATCH',
+    body: { newPassword, requirePasswordChange },
+  });
   return data;
 };

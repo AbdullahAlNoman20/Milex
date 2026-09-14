@@ -1,13 +1,36 @@
 // server/src/common/utils/scopeGuard.util.ts
 import { prisma } from "../../config/db";
 
-export const assertLineManagerOwnsCustomer = async (customerId: string, lmId: string) => {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-    include: { handledBy: { select: { lineManagerId: true } } },
+const getActorRole = async (actorId: string): Promise<string | null> => {
+  const actor = await prisma.user.findUnique({
+    where: { id: actorId },
+    select: { role: { select: { name: true } } },
   });
-  if (!customer) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
-  if (customer.handledBy?.lineManagerId !== lmId) {
+  return actor?.role.name ?? null;
+};
+
+// Line Manager scoping, with two deliberate exceptions:
+//  1. SUPER_ADMIN is never scoped — it is the system-wide override role.
+//  2. If the owning KAM/SC has no Line Manager assigned yet, ANY Line
+//     Manager may act. Without this, an unassigned staff member's records
+//     could never be approved by anyone and the workflow would deadlock —
+//     this mirrors the same fallback the notification layer already uses.
+export const assertLineManagerOwnsCustomer = async (customerId: string, actorId: string) => {
+  const [customer, actorRole] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, isDeleted: true, handledBy: { select: { lineManagerId: true } } },
+    }),
+    getActorRole(actorId),
+  ]);
+  if (!customer || customer.isDeleted) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+  }
+  if (actorRole === 'SUPER_ADMIN') return;
+
+  const ownerLineManagerId = customer.handledBy?.lineManagerId ?? null;
+  if (ownerLineManagerId === null) return;
+  if (ownerLineManagerId !== actorId) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'You can only manage customers handled by your own team.' };
   }
 };
@@ -18,9 +41,14 @@ export const assertLineManagerOwnsCustomer = async (customerId: string, lmId: st
 // is a no-op for them by design, not an oversight.
 export const assertKamOwnsCustomerIfKam = async (customerId: string, actorId: string, actorRole: string) => {
   if (actorRole !== 'KAM') return;
-  const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { handledById: true } });
-  if (!customer) throw { statusCode: 404, code: 'NOT_FOUND', message: 'Customer not found' };
-   if (customer.handledById !== actorId) {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { handledById: true, isDeleted: true },
+  });
+  if (!customer || customer.isDeleted) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+  }
+  if (customer.handledById !== actorId) {
     throw {
       statusCode: 403,
       code: 'FORBIDDEN',
@@ -30,10 +58,15 @@ export const assertKamOwnsCustomerIfKam = async (customerId: string, actorId: st
 };
 
 // A Line Manager may only view activity/reports for KAMs and Sales
-// Coordinators actually assigned to them — not any staff member system-wide.
+// Coordinators actually assigned to them. Same two exceptions as above.
 export const assertLineManagerOwnsKam = async (kamId: string, lmId: string) => {
-  const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
-  if (!kam) throw { statusCode: 404, code: 'NOT_FOUND', message: 'User not found' };
+  const [kam, actorRole] = await Promise.all([
+    prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } }),
+    getActorRole(lmId),
+  ]);
+  if (!kam) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that team member.' };
+  if (actorRole === 'SUPER_ADMIN') return;
+  if (kam.lineManagerId === null) return;
   if (kam.lineManagerId !== lmId) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This team member doesn\'t report to you, so you can\'t view their activity.' };
   }

@@ -3,6 +3,7 @@ import { prisma } from '../../config/db';
 import { hashPassword, isPasswordPolicyCompliant, PASSWORD_POLICY_MESSAGE } from '../../common/utils/hash.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
+import { sendNotification } from '../../jobs/notification.job';
 
 const assertUserIsLineManager = async (userId: string) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
@@ -18,6 +19,7 @@ const toSafeUser = (user: any) => ({
   role: user.role.name,
   isActive: user.isActive,
   mfaEnabled: user.mfaEnabled,
+  mustChangePassword: !!user.mustChangePassword,
   lineManagerId: user.lineManagerId || null,
   lastLoginAt: user.lastLoginAt,
   createdAt: user.createdAt,
@@ -96,7 +98,12 @@ export const updateUser = async (
   return toSafeUser(user);
 };
 
-export const setUserPassword = async (targetUserId: string, newPassword: string, actorId: string) => {
+export const setUserPassword = async (
+  targetUserId: string,
+  newPassword: string,
+  actorId: string,
+  requirePasswordChange = true
+) => {
   if (!isPasswordPolicyCompliant(newPassword)) {
     throw { statusCode: 400, code: 'WEAK_PASSWORD', message: PASSWORD_POLICY_MESSAGE };
   }
@@ -104,10 +111,17 @@ export const setUserPassword = async (targetUserId: string, newPassword: string,
   const newHash = await hashPassword(newPassword);
   const updatedHistory = [newHash, ...user.passwordHistory].slice(0, 5);
   await prisma.$transaction([
-    prisma.user.update({ where: { id: targetUserId }, data: { passwordHash: newHash, passwordHistory: updatedHistory } }),
+    prisma.user.update({
+      where: { id: targetUserId },
+      // The "require password change on next login" switch in the admin
+      // console now actually does something — the person is prompted and
+      // cannot dismiss it until they set their own password.
+      data: { passwordHash: newHash, passwordHistory: updatedHistory, mustChangePassword: requirePasswordChange },
+    }),
     prisma.refreshToken.updateMany({ where: { userId: targetUserId }, data: { revoked: true } }),
   ]);
-  await logAudit({ entity: 'User', entityId: targetUserId, action: 'PASSWORD_SET_BY_ADMIN', actorId });
+  await invalidateUserPermissionCache(targetUserId);
+  await logAudit({ entity: 'User', entityId: targetUserId, action: 'PASSWORD_SET_BY_ADMIN', actorId, afterState: { requirePasswordChange } });
 };
 
 export const createUser = async (data: {
@@ -117,6 +131,7 @@ export const createUser = async (data: {
   role: string;
   branchId?: string;
   lineManagerId?: string | null;
+  sendWelcomeEmail?: boolean;
 }, actorId: string) => {
   if (!isPasswordPolicyCompliant(data.password)) {
     throw { statusCode: 400, code: 'WEAK_PASSWORD', message: PASSWORD_POLICY_MESSAGE };
@@ -136,11 +151,29 @@ export const createUser = async (data: {
       roleId: role.id,
       branchId: data.branchId,
       lineManagerId: data.lineManagerId || null,
+      // A password an admin typed for someone else must be replaced by that
+      // person the first time they sign in.
+      mustChangePassword: true,
     },
     include: { role: true },
   });
 
-  await logAudit({ entity: 'User', entityId: user.id, action: 'USER_CREATED', actorId, afterState: { email: user.email, role: role.name, lineManagerId: user.lineManagerId } });
+  await logAudit({
+    entity: 'User',
+    entityId: user.id,
+    action: 'USER_CREATED',
+    actorId,
+    afterState: { email: user.email, role: role.name, lineManagerId: user.lineManagerId, welcomeEmailRequested: !!data.sendWelcomeEmail },
+  });
+
+  if (data.sendWelcomeEmail) {
+    // Recorded and queued through the same path every other notification
+    // uses. No email provider is wired up yet, so this is a no-op delivery
+    // today — the request is still captured in the audit trail above so
+    // nothing is silently lost once a provider is connected.
+    sendNotification({ kind: 'WELCOME', userId: user.id }).catch(() => {});
+  }
+
   return toSafeUser(user);
 };
 

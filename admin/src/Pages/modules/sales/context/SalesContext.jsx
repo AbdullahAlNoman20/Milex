@@ -40,7 +40,7 @@ export const SalesProvider = ({ children }) => {
     try {
       setIsLoading(true);
       setLoadError(null);
-      const data = await customerService.fetchCustomers({ pageSize: '300' });
+      const data = await customerService.fetchCustomers();
       setCustomers(Array.isArray(data) ? data : []);
     } catch {
       setLoadError('Failed to load customer records.');

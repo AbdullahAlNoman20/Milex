@@ -11,37 +11,31 @@ export interface NotificationInput {
   type?: string;
 }
 
-// CRITICAL FOR SPEED: the realtime socket push happens FIRST, synchronously,
-// before the database write even starts. A previous version of this system
-// only ever did the socket push (no persisted table existed at all), which
-// is why it felt instant — persisting to the database is valuable for
-// history/7-day-retention/badge-counts, but it must NEVER sit in the
-// critical path of the live push, since even a fast DB commit adds real,
-// perceptible delay once you're on a VPS. Emitting first and persisting
-// second/in-parallel restores that original instant feel while still
-// keeping everything stored correctly.
+// ORDER MATTERS: the row is written FIRST, then the socket push goes out.
+// The previous version emitted first and wrote afterwards, which created a
+// race — the client received the push, immediately re-read the database,
+// and the row was not committed yet. The bell stayed empty until the next
+// 60-second poll even though the sound had already played.
+//
+// The write is a single indexed createMany against a local connection pool
+// (single-digit milliseconds), so nothing perceptible is lost, and the push
+// now carries the notification body with it so the client does not have to
+// wait on a second round trip to show it.
+//
+// This whole function is called fire-and-forget by every caller, so it is
+// never on the critical path of the user's own request either way.
 export const createNotificationsForUsers = async (userIds: string[], data: NotificationInput): Promise<void> => {
   const uniqueIds = [...new Set(userIds)].filter(Boolean);
   if (uniqueIds.length === 0) return;
 
-  // 1) Fire the live push immediately — this call is synchronous (no
-  // network/DB round trip involved), so nothing before this point should
-  // ever be an `await` that could delay it.
-  try {
-    uniqueIds.forEach((id) => emitNotificationToUser(id));
-  } catch (err) {
-    console.warn('[notifications] Failed to emit realtime notification (non-fatal):', (err as Error)?.message);
-  }
+  const label = data.label.slice(0, 300);
 
-  // 2) Persist afterward. This can take a little time on a busy VPS, but
-  // since the live push already went out above, that time no longer
-  // delays what the user sees/hears.
   try {
     await prisma.notification.createMany({
       data: uniqueIds.map((userId) => ({
         userId,
         type: data.type || 'WORKFLOW',
-        label: data.label.slice(0, 300),
+        label,
         link: data.link,
         isOverdue: !!data.isOverdue,
       })),
@@ -52,6 +46,15 @@ export const createNotificationsForUsers = async (userIds: string[], data: Notif
         'If this keeps happening, check that the "add_notifications" Prisma migration has been applied and the Prisma Client was regenerated:',
       (err as Error)?.message,
     );
+    // Still push live below — a storage failure should not also cost the
+    // person the realtime alert.
+  }
+
+  try {
+    const payload = { label, link: data.link, isOverdue: !!data.isOverdue, createdAt: new Date().toISOString() };
+    uniqueIds.forEach((id) => emitNotificationToUser(id, payload));
+  } catch (err) {
+    console.warn('[notifications] Failed to emit realtime notification (non-fatal):', (err as Error)?.message);
   }
 };
 

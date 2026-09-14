@@ -71,35 +71,75 @@ export const listPlansForReview = async () => {
   return attachVisitOutcomes(plans);
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Rows are now diffed (update / create / delete) instead of wiped and
+// recreated, so every visit keeps its id for life. That is what makes
+// ReportVisit.sourceVisitId keep resolving, which is what makes Daily
+// Report outcomes keep showing in the Weekly Plan and Team Reports views.
+// The whole diff runs in one transaction: a failure half way through can
+// no longer leave the week's plan partially or fully wiped.
 export const upsertDraft = async (kamId: string, data: any) => {
-  const existing = await prisma.weeklyPlan.findUnique({
-    where: { kamId_weekStartDate: { kamId, weekStartDate: data.weekStartDate } },
-  });
+  const saved = await prisma.$transaction(
+    async (tx) => {
+      const plan = await tx.weeklyPlan.upsert({
+        where: { kamId_weekStartDate: { kamId, weekStartDate: data.weekStartDate } },
+        update: {},
+        create: { kamId, weekStartDate: data.weekStartDate },
+      });
 
-  let saved;
-  if (existing) {
-    await prisma.visit.deleteMany({ where: { OR: [{ existingPlanId: existing.id }, { prospectPlanId: existing.id }] } });
-    saved = await prisma.weeklyPlan.update({
-      where: { id: existing.id },
-      data: {
-        existingVisits: { create: data.existingVisits },
-        prospectVisits: { create: data.prospectVisits },
-      },
-      include: { existingVisits: true, prospectVisits: true },
-    });
-  } else {
-    saved = await prisma.weeklyPlan.create({
-      data: {
-        kamId,
-        weekStartDate: data.weekStartDate,
-        existingVisits: { create: data.existingVisits },
-        prospectVisits: { create: data.prospectVisits },
-      },
-      include: { existingVisits: true, prospectVisits: true },
-    });
-  }
+      const incoming = [
+        ...(data.existingVisits || []).map((v: any) => ({ v, section: 'existing' as const })),
+        ...(data.prospectVisits || []).map((v: any) => ({ v, section: 'prospect' as const })),
+      ];
 
-  await notifyLineManagerOfPlanChange(kamId);
+      const current = await tx.visit.findMany({
+        where: { OR: [{ existingPlanId: plan.id }, { prospectPlanId: plan.id }] },
+        select: { id: true },
+      });
+      const currentIds = new Set(current.map((r) => r.id));
+
+      const keepIds = new Set<string>(
+        incoming
+          .map(({ v }) => v.id)
+          .filter((id: unknown): id is string => typeof id === 'string' && UUID_RE.test(id) && currentIds.has(id))
+      );
+
+      const removedIds = [...currentIds].filter((id) => !keepIds.has(id));
+      if (removedIds.length > 0) {
+        await tx.visit.deleteMany({ where: { id: { in: removedIds } } });
+      }
+
+      for (const { v, section } of incoming) {
+        const fields = {
+          day: v.day,
+          customerName: v.customerName,
+          customerId: v.customerId || null,
+          purpose: v.purpose,
+          outcomeNotes: v.outcomeNotes ?? null,
+          existingPlanId: section === 'existing' ? plan.id : null,
+          prospectPlanId: section === 'prospect' ? plan.id : null,
+        };
+        if (typeof v.id === 'string' && keepIds.has(v.id)) {
+          // eslint-disable-next-line no-await-in-loop
+          await tx.visit.update({ where: { id: v.id }, data: fields });
+        } else {
+          // eslint-disable-next-line no-await-in-loop
+          await tx.visit.create({ data: fields });
+        }
+      }
+
+      return tx.weeklyPlan.findUniqueOrThrow({
+        where: { id: plan.id },
+        include: { existingVisits: true, prospectVisits: true },
+      });
+    },
+    { timeout: 20000 }
+  );
+
+  // Fire-and-forget: notifying the Line Manager must never delay the save
+  // response, and must never fail the save.
+  notifyLineManagerOfPlanChange(kamId).catch(() => {});
   const [withOutcomes] = await attachVisitOutcomes([saved]);
   return withOutcomes;
 };
@@ -115,7 +155,7 @@ export const submitPlan = async (kamId: string, weekStartDate: string) => {
     data: { status: 'SUBMITTED', lmComments: '' },
     include: { existingVisits: true, prospectVisits: true },
   });
-  await notifyLineManagerOfPlanChange(kamId);
+  notifyLineManagerOfPlanChange(kamId).catch(() => {});
   const [withOutcomes] = await attachVisitOutcomes([updated]);
   return withOutcomes;
 };

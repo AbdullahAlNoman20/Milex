@@ -1,4 +1,4 @@
-// server/src/modules/service-providers/serviceProviders.service.ts 
+// server/src/modules/service-providers/serviceProviders.service.ts
 import { prisma } from '../../config/db';
 
 export const listServiceProviders = async () => {

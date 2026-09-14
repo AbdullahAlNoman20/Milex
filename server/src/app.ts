@@ -1,12 +1,14 @@
-// src/app.ts
+// server/src/app.ts
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
 import pino from 'pino';
 import { env } from './config/env';
-import { globalApiLimiter } from './common/middlewares/rateLimit.middleware';
+import { prisma } from './config/db';
+import { globalApiLimiter, ddosLimiter } from './common/middlewares/rateLimit.middleware';
 import { errorHandlerMiddleware, notFoundMiddleware } from './common/middlewares/errorHandler.middleware';
 
 import authRoutes from './modules/auth/auth.routes';
@@ -22,8 +24,20 @@ import onboardingRoutes from './modules/onboarding/onboarding.routes';
 import weeklyPlansRoutes from './modules/weekly-plans/weeklyPlans.routes';
 import dailyReportsRoutes from './modules/daily-reports/dailyReports.routes';
 import followUpsRoutes from './modules/follow-ups/followUps.routes';
+import backupRoutes from './modules/backup/backup.routes';
 
-export const logger = pino({ level: env.IS_PRODUCTION ? 'info' : 'debug', redact: ['req.headers.authorization', 'req.headers.cookie'] });
+export const logger = pino({
+  level: env.IS_PRODUCTION ? 'info' : 'debug',
+  redact: [
+    'req.headers.authorization',
+    'req.headers.cookie',
+    'res.headers["set-cookie"]',
+    'req.body.password',
+    'req.body.newPassword',
+    'req.body.currentPassword',
+    'req.body.token',
+  ],
+});
 
 export const buildApp = () => {
   const app = express();
@@ -42,6 +56,7 @@ export const buildApp = () => {
       frameguard: { action: 'deny' },
       hsts: { maxAge: 31536000, includeSubDomains: true },
       referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
     })
   );
 
@@ -61,12 +76,53 @@ export const buildApp = () => {
     })
   );
 
+  // Gzip/brotli every JSON response. The customer list alone drops by
+  // roughly 85%, which is the single biggest win for slow connections.
+  // Already-compressed file downloads are skipped automatically.
+  app.use(
+    compression({
+      threshold: 1024,
+      filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+      },
+    })
+  );
+
   app.use(cookieParser());
-  app.use(express.json({ limit: '1mb' }));
+  // Global body limit stays small — a 1MB ceiling is plenty for every normal
+  // request and keeps oversized-payload floods cheap to reject. The single
+  // exception is the backup restore endpoint, which legitimately carries
+  // embedded files; it parses its own body with its own limit instead.
+  app.use((req, res, next) => {
+    if (req.path === '/api/v1/backup/restore') return next();
+    return express.json({ limit: '1mb' })(req, res, next);
+  });
   app.use(pinoHttp({ logger }));
+  app.use(ddosLimiter);
   app.use(globalApiLimiter);
 
-  app.get('/health', (_req, res) => res.status(200).json({ success: true, data: { status: 'ok' } }));
+  // Business data must never be cached by a browser or intermediate proxy —
+  // otherwise a logged-out user pressing Back can still read the last page.
+  app.use('/api/v1', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    next();
+  });
+
+  // A health check that never touches the database is worse than none —
+  // it reports "ok" while the app is completely unable to serve anything.
+  app.get('/health', async (_req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return res.status(200).json({ success: true, data: { status: 'ok', database: 'up', uptime: Math.round(process.uptime()) } });
+    } catch {
+      return res.status(503).json({
+        success: false,
+        error: { code: 'SERVICE_UNAVAILABLE', message: 'The service is temporarily unavailable. Please try again shortly.' },
+      });
+    }
+  });
 
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', usersRoutes);
@@ -81,6 +137,7 @@ export const buildApp = () => {
   app.use('/api/v1/weekly-plans', weeklyPlansRoutes);
   app.use('/api/v1/daily-reports', dailyReportsRoutes);
   app.use('/api/v1/follow-ups', followUpsRoutes);
+  app.use('/api/v1/backup', backupRoutes);
 
   app.use(notFoundMiddleware);
   app.use(errorHandlerMiddleware(logger));

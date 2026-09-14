@@ -3,7 +3,7 @@ import { Router } from 'express';
 import * as controller from './auth.controller';
 import { validateBody } from '../../common/middlewares/validate.middleware';
 import { requireAuth } from '../../common/middlewares/auth.middleware';
-import { loginRateLimiter, mfaRateLimiter } from '../../common/middlewares/rateLimit.middleware';
+import { loginRateLimiter, loginIpLimiter, mfaRateLimiter, refreshRateLimiter } from '../../common/middlewares/rateLimit.middleware';
 import { verifyCsrf } from '../../common/middlewares/csrf.middleware';
 import {
   loginSchema,
@@ -15,8 +15,8 @@ import {
 
 const router = Router();
 
-router.post('/login', loginRateLimiter, validateBody(loginSchema), controller.loginHandler);
-router.post('/refresh', controller.refreshHandler);
+router.post('/login', loginIpLimiter, loginRateLimiter, validateBody(loginSchema), controller.loginHandler);
+router.post('/refresh', refreshRateLimiter, controller.refreshHandler);
 router.post('/logout', requireAuth, controller.logoutHandler);
 router.post('/forgot-password', loginRateLimiter, validateBody(forgotPasswordSchema), controller.forgotPasswordHandler);
 router.post('/reset-password', loginRateLimiter, validateBody(resetPasswordSchema), controller.resetPasswordHandler);

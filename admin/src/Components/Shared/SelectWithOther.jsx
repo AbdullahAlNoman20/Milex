@@ -49,7 +49,10 @@ const SelectWithOther = ({
 
   const handleOtherInput = useCallback(
     (e) => {
-      const clean = sanitizeText(e.target.value, { maxLength: MAX_OTHER_LENGTH });
+      // No trimming per keystroke — that silently ate spaces mid-word while
+      // typing. Length is capped by maxLength on the input; the server
+      // trims and strips tags on write.
+      const clean = e.target.value.slice(0, MAX_OTHER_LENGTH);
       setOtherText(clean);
       onChange?.(clean);
     },

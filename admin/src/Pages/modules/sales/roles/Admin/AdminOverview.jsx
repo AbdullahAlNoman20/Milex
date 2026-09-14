@@ -1,4 +1,4 @@
-// admin/src/Pages/modules/sales/roles/Admin/AdminOverview.jsx — REPLACE ENTIRE FILE
+// admin/src/Pages/modules/sales/roles/Admin/AdminOverview.jsx
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Users,
@@ -15,9 +15,14 @@ import {
   ChevronRight,
   Bell,
   UserPlus,
+  DatabaseBackup,
+  UploadCloud,
+  HardDrive,
+  AlertTriangle,
 } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
+import { downloadCsv } from '../../../../../Components/utils/csv';
 import {
   listAllUsers,
   listLineManagers,
@@ -25,6 +30,7 @@ import {
   updateUserAdmin,
   setUserPasswordAdmin,
 } from '../../services/userAdminService';
+import { getBackupStats, downloadBackup, restoreBackup } from '../../services/backupService';
 
 const ROLE_OPTIONS = [
   { value: 'KAM', label: 'KAM' },
@@ -53,14 +59,70 @@ const emptyForm = { name: '', email: '', password: '', role: 'KAM', lineManagerI
 
 const PAGE_SIZE = 10;
 
+// Cryptographically random rather than Math.random(): a predictable
+// temporary password is guessable by anyone who knows roughly when the
+// account was created.
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
 const generatePassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-  let out = '';
-  for (let i = 0; i < 12; i += 1) out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
+  const bytes = new Uint32Array(14);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length]).join('');
 };
 
-const StatCard = ({ icon: Icon, label, value, trend, trendUp, iconBg }) => (
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
+
+// Real month-by-month counts derived from each user's createdAt, replacing
+// the hardcoded percentages and the fixed decorative polyline that used to
+// show the same numbers to everyone regardless of the data.
+const buildMonthlySeries = (users, predicate) => {
+  const buckets = Array(8).fill(0);
+  const now = new Date();
+  const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const months = Array.from({ length: 8 }, (_, i) =>
+    startOfMonth(new Date(now.getFullYear(), now.getMonth() - (7 - i), 1))
+  );
+  users.forEach((u) => {
+    if (predicate && !predicate(u)) return;
+    const created = u.createdAt ? new Date(u.createdAt) : null;
+    if (!created || Number.isNaN(created.getTime())) return;
+    const ms = startOfMonth(created);
+    for (let i = months.length - 1; i >= 0; i -= 1) {
+      if (ms >= months[i]) {
+        // Cumulative: each point is the total that existed at that month.
+        for (let j = i; j < buckets.length; j += 1) buckets[j] += 1;
+        break;
+      }
+    }
+  });
+  return buckets;
+};
+
+const trendFromSeries = (series) => {
+  if (series.length < 2) return null;
+  const prev = series[series.length - 2];
+  const curr = series[series.length - 1];
+  if (prev === 0) return curr === 0 ? { value: '0.0', up: true } : { value: '100.0', up: true };
+  const pct = ((curr - prev) / prev) * 100;
+  return { value: Math.abs(pct).toFixed(1), up: pct >= 0 };
+};
+
+const Sparkline = ({ series, up }) => {
+  const max = Math.max(1, ...series);
+  const step = series.length > 1 ? 100 / (series.length - 1) : 100;
+  const points = series.map((v, i) => `${(i * step).toFixed(1)},${(24 - (v / max) * 22).toFixed(1)}`).join(' ');
+  return (
+    <svg viewBox="0 0 100 24" className="w-full h-6 mt-2" preserveAspectRatio="none">
+      <polyline points={points} fill="none" stroke={up === false ? '#EF4444' : '#059669'} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+};
+
+const StatCard = ({ icon: Icon, label, value, trend, series, iconBg }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] min-w-0">
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2 min-w-0">
@@ -69,26 +131,19 @@ const StatCard = ({ icon: Icon, label, value, trend, trendUp, iconBg }) => (
         </div>
         <p className="text-xs font-bold text-slate-600 truncate">{label}</p>
       </div>
-      {trend != null && (
+      {trend && (
         <span
+          title="Change compared with last month"
           className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
-            trendUp ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+            trend.up ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
           }`}
         >
-          {trendUp ? '▲' : '▼'} {trend}%
+          {trend.up ? '▲' : '▼'} {trend.value}%
         </span>
       )}
     </div>
     <p className="text-2xl font-bold text-slate-800 mt-2">{value}</p>
-    <svg viewBox="0 0 100 24" className="w-full h-6 mt-2" preserveAspectRatio="none">
-      <polyline
-        points="0,18 15,14 30,16 45,8 60,12 75,4 90,7 100,2"
-        fill="none"
-        stroke={trendUp === false ? '#EF4444' : '#059669'}
-        strokeWidth="2"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
+    <Sparkline series={series} up={trend ? trend.up : true} />
   </div>
 );
 
@@ -105,14 +160,7 @@ const Donut = ({ segments, size = 72, thickness = 12 }) => {
     .map((s) => `${s.color} ${s.start}deg ${s.end}deg`)
     .join(', ');
   return (
-    <div
-      className="rounded-full shrink-0"
-      style={{
-        width: size,
-        height: size,
-        background: `conic-gradient(${stops})`,
-      }}
-    >
+    <div className="rounded-full shrink-0" style={{ width: size, height: size, background: `conic-gradient(${stops})` }}>
       <div
         className="rounded-full bg-white flex items-center justify-center"
         style={{ width: size - thickness * 2, height: size - thickness * 2, margin: thickness }}
@@ -166,10 +214,19 @@ const AdminOverview = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
 
+  // --- System maintenance ---
+  const [backupStats, setBackupStats] = useState(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreFile, setRestoreFile] = useState(null);
+  const [restoreConfirm, setRestoreConfirm] = useState('');
+  const [isRestorePanelOpen, setIsRestorePanelOpen] = useState(false);
+  const backupLockRef = useRef(false);
+
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [userRes, lms] = await Promise.all([listAllUsers(1, 200), listLineManagers()]);
+      const [userRes, lms] = await Promise.all([listAllUsers(1, 500), listLineManagers()]);
       setUsers(userRes.items);
       setLineManagers(lms);
     } catch (err) {
@@ -177,6 +234,9 @@ const AdminOverview = () => {
     } finally {
       setIsLoading(false);
     }
+    getBackupStats()
+      .then(setBackupStats)
+      .catch(() => setBackupStats(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -188,6 +248,10 @@ const AdminOverview = () => {
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.isActive).length;
   const inactiveUsers = users.filter((u) => !u.isActive).length;
+
+  const totalSeries = useMemo(() => buildMonthlySeries(users, null), [users]);
+  const activeSeries = useMemo(() => buildMonthlySeries(users, (u) => u.isActive), [users]);
+  const inactiveSeries = useMemo(() => buildMonthlySeries(users, (u) => !u.isActive), [users]);
 
   const roleDistribution = useMemo(() => {
     const counts = {};
@@ -202,15 +266,20 @@ const AdminOverview = () => {
     })).filter((seg) => seg.value > 0);
   }, [users]);
 
-  const recentUsers = useMemo(() => users.slice(-5).reverse(), [users]);
+  const recentUsers = useMemo(
+    () =>
+      [...users]
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        .slice(0, 5),
+    [users]
+  );
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
     return users.filter((u) => {
       const matchesSearch = !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
       const matchesRole = !roleFilter || u.role === roleFilter;
-      const matchesStatus =
-        !statusFilter || (statusFilter === 'active' ? u.isActive : !u.isActive);
+      const matchesStatus = !statusFilter || (statusFilter === 'active' ? u.isActive : !u.isActive);
       return matchesSearch && matchesRole && matchesStatus;
     });
   }, [users, search, roleFilter, statusFilter]);
@@ -233,8 +302,9 @@ const AdminOverview = () => {
         password: form.password,
         role: form.role,
         lineManagerId: ['KAM', 'SALES_COORDINATOR'].includes(form.role) && form.lineManagerId ? form.lineManagerId : null,
+        sendWelcomeEmail: !!form.sendWelcomeEmail,
       });
-      showToast('User created', 'success');
+      showToast('User created — they will be asked to set their own password at first login', 'success');
       setForm(emptyForm);
       setIsCreatePanelOpen(false);
       setPage(1);
@@ -284,11 +354,17 @@ const AdminOverview = () => {
     savePasswordLockRef.current = true;
     setIsSavingPassword(true);
     try {
-      await setUserPasswordAdmin(passwordTargetId, newPassword);
-      showToast('Password updated', 'success');
+      await setUserPasswordAdmin(passwordTargetId, newPassword, requireChangeOnLogin);
+      showToast(
+        requireChangeOnLogin
+          ? 'Password updated — they will be asked to set their own at next login'
+          : 'Password updated',
+        'success'
+      );
       setPasswordTargetId(null);
       setNewPassword('');
       setRequireChangeOnLogin(true);
+      loadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to set password', 'error');
     } finally {
@@ -298,24 +374,66 @@ const AdminOverview = () => {
   };
 
   const exportUsers = () => {
-    const rows = [
-      ['Name', 'Email', 'Role', 'Line Manager', 'Status'],
-      ...filteredUsers.map((u) => [
-        u.name,
-        u.email,
-        roleLabel(u.role),
-        lineManagers.find((lm) => lm.id === u.lineManagerId)?.name || '',
-        u.isActive ? 'Active' : 'Deactivated',
-      ]),
-    ];
-    const csv = rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'users_export.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    const rows = filteredUsers.map((u) => ({
+      Name: u.name,
+      Email: u.email,
+      Role: roleLabel(u.role),
+      'Line Manager': lineManagers.find((lm) => lm.id === u.lineManagerId)?.name || '',
+      Status: u.isActive ? 'Active' : 'Deactivated',
+      Created: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '',
+    }));
+    if (!downloadCsv('users_export.csv', rows)) showToast('Nothing to export', 'warning');
+  };
+
+  const handleDownloadBackup = async (includeFiles) => {
+    if (backupLockRef.current) return;
+    backupLockRef.current = true;
+    setIsBackingUp(true);
+    showToast('Preparing your backup — this can take a minute for large systems…', 'info', 8000);
+    try {
+      await downloadBackup(includeFiles);
+      showToast('Backup downloaded. Please store it somewhere safe and off this server.', 'success', 8000);
+      getBackupStats().then(setBackupStats).catch(() => {});
+    } catch (err) {
+      showToast(err?.message || 'Backup failed', 'error');
+    } finally {
+      backupLockRef.current = false;
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (backupLockRef.current) return;
+    if (!restoreFile) return showToast('Choose a backup file first', 'warning');
+    if (restoreConfirm !== 'RESTORE') return showToast('Type RESTORE to confirm', 'warning');
+    backupLockRef.current = true;
+    setIsRestoring(true);
+    try {
+      const text = await restoreFile.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error("That file isn't a valid Milex backup. Please choose the .json file you downloaded from this page.");
+      }
+      const result = await restoreBackup(parsed, restoreConfirm);
+      showToast(
+        `Restore complete (${result.filesRestored} file(s)). Everyone must sign in again.`,
+        'success',
+        10000
+      );
+      setIsRestorePanelOpen(false);
+      setRestoreFile(null);
+      setRestoreConfirm('');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 2500);
+    } catch (err) {
+      showToast(err?.message || 'Restore failed', 'error', 10000);
+    } finally {
+      backupLockRef.current = false;
+      setIsRestoring(false);
+    }
   };
 
   return (
@@ -373,9 +491,9 @@ const AdminOverview = () => {
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Users" value={totalUsers} trend="18" trendUp iconBg="bg-emerald-50 text-emerald-600" />
-          <StatCard icon={Users} label="Active Users" value={activeUsers} trend="3.8" trendUp iconBg="bg-emerald-50 text-emerald-600" />
-          <StatCard icon={Users} label="Inactive Users" value={inactiveUsers} trend="1.3" trendUp={false} iconBg="bg-red-50 text-red-600" />
+          <StatCard icon={Users} label="Total Users" value={totalUsers} trend={trendFromSeries(totalSeries)} series={totalSeries} iconBg="bg-emerald-50 text-emerald-600" />
+          <StatCard icon={Users} label="Active Users" value={activeUsers} trend={trendFromSeries(activeSeries)} series={activeSeries} iconBg="bg-emerald-50 text-emerald-600" />
+          <StatCard icon={Users} label="Inactive Users" value={inactiveUsers} trend={trendFromSeries(inactiveSeries)} series={inactiveSeries} iconBg="bg-red-50 text-red-600" />
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] min-w-0">
             <p className="text-xs font-bold text-slate-600 mb-2">Role Distribution</p>
             {roleDistribution.length === 0 ? (
@@ -468,7 +586,12 @@ const AdminOverview = () => {
                           <td className="py-2.5 px-4">
                             <div className="flex items-center gap-2.5 min-w-0">
                               <Avatar name={u.name} />
-                              <span className="font-bold text-slate-800 text-sm truncate">{u.name}</span>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800 text-sm truncate block">{u.name}</span>
+                                {u.mustChangePassword && (
+                                  <span className="text-[9px] font-bold text-amber-600 uppercase">Password change pending</span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="py-2.5 px-3 text-slate-500 text-xs truncate max-w-[200px]">{u.email}</td>
@@ -570,7 +693,10 @@ const AdminOverview = () => {
                       <Avatar name={u.name} />
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-700 truncate">{u.name}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{roleLabel(u.role)}</p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {roleLabel(u.role)}
+                          {u.createdAt ? ` · ${new Date(u.createdAt).toLocaleDateString()}` : ''}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -592,6 +718,60 @@ const AdminOverview = () => {
                 <span className="text-slate-500 font-semibold">Total Users</span>
                 <span className="font-bold text-slate-800">{totalUsers}</span>
               </div>
+            </div>
+
+            {/* System backup & restore */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4 space-y-3">
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                <DatabaseBackup size={14} className="text-slate-400" /> Backup &amp; Restore
+              </h3>
+
+              {backupStats && (
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-semibold flex items-center gap-1">
+                      <HardDrive size={11} /> Uploaded files
+                    </span>
+                    <span className="font-bold text-slate-800">
+                      {backupStats.files.count} · {formatBytes(backupStats.files.totalBytes)}
+                    </span>
+                  </div>
+                  {Object.entries(backupStats.records).map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-slate-500 font-semibold capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                      <span className="font-bold text-slate-800">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={isBackingUp}
+                onClick={() => handleDownloadBackup(true)}
+                className="w-full inline-flex items-center justify-center gap-1.5 bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs hover:bg-emerald-800 transition disabled:opacity-50"
+              >
+                {isBackingUp ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                Download Full Backup (with files)
+              </button>
+              <button
+                type="button"
+                disabled={isBackingUp}
+                onClick={() => handleDownloadBackup(false)}
+                className="w-full inline-flex items-center justify-center gap-1.5 border border-slate-200 text-slate-600 font-bold py-2 rounded-lg text-xs hover:bg-slate-50 transition disabled:opacity-50"
+              >
+                <Download size={13} /> Data Only (smaller)
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRestorePanelOpen(true)}
+                className="w-full inline-flex items-center justify-center gap-1.5 border border-red-200 text-red-600 bg-red-50 font-bold py-2 rounded-lg text-xs hover:bg-red-100 transition"
+              >
+                <UploadCloud size={13} /> Restore From Backup
+              </button>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                Keep backups somewhere other than this server. A restore replaces everything currently stored.
+              </p>
             </div>
           </div>
         </div>
@@ -656,13 +836,27 @@ const AdminOverview = () => {
                     Generate
                   </button>
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  They'll be asked to replace this with their own password the first time they sign in.
+                </p>
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Role</label>
                 <select
                   className="w-full border border-slate-200 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-emerald-500"
                   value={form.role}
-                  onChange={(e) => setForm((p) => ({ ...p, role: e.target.value, lineManagerId: '' }))}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      role: e.target.value,
+                      // When exactly one Line Manager exists, preselect them —
+                      // there is nothing to choose between.
+                      lineManagerId:
+                        ['KAM', 'SALES_COORDINATOR'].includes(e.target.value) && lineManagers.length === 1
+                          ? lineManagers[0].id
+                          : '',
+                    }))
+                  }
                 >
                   {ROLE_OPTIONS.map((r) => (
                     <option key={r.value} value={r.value}>{r.label}</option>
@@ -672,16 +866,27 @@ const AdminOverview = () => {
               {['KAM', 'SALES_COORDINATOR'].includes(form.role) && (
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Line Manager</label>
-                  <select
-                    className="w-full border border-slate-200 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-emerald-500"
-                    value={form.lineManagerId}
-                    onChange={(e) => setForm((p) => ({ ...p, lineManagerId: e.target.value }))}
-                  >
-                    <option value="">No Line Manager (assign later)</option>
-                    {lineManagers.map((lm) => (
-                      <option key={lm.id} value={lm.id}>{lm.name}</option>
-                    ))}
-                  </select>
+                  {lineManagers.length === 1 ? (
+                    <>
+                      <div className="w-full border border-slate-200 bg-slate-50 p-2.5 rounded-lg text-sm text-slate-700 font-medium">
+                        {lineManagers[0].name}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Assigned automatically — there is only one Line Manager in the system.
+                      </p>
+                    </>
+                  ) : (
+                    <select
+                      className="w-full border border-slate-200 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-emerald-500"
+                      value={form.lineManagerId}
+                      onChange={(e) => setForm((p) => ({ ...p, lineManagerId: e.target.value }))}
+                    >
+                      <option value="">No Line Manager (assign later)</option>
+                      {lineManagers.map((lm) => (
+                        <option key={lm.id} value={lm.id}>{lm.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
               <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
@@ -693,6 +898,9 @@ const AdminOverview = () => {
                 />
                 <span className="text-xs font-semibold text-slate-600">Send welcome email</span>
               </label>
+              <p className="text-[10px] text-slate-400 -mt-2">
+                Recorded against the account. Delivery starts as soon as an email provider is connected.
+              </p>
             </div>
             <div className="px-5 py-4 border-t border-slate-100 shrink-0">
               <button
@@ -774,6 +982,78 @@ const AdminOverview = () => {
               <button
                 type="button"
                 onClick={() => { setPasswordTargetId(null); setNewPassword(''); }}
+                className="px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restore Modal */}
+      {isRestorePanelOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <UploadCloud size={16} className="text-red-600" /> Restore From Backup
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsRestorePanelOpen(false)}
+                aria-label="Close"
+                className="w-7 h-7 rounded-full inline-flex items-center justify-center text-slate-400 hover:bg-slate-100 transition"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="flex gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertTriangle size={16} className="text-red-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-red-700 leading-relaxed">
+                This replaces every customer, user, report and document currently in the system with the contents of
+                the backup file. Anything created since that backup was taken will be lost, and everyone will be
+                signed out.
+              </p>
+            </div>
+
+            <label className="block border-2 border-dashed border-slate-200 rounded-lg py-4 text-center cursor-pointer hover:bg-slate-50 transition text-xs font-semibold text-slate-600">
+              {restoreFile ? restoreFile.name : 'Choose a backup .json file'}
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
+              />
+            </label>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                Type RESTORE to confirm
+              </label>
+              <input
+                className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-red-500"
+                value={restoreConfirm}
+                maxLength={20}
+                placeholder="RESTORE"
+                onChange={(e) => setRestoreConfirm(e.target.value.toUpperCase())}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={isRestoring || restoreConfirm !== 'RESTORE' || !restoreFile}
+                onClick={handleRestore}
+                className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-lg text-sm disabled:opacity-50 inline-flex items-center justify-center gap-2"
+              >
+                {isRestoring ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+                Restore Now
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRestorePanelOpen(false)}
                 className="px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold"
               >
                 Cancel

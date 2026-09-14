@@ -13,8 +13,12 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    
-    console.error("Unhandled UI error:", error, info);
+    // Development only — a production console trace can contain the user's
+    // own data from component props, which does not belong in a browser log
+    // on a shared machine.
+    if (import.meta.env.DEV) {
+      console.error("Unhandled UI error:", error, info);
+    }
   }
 
   handleReset = () => {

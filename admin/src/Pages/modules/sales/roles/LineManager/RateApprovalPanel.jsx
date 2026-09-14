@@ -1,8 +1,9 @@
 // admin/src/Pages/modules/sales/roles/LineManager/RateApprovalPanel.jsx
 import { useState, useRef } from 'react';
-import { CheckCircle, FileOutput } from 'lucide-react';
+import { CheckCircle, FileOutput, Loader2 } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
+import { getDocumentSignedUrl } from '../../services/customerService';
 import { STATUS, CREDIT_RULES } from '../../constants/salesStatus';
 import { isRequired, isValidCreditPeriod } from '../../../../../Components/utils/validators';
 import { sanitizeText } from '../../../../../Components/utils/sanitize';
@@ -14,7 +15,33 @@ const RateApprovalPanel = ({ customer }) => {
   const [lmNote, setLmNote] = useState('');
   const [creditPeriod, setCreditPeriod] = useState(customer.creditPeriodDays || String(CREDIT_RULES.DEFAULT_PERIOD_DAYS));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOpeningRateDoc, setIsOpeningRateDoc] = useState(false);
   const submitLockRef = useRef(false);
+
+  // The rate sheet the KAM attached to the recommendation. This button used
+  // to do nothing at all — it now opens that document, and says so plainly
+  // when the KAM didn't attach one.
+  const rateDocument = (customer.documents || []).find(
+    (d) => d.documentType === 'RECOMMENDATION_ATTACHMENT'
+  );
+
+  const handleOpenRateDocument = async () => {
+    if (!rateDocument) {
+      return showToast('The KAM did not attach a rate document to this recommendation.', 'warning');
+    }
+    if (rateDocument.scanStatus !== 'CLEAN') {
+      return showToast('This file is still being checked — try again shortly', 'warning');
+    }
+    setIsOpeningRateDoc(true);
+    try {
+      const url = await getDocumentSignedUrl(rateDocument.storageKey);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      showToast(err?.message || 'Could not open the rate document', 'error');
+    } finally {
+      setIsOpeningRateDoc(false);
+    }
+  };
 
   const handleApprove = async () => {
     if (submitLockRef.current) return;
@@ -53,8 +80,14 @@ const RateApprovalPanel = ({ customer }) => {
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">RATE REFERENCE</p>
           <p className="font-black text-xl text-slate-800 mb-2">{customer.rateRef}</p>
-          <button type="button" className="text-xs text-blue-600 font-bold flex items-center justify-center w-full hover:underline">
-            <FileOutput size={14} className="mr-1" /> Download to Verify
+          <button
+            type="button"
+            onClick={handleOpenRateDocument}
+            disabled={isOpeningRateDoc}
+            className="text-xs text-blue-600 font-bold flex items-center justify-center w-full hover:underline disabled:opacity-50"
+          >
+            {isOpeningRateDoc ? <Loader2 size={14} className="mr-1 animate-spin" /> : <FileOutput size={14} className="mr-1" />}
+            {rateDocument ? 'Open Attached Rate Document' : 'No Rate Document Attached'}
           </button>
         </div>
       )}

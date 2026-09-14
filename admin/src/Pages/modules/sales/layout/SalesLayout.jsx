@@ -83,7 +83,12 @@ const SalesLayoutInner = () => {
               </button>
             </div>
           </header>
-          {isChangePasswordOpen && <ChangePasswordModal onClose={() => setIsChangePasswordOpen(false)} />}
+          {(isChangePasswordOpen || currentUser?.mustChangePassword) && (
+        <ChangePasswordModal
+          forced={!!currentUser?.mustChangePassword}
+          onClose={() => setIsChangePasswordOpen(false)}
+        />
+      )}
           <main className="flex-1 overflow-x-hidden overflow-y-auto md:p-6 relative">
             <Toast />
             <ErrorBoundary>
