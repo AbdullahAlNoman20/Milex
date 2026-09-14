@@ -53,6 +53,10 @@ export const getWorkflowStageLabel = (customer) => {
     case STATUS.PROVISIONAL_FINAL_REVIEW_PENDING:
       return 'Waiting for Line Manager Final Verification';
     case STATUS.PROVISIONAL_ACTIVE:
+      // A rejected offer keeps the account provisional — the document
+      // window is still running, only the rate is back with the Line
+      // Manager — so this is checked before the offer-sent checks below.
+      if (customer.offerRejected) return 'Customer Rejected the Offer — Waiting for Line Manager to Approve a New Rate';
       if (!customer.offerSent) return 'Waiting for Sales Coordinator to Send Offer Letter';
       if (!customer.offerAccepted) return "Waiting for Customer's Feedback (via KAM)";
       if (!customer.agreementSent) return 'Waiting for Sales Coordinator to Collect Agreement';

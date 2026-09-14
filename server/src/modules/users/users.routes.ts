@@ -4,7 +4,7 @@ import * as controller from './users.controller';
 import { requireAuth } from '../../common/middlewares/auth.middleware';
 import { requirePermission, requireOwnershipOrPermission } from '../../common/middlewares/permission.middleware';
 import { validateBody } from '../../common/middlewares/validate.middleware';
-import { createUserSchema, updateUserSchema, setPasswordSchema } from './users.schema';
+import { createUserSchema, updateUserSchema, setPasswordSchema, bulkImportKamsSchema } from './users.schema';
 import { PERMISSIONS } from '../../common/constants/permissions.constant';
 import { asString } from '../../common/utils/requestParams.util';
 import { verifyCsrf } from '../../common/middlewares/csrf.middleware';
@@ -29,6 +29,12 @@ router.post(
   requirePermission(PERMISSIONS.MANAGE_USERS, PERMISSIONS.FULL_SYSTEM_CONTROL),
   validateBody(createUserSchema),
   controller.createUserHandler
+);
+router.post(
+  '/bulk-import',
+  requirePermission(PERMISSIONS.MANAGE_USERS, PERMISSIONS.FULL_SYSTEM_CONTROL),
+  validateBody(bulkImportKamsSchema),
+  controller.bulkImportKamsHandler
 );
 router.patch(
   '/:id',

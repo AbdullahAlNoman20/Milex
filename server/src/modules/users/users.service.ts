@@ -62,6 +62,17 @@ export const updateUser = async (
 ) => {
   const before = await prisma.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
 
+  // An existing Super Admin's role must not be editable from the console
+  // either — demoting the only Super Admin would lock everyone out of user
+  // management permanently.
+  if (before.role.name === 'SUPER_ADMIN' && updates.role && updates.role !== 'SUPER_ADMIN') {
+    throw {
+      statusCode: 403,
+      code: 'SUPER_ADMIN_PROTECTED',
+      message: 'A Super Admin account\'s role can\'t be changed here.',
+    };
+  }
+
   if (updates.lineManagerId) {
     await assertUserIsLineManager(updates.lineManagerId);
   }
@@ -223,4 +234,135 @@ export const getUserActivity = async (userId: string) => {
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   return merged.slice(0, 150);
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_IMPORT_ROWS = 50;
+
+// Bulk-creates Key Account Managers from a spreadsheet the administrator
+// uploads. Two deliberate decisions here:
+//
+//  1. The initial password IS the person's own email address. That would
+//     normally fail the password policy, so the policy check is skipped for
+//     these accounts only — and every one of them is created with
+//     mustChangePassword set, so the very first thing they are made to do is
+//     replace it with a password that DOES satisfy the policy. The weak
+//     value therefore never survives past first login.
+//  2. If the organisation has exactly one Line Manager, every imported KAM
+//     is placed under them automatically, because there is nothing to
+//     choose between.
+export const bulkCreateKams = async (
+  rows: { name: string; email: string }[],
+  requestedLineManagerId: string | null,
+  actorId: string
+) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw { statusCode: 400, code: 'NO_ROWS', message: 'The file didn\'t contain any rows to import.' };
+  }
+  if (rows.length > MAX_IMPORT_ROWS) {
+    throw {
+      statusCode: 400,
+      code: 'TOO_MANY_ROWS',
+      message: `Please import at most ${MAX_IMPORT_ROWS} people at a time.`,
+    };
+  }
+
+  let lineManagerId = requestedLineManagerId || null;
+  if (lineManagerId) {
+    await assertUserIsLineManager(lineManagerId);
+  } else {
+    const lms = await prisma.user.findMany({
+      where: { role: { name: 'LINE_MANAGER' }, isActive: true },
+      select: { id: true },
+      take: 2,
+    });
+    if (lms.length === 1) lineManagerId = lms[0].id;
+  }
+
+  const kamRole = await prisma.role.findUniqueOrThrow({ where: { name: 'KAM' as any } });
+
+  const created: { name: string; email: string }[] = [];
+  const skipped: { email: string; reason: string }[] = [];
+
+  const candidates: { name: string; email: string }[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of rows) {
+    const name = String(raw?.name ?? '').trim();
+    const email = String(raw?.email ?? '').trim().toLowerCase();
+    if (!name || !email) {
+      skipped.push({ email: email || '(blank)', reason: 'Name and email are both required' });
+      continue;
+    }
+    if (name.length > 150) {
+      skipped.push({ email, reason: 'Name is too long (maximum 150 characters)' });
+      continue;
+    }
+    if (!EMAIL_RE.test(email) || email.length > 254) {
+      skipped.push({ email, reason: 'That doesn\'t look like a valid email address' });
+      continue;
+    }
+    if (seen.has(email)) {
+      skipped.push({ email, reason: 'This email appears more than once in the file' });
+      continue;
+    }
+    seen.add(email);
+    candidates.push({ name, email });
+  }
+
+  if (candidates.length > 0) {
+    const existing = await prisma.user.findMany({
+      where: { email: { in: candidates.map((c) => c.email) } },
+      select: { email: true },
+    });
+    const existingSet = new Set(existing.map((e) => e.email));
+
+    const toCreate = candidates.filter((c) => {
+      if (existingSet.has(c.email)) {
+        skipped.push({ email: c.email, reason: 'An account with this email already exists' });
+        return false;
+      }
+      return true;
+    });
+
+    // Hashed in small parallel batches: bcrypt is intentionally slow, and
+    // hashing 50 passwords one after another would hold the request open
+    // far longer than necessary.
+    const BATCH = 4;
+    for (let i = 0; i < toCreate.length; i += BATCH) {
+      const batch = toCreate.slice(i, i + BATCH);
+      // eslint-disable-next-line no-await-in-loop
+      const hashes = await Promise.all(batch.map((c) => hashPassword(c.email)));
+      for (let j = 0; j < batch.length; j += 1) {
+        const c = batch[j];
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await prisma.user.create({
+            data: {
+              name: c.name,
+              email: c.email,
+              passwordHash: hashes[j],
+              passwordHistory: [hashes[j]],
+              roleId: kamRole.id,
+              lineManagerId,
+              mustChangePassword: true,
+            },
+          });
+          created.push(c);
+        } catch {
+          skipped.push({ email: c.email, reason: 'This account could not be created' });
+        }
+      }
+    }
+  }
+
+  await logAudit({
+    entity: 'User',
+    entityId: 'bulk-import',
+    action: 'USERS_BULK_IMPORTED',
+    actorId,
+    afterState: { createdCount: created.length, skippedCount: skipped.length, lineManagerId },
+  });
+
+  return { created, skipped, lineManagerId };
 };

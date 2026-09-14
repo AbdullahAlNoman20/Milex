@@ -14,13 +14,24 @@ const roleQueueFilter = (role) => (c) => {
   if (c.status === STATUS.ACTIVE) return false;
   switch (role) {
     case ROLES.SALES_COORDINATOR:
-      return c.status === STATUS.PROVISIONAL_ACTIVE && (!c.offerSent || (c.offerAccepted && !c.agreementSent));
+      // A rejected offer is not theirs to act on until the Line Manager has
+      // approved a new rate, so it is excluded from their queue.
+      return (
+        c.status === STATUS.PROVISIONAL_ACTIVE &&
+        !c.offerRejected &&
+        (!c.offerSent || (c.offerAccepted && !c.agreementSent))
+      );
     case ROLES.LINE_MANAGER:
+      // A customer who rejected the offer stays provisional (the document
+      // countdown keeps running) but still needs a new rate from the Line
+      // Manager — so it belongs in this queue.
+      if (c.status === STATUS.PROVISIONAL_ACTIVE && c.offerRejected) return true;
       return [
         STATUS.PENDING_APPROVAL,
         STATUS.INFO_UPDATE_PENDING,
         STATUS.PROVISIONAL_EXTENSION_REQUESTED,
         STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+        STATUS.OFFER_REJECTED,
       ].includes(c.status);
     case ROLES.KAM:
       return c.status === STATUS.PROVISIONAL_ACTIVE && c.offerSent && !c.offerAccepted;

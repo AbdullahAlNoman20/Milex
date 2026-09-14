@@ -173,6 +173,10 @@ model Customer {
   offerAccepted            Boolean            @default(false)
   agreementText            String?
   agreementSent            Boolean            @default(false)
+  // The customer rejected the offer and a new rate is awaited from the Line
+  // Manager. The account deliberately stays PROVISIONAL_ACTIVE throughout,
+  // so the 21-day document window keeps counting down.
+  offerRejected            Boolean            @default(false)
 
   // Final Account Profile Data (filled by KAM/SC once Agreement is signed)
   finalProfileCompleted    Boolean            @default(false)
@@ -228,6 +232,7 @@ model Customer {
   @@index([status, provisionalExpiryDate])
   @@index([isDeleted])
   @@index([isDeleted, createdAt])
+  @@index([status, offerRejected])
 }
 
 model Contact {

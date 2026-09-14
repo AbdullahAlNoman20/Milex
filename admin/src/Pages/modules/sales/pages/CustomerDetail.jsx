@@ -173,6 +173,25 @@ const CustomerDetail = () => {
     }
 
     if (isProvisionalActive) {
+      // The customer rejected the offer. The account stays provisional (the
+      // 21-day document window is still running) but the rate goes back to
+      // the Line Manager before anything else can happen.
+      if (customer.offerRejected) {
+        if (role === ROLES.LINE_MANAGER || isSuperAdmin) {
+          return (
+            <ReviseRateApprovalPanel
+              customer={customer}
+              onUpdated={refreshCustomer}
+            />
+          );
+        }
+        return (
+          <Waiting>
+            Customer rejected the offer — waiting for the Line Manager to
+            approve a new rate
+          </Waiting>
+        );
+      }
       if (role === ROLES.SALES_COORDINATOR) {
         if (!customer.offerSent)
           return <OfferLetterPanel customer={customer} />;
@@ -295,6 +314,27 @@ const CustomerDetail = () => {
           <StatusBadge status={customer.status} />
         </div>
       </div>
+
+      {customer.offerRejected && customer.status === STATUS.PROVISIONAL_ACTIVE && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex flex-wrap items-start gap-3">
+          <Eye size={18} className="text-red-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">
+              Offer Rejected by Customer
+            </p>
+            <p className="text-xs text-red-700 leading-relaxed">
+              The account remains provisional and the document upload window is
+              still running. A new rate from the Line Manager is needed before
+              a revised offer letter can be sent.
+            </p>
+            {customer.rejectReason && (
+              <p className="text-xs text-red-800 font-semibold mt-2 break-words">
+                Customer's feedback: {customer.rejectReason}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {customer.accountProfileType === "PROVISIONAL" &&
         PROVISIONAL_COUNTDOWN_STATUSES.includes(customer.status) && (

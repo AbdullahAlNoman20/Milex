@@ -95,6 +95,20 @@ export const getMyActivityHandler = async (req: Request, res: Response, next: Ne
   }
 };
 
+export const bulkImportKamsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await usersService.bulkCreateKams(
+      req.body.rows,
+      req.body.lineManagerId || null,
+      req.user!.id
+    );
+    return sendSuccess(res, result, 201);
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
 export const getUserActivityHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const targetId = asString(req.params.id);

@@ -91,7 +91,7 @@ export const listCustomers = async (
         businessType: true, serviceRequired: true, accountMode: true, accountType: true,
         creditLimitTk: true, creditPeriodDays: true, creditPeriodExtendedByLM: true,
         proposedRate: true, approvedRate: true, lmNote: true, recNote: true, rejectReason: true,
-        rateRef: true, offerSent: true, offerAccepted: true, agreementSent: true,
+        rateRef: true, offerSent: true, offerAccepted: true, offerRejected: true, agreementSent: true,
         finalProfileCompleted: true, accountConfigMode: true, managingPartnerName: true,
         binNumber: true, tinNumber: true, preferredCarrier: true, natureOfBusiness: true,
         gainType: true, financeMode: true, area: true, zone: true,
@@ -225,6 +225,7 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
       rateRef,
       offerSent: false,
       offerAccepted: false,
+      offerRejected: false,
       agreementSent: false,
     },
     historyAction: 'RATE APPROVED BY LM — PROVISIONAL CUSTOMER CREATED',
@@ -271,7 +272,7 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
   const updated = await prisma.$transaction(async (tx) => {
     const current = await tx.customer.findUnique({
       where: { id: customerId },
-      select: { status: true, isDeleted: true },
+      select: { status: true, isDeleted: true, offerRejected: true },
     });
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
@@ -283,9 +284,16 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
         message: `The offer letter can't be sent right now (current status: ${humanizeStatus(current.status)}).`,
       };
     }
+    if (current.offerRejected) {
+      throw {
+        statusCode: 409,
+        code: 'AWAITING_NEW_RATE',
+        message: 'The customer rejected the last offer. The Line Manager must approve a new rate before another offer can be sent.',
+      };
+    }
     const customer = await tx.customer.update({
       where: { id: customerId },
-      data: { offerText: clean.offerText, offerSent: true, offerAccepted: false },
+      data: { offerText: clean.offerText, offerSent: true, offerAccepted: false, offerRejected: false },
       include: CUSTOMER_WITH_HANDLER,
     });
     await tx.customerHistoryEntry.updateMany({
@@ -412,28 +420,79 @@ export const submitClientFeedback = async (
     return updated;
   }
 
-  const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const clean = sanitizeAndEscape({ r: data.rejectReason || '' });
-  // A rejection now routes back through the Line Manager for a fresh
-  // approved rate — the Sales Coordinator can no longer resend without
-  // that re-approval. transitionCustomerStatus already handles the
-  // history entry, audit log, and notification for us.
-  const updated = await transitionCustomerStatus({
-    customerId,
-    toStatus: CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
-    actorId: kamId,
-    extraUpdates: {
-      offerSent: false,
-      offerAccepted: false,
-      rejectReason: clean.r,
-      revision: customer.revision + 1,
-    },
-    historyAction: 'OFFER REJECTED BY CUSTOMER',
-    historySubText: clean.r,
+
+  // A rejection routes back through the Line Manager for a fresh approved
+  // rate — the Sales Coordinator cannot resend without that re-approval.
+  //
+  // Crucially the status stays PROVISIONAL_ACTIVE rather than moving to
+  // OFFER_REJECTED_REVISE_RATE. Moving it stopped the 21-day document
+  // countdown and dropped the account out of the provisional view, when in
+  // reality the provisional period is still running and only the offer is
+  // in question. The `offerRejected` flag carries that meaning instead.
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await tx.customer.findUnique({
+      where: { id: customerId },
+      select: { status: true, isDeleted: true, offerSent: true, revision: true },
+    });
+    if (!current || current.isDeleted) {
+      throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+    }
+    if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE || !current.offerSent) {
+      throw {
+        statusCode: 409,
+        code: 'INVALID_STATE',
+        message: 'Customer feedback can only be recorded after an offer letter has been sent.',
+      };
+    }
+
+    const customer = await tx.customer.update({
+      where: { id: customerId },
+      data: {
+        offerSent: false,
+        offerAccepted: false,
+        offerRejected: true,
+        rejectReason: clean.r,
+        revision: current.revision + 1,
+      },
+      include: CUSTOMER_WITH_HANDLER,
+    });
+
+    await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
+    await tx.customerHistoryEntry.create({
+      data: {
+        customerId,
+        action: 'OFFER REJECTED BY CUSTOMER',
+        subText: clean.r ? `${clean.r} — awaiting a new rate from the Line Manager` : 'Awaiting a new rate from the Line Manager',
+        status: 'active',
+      },
+    });
+
+    return customer;
   });
+
+  logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: 'OFFER_REJECTED',
+    actorId: kamId,
+    afterState: { offerRejected: true, revision: updated.revision },
+  }).catch(() => {});
+
+  // Goes to the Line Manager (and the KAM's own record), not to the Sales
+  // Coordinators — nothing is theirs to do until a new rate is approved.
+  notifyCustomerWorkflowUsers(
+    updated.handledById,
+    { label: `${updated.accountName} — Customer rejected the offer, a new rate is needed`, link: `/app/customers/${updated.barcode}` },
+    kamId,
+  ).catch(() => {});
+
   return updated;
 };
 
+// The account never left PROVISIONAL_ACTIVE when the offer was rejected, so
+// there is no status change to make here — only the rejection flag to clear
+// and a new approved rate to record. Everything commits together.
 export const reapproveRateAfterRejection = async (
   customerId: string,
   approvedRate: string,
@@ -441,39 +500,79 @@ export const reapproveRateAfterRejection = async (
   lmId: string,
 ) => {
   await assertLineManagerOwnsCustomer(customerId, lmId);
-  const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const clean = sanitizeAndEscape({ approvedRate, lmNote: lmNote || '' });
-
-  const previousEntry = {
-    rate: customer.approvedRate || customer.proposedRate || '',
-    rateRef: customer.rateRef || '',
-    changedAt: new Date().toISOString(),
-  };
   const newRateRef = await generateUniqueRateRef();
 
-  await transitionCustomerStatus({
-    customerId,
-    toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
-    actorId: lmId,
-    extraUpdates: {
-      approvedRate: clean.approvedRate,
-      lmNote: clean.lmNote || null,
-      rateRef: newRateRef,
-      rejectReason: null,
-    },
-    historyAction: 'NEW RATE APPROVED BY LM',
-    historySubText: 'Awaiting Sales Coordinator to send the revised offer letter',
-    notifySalesCoordinators: true,
+  const updated = await prisma.$transaction(async (tx) => {
+    const customer = await tx.customer.findUnique({ where: { id: customerId } });
+    if (!customer || customer.isDeleted) {
+      throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+    }
+    // Legacy records created before this change may still be sitting in
+    // OFFER_REJECTED_REVISE_RATE, so both are accepted here.
+    const isRejectedProvisional = customer.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE && customer.offerRejected;
+    const isLegacyRejected = customer.status === CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE;
+    if (!isRejectedProvisional && !isLegacyRejected) {
+      throw {
+        statusCode: 409,
+        code: 'INVALID_STATE',
+        message: 'A new rate can only be approved for an account where the customer has rejected the offer.',
+      };
+    }
+
+    const previousEntry = {
+      rate: customer.approvedRate || customer.proposedRate || '',
+      rateRef: customer.rateRef || '',
+      changedAt: new Date().toISOString(),
+    };
+
+    const result = await tx.customer.update({
+      where: { id: customerId },
+      data: {
+        approvedRate: clean.approvedRate,
+        lmNote: clean.lmNote || null,
+        rateRef: newRateRef,
+        rejectReason: null,
+        offerRejected: false,
+        offerSent: false,
+        offerAccepted: false,
+        // A legacy record is pulled back into the provisional flow.
+        ...(isLegacyRejected ? { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any } : {}),
+        rateHistory: { push: previousEntry },
+      },
+      include: CUSTOMER_WITH_HANDLER,
+    });
+
+    await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
+    await tx.customerHistoryEntry.create({
+      data: {
+        customerId,
+        action: 'NEW RATE APPROVED BY LM',
+        subText: 'Awaiting Sales Coordinator to send the revised offer letter',
+        status: 'active',
+      },
+    });
+
+    return result;
   });
 
-  // Kept as a separate, simple update right after — pushing to a Json[]
-  // history field isn't supported inside transitionCustomerStatus's
-  // concurrency-safe updateMany, so it's appended here instead.
-  return prisma.customer.update({
-    where: { id: customerId },
-    data: { rateHistory: { push: previousEntry } },
-    include: CUSTOMER_WITH_HANDLER,
-  });
+  logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: 'RATE_REAPPROVED_AFTER_REJECTION',
+    actorId: lmId,
+    afterState: { approvedRate: clean.approvedRate, rateRef: newRateRef },
+  }).catch(() => {});
+
+  // Now it genuinely is the Sales Coordinator's turn again.
+  notifyCustomerWorkflowUsers(
+    updated.handledById,
+    { label: `${updated.accountName} — New rate approved, please resend the offer letter`, link: `/app/customers/${updated.barcode}` },
+    lmId,
+    { includeSalesCoordinators: true },
+  ).catch(() => {});
+
+  return updated;
 };
 
 export const reviseRateAfterRejection = async (customerId: string, proposedRate: string, kamId: string) => {
