@@ -72,9 +72,21 @@ const DocumentsList = ({ customer, documents = [] }) => {
       setPrintData({ type: doc.printType, customer });
       return;
     }
+    if (doc.scanStatus === "INFECTED") {
+      return showToast(
+        "This file was blocked by our security check and can't be opened. Please ask for a clean copy to be uploaded.",
+        "error",
+      );
+    }
+    if (doc.scanStatus === "ERROR") {
+      return showToast(
+        "We couldn't finish the security check on this file. Please try again in a few minutes.",
+        "warning",
+      );
+    }
     if (doc.scanStatus !== "CLEAN") {
       return showToast(
-        "This file is still being scanned — try again shortly",
+        "This file is still being checked — try again shortly",
         "warning",
       );
     }

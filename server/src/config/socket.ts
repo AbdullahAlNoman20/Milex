@@ -49,14 +49,14 @@ export const initSocket = async (httpServer: HTTPServer) => {
       const match = cookies.match(/(?:^|;\s*)access_token=([^;]+)/);
       const token = match ? decodeURIComponent(match[1]) : null;
       if (!token) {
-        console.warn('[socket] rejected: no access_token cookie present');
         return next(new Error('Unauthenticated'));
       }
       const payload = verifyAccessToken(token);
       (socket as any).userId = payload.sub;
       next();
-    } catch (err) {
-      console.warn('[socket] rejected: invalid/expired access token —', (err as Error)?.message);
+    } catch {
+      // Expected routinely once the 15-minute access cookie lapses; the
+      // client silently refreshes and reconnects, so this is not an error.
       next(new Error('Unauthenticated'));
     }
   });
@@ -65,16 +65,24 @@ export const initSocket = async (httpServer: HTTPServer) => {
     const userId = (socket as any).userId;
     if (userId) {
       socket.join(`user:${userId}`);
-      console.info(`[socket] user ${userId} connected (${socket.id})`);
     }
-    socket.on('disconnect', () => {
-      console.info(`[socket] user ${userId || 'unknown'} disconnected (${socket.id})`);
-    });
+    // Connect/disconnect chatter is development-only. In production it
+    // wrote a user id to disk on every reconnect, which is both noise and
+    // unnecessary personal data in the log files.
+    if (!env.IS_PRODUCTION) {
+      socket.on('disconnect', (reason) => console.info(`[socket] disconnected: ${reason}`));
+    }
   });
 
   return io;
 };
 
-export const emitNotificationToUser = (userId: string) => {
-  io?.to(`user:${userId}`).emit('notification:new');
+export const emitNotificationToUser = (userId: string, payload?: unknown) => {
+  io?.to(`user:${userId}`).emit('notification:new', payload ?? null);
+};
+
+export const closeSocket = async () => {
+  if (!io) return;
+  await new Promise<void>((resolve) => io!.close(() => resolve()));
+  io = null;
 };

@@ -1,12 +1,14 @@
 // admin/src/Pages/modules/sales/pages/TeamActivityPage.jsx — REPLACE ENTIRE FILE
 import { useEffect, useState, useMemo } from 'react';
-import { Eye, X, Users2, LogIn, Activity, Search, RefreshCw, Download, Printer, ChevronDown } from 'lucide-react';
+import { Eye, X, Users2, LogIn, Activity, Search, RefreshCw, Download, Printer } from 'lucide-react';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { listStaffDirectory, getUserActivity } from '../services/teamService';
 import { listReportsForKam } from '../services/dailyReportService';
 import { humanizeAction } from '../../../../Components/utils/format';
 import Loader from '../../../../Components/Shared/Loader';
 import Pagination from '../../../../Components/Shared/Pagination';
+import { downloadCsv } from '../../../../Components/utils/csv';
+
 const ROLE_FILTERS = [
   { key: 'ALL', label: 'All' },
   { key: 'KAM', label: 'KAM' },
@@ -195,15 +197,8 @@ const TeamActivityPage = () => {
       Entity: i.entity || '',
     }));
     if (rows.length === 0) return showToast('Nothing to export', 'warning');
-    const headers = Object.keys(rows[0]);
-    const csv = [headers.join(','), ...rows.map((r) => headers.map((h) => `"${String(r[h]).replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeUser.name.replace(/\s+/g, '_')}_activity.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`${activeUser.name.replace(/\s+/g, '_')}_activity.csv`, rows);
+    showToast('Export downloaded', 'success');
   };
 
   if (isLoading) return <Loader fullScreen label="Loading team..." />;
@@ -292,8 +287,28 @@ const TeamActivityPage = () => {
       <Pagination page={pageClamped} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
 
       {activeUser && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="team-activity-print fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-4">
+          {/* Printing used to dump the whole application behind the modal
+              onto the page. Hiding the app root and re-showing only this
+              panel is the approach that works across every browser. */}
+          <style>{`
+            @media print {
+              @page { size: A4 landscape; margin: 10mm; }
+              #root { display: none !important; }
+              .team-activity-print {
+                display: block !important;
+                position: absolute !important;
+                inset: 0 !important;
+                background: #fff !important;
+                padding: 0 !important;
+                max-height: none !important;
+                overflow: visible !important;
+              }
+              .team-activity-print * { max-height: none !important; overflow: visible !important; }
+              .print\\:hidden { display: none !important; }
+            }
+          `}</style>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col print:shadow-none print:max-h-none print:max-w-none">
             {/* Header */}
             <div className="flex flex-wrap items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
@@ -339,14 +354,15 @@ const TeamActivityPage = () => {
                   onClick={exportActivity}
                   className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
                 >
-                  <Download size={13} /> Export <ChevronDown size={12} />
+                  <Download size={13} /> Export CSV
                 </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition"
+                  aria-label="Print this activity report"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition print:hidden"
                 >
-                  <Printer size={13} />
+                  <Printer size={13} /> Print
                 </button>
                 <button
                   type="button"

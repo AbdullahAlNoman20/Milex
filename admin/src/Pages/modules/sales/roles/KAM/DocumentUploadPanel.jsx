@@ -33,7 +33,9 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
 
   const handleView = async () => {
     if (!doc) return;
-    if (doc.scanStatus !== 'CLEAN') return showToast('This file is still being scanned — try again shortly', 'warning');
+    if (doc.scanStatus === 'INFECTED') return showToast("This file was blocked by our security check and can't be opened. Please upload a clean copy.", 'error');
+    if (doc.scanStatus === 'ERROR') return showToast("We couldn't finish the security check on this file. Please try again in a few minutes.", 'warning');
+    if (doc.scanStatus !== 'CLEAN') return showToast('This file is still being checked — try again shortly', 'warning');
     setIsOpening(true);
     try {
       const url = await getDocumentSignedUrl(doc.storageKey);

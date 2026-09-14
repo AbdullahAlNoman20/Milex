@@ -38,7 +38,8 @@ export const requestExtensionHandler = async (req: Request, res: Response, next:
       asString(req.params.id),
       req.body.requestedDays,
       req.body.reason,
-      req.user!.id
+      req.user!.id,
+      req.user!.role
     );
     return sendSuccess(res, { request }, 201);
   } catch (err: any) {

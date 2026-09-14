@@ -48,7 +48,17 @@ export const env = Object.freeze({
   // that actually matters. Before raising it, check your Postgres server's
   // own limit with `SHOW max_connections;` — this value plus every other
   // app/tool connecting to the same database must stay comfortably under it.
-  PG_POOL_MAX: Number(process.env.PG_POOL_MAX || 10),
+  // Raised from 10: with ~60 concurrent staff, 10 connections became the
+  // queueing bottleneck long before Postgres itself did. Check your server's
+  // `SHOW max_connections;` and keep this plus every other client under it.
+  PG_POOL_MAX: Number(process.env.PG_POOL_MAX || 20),
+  // Optional ClamAV daemon (clamd) for real virus scanning of uploads.
+  // Leave CLAMAV_HOST unset to keep the current behaviour (extension +
+  // magic-byte validation only). Setting it turns on real scanning with no
+  // other code change anywhere.
+  CLAMAV_HOST: process.env.CLAMAV_HOST || '',
+  CLAMAV_PORT: Number(process.env.CLAMAV_PORT || 3310),
+  CLAMAV_TIMEOUT_MS: Number(process.env.CLAMAV_TIMEOUT_MS || 20000),
 });
 
 if (

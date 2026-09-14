@@ -47,12 +47,29 @@ export const NotificationProvider = ({ children }) => {
     const id = setInterval(refresh, REFRESH_INTERVAL_MS);
 
     const socket = getSocket();
-    // Play the sound the INSTANT the push arrives — don't wait for the
-    // follow-up refresh() network round-trip to finish first. Waiting for
-    // that round-trip before playing the sound is exactly what caused the
-    // 1–2 second delay.
-    const handleNew = () => {
+    // The server now writes the notification row BEFORE pushing, and sends
+    // the body along with the push. So we can render it instantly from the
+    // payload, then reconcile with the server in the background — no waiting
+    // on a network round-trip, and no more "sound played but bell is empty".
+    const handleNew = (payload) => {
       playNotificationSound();
+      if (payload && payload.label) {
+        setItems((prev) => {
+          if (prev.some((i) => i.label === payload.label && i.link === payload.link && !i.isRead)) return prev;
+          return [
+            {
+              id: `live_${payload.createdAt}_${payload.link}`,
+              label: payload.label,
+              link: payload.link,
+              isOverdue: !!payload.isOverdue,
+              isRead: false,
+              createdAt: payload.createdAt,
+            },
+            ...prev,
+          ].slice(0, BELL_LIMIT);
+        });
+        setCount((prev) => prev + 1);
+      }
       refresh();
     };
     socket.on('notification:new', handleNew);

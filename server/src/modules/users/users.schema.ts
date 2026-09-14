@@ -9,6 +9,7 @@ export const createUserSchema = z
     role: z.enum(["KAM", "SALES_COORDINATOR", "LINE_MANAGER", "SUPER_ADMIN"], { message: 'Please choose a valid role.' }),
     branchId: z.string().max(100).optional(),
     lineManagerId: z.string().max(100).optional().nullable(),
+    sendWelcomeEmail: z.boolean().optional(),
   })
   .strict();
 
@@ -24,5 +25,8 @@ export const updateUserSchema = z
   .strict();
 
 export const setPasswordSchema = z
-  .object({ newPassword: z.string().min(8, 'Password must be at least 8 characters long.').max(200) })
+  .object({
+    newPassword: z.string().min(8, 'Password must be at least 8 characters long.').max(200),
+    requirePasswordChange: z.boolean().optional(),
+  })
   .strict();

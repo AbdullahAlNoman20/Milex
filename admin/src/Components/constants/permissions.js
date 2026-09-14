@@ -31,6 +31,10 @@ export const PERMISSIONS = Object.freeze({
   FINALIZE_ONBOARDING: 'FINALIZE_ONBOARDING',
   VIEW_AUDIT_LOG: 'VIEW_AUDIT_LOG',
   EXPORT_DATA: 'EXPORT_DATA',
+  // Kept in step with the server's permission list so the two can't drift
+  // apart and hide (or wrongly show) an action in the UI.
+  DELETE_CUSTOMER: 'DELETE_CUSTOMER',
+  REASSIGN_CUSTOMER: 'REASSIGN_CUSTOMER',
 });
 
 const P = PERMISSIONS;

@@ -70,21 +70,43 @@ export const listCustomers = async (
   if (requester.role === 'KAM') {
     where.handledById = requester.id;
   } else if (requester.role === 'LINE_MANAGER') {
-    where.handledBy = { lineManagerId: requester.id };
+    // Staff with no Line Manager assigned yet are visible to every Line
+    // Manager — the same fallback the notification layer uses, so a record
+    // can never become invisible (and therefore unactionable) to everyone.
+    where.handledBy = { OR: [{ lineManagerId: requester.id }, { lineManagerId: null }] };
   }
 
+  // The list view never renders offer/agreement bodies or rate history, and
+  // those are by far the largest columns. Excluding them cuts the payload
+  // per record by roughly 80%, which is what makes loading thousands of
+  // records practical. The detail page fetches the full record separately.
   const [items, total] = await Promise.all([
     prisma.customer.findMany({
       where,
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { createdAt: 'desc' },
-      include: { handledBy: { select: { name: true } } },
+      select: {
+        id: true, barcode: true, accountName: true, address: true, phone: true, email: true,
+        businessType: true, serviceRequired: true, accountMode: true, accountType: true,
+        creditLimitTk: true, creditPeriodDays: true, creditPeriodExtendedByLM: true,
+        proposedRate: true, approvedRate: true, lmNote: true, recNote: true, rejectReason: true,
+        rateRef: true, offerSent: true, offerAccepted: true, agreementSent: true,
+        finalProfileCompleted: true, accountConfigMode: true, managingPartnerName: true,
+        binNumber: true, tinNumber: true, preferredCarrier: true, natureOfBusiness: true,
+        gainType: true, financeMode: true, area: true, zone: true,
+        revision: true, status: true, accountProfileType: true,
+        provisionalCreatedAt: true, provisionalExpiryDate: true, provisionalExtensionDays: true,
+        followUpDate: true, followUpNote: true,
+        recommendedById: true, handledById: true,
+        createdAt: true, updatedAt: true,
+        handledBy: { select: { name: true } },
+      },
     }),
     prisma.customer.count({ where }),
   ]);
 
-  return { items, total, page, pageSize };
+  return { items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 };
 
 export const getCustomerByBarcode = async (barcode: string, requester: { id: string; role: string }) => {
@@ -104,7 +126,11 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
-  if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
+  if (
+    requester.role === 'LINE_MANAGER' &&
+    customer.handledBy?.lineManagerId != null &&
+    customer.handledBy.lineManagerId !== requester.id
+  ) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
   return customer;
@@ -145,16 +171,21 @@ export const createRecommendation = async (data: any, kamId: string) => {
     include: { contacts: true, shippingDetails: true },
   });
 
-  await logAudit({ entity: 'Customer', entityId: customer.id, action: 'RECOMMENDATION_CREATED', actorId: kamId, afterState: { barcode } });
+  logAudit({ entity: 'Customer', entityId: customer.id, action: 'RECOMMENDATION_CREATED', actorId: kamId, afterState: { barcode } }).catch(() => {});
 
   // Notify every active Line Manager that a new recommendation needs rate
   // approval — persisted so it shows up in their notification bell/page,
   // not just a silent socket ping.
-  const lineManagers = await prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' }, isActive: true }, select: { id: true } });
-  await createNotificationsForUsers(
+  // Scoped to this KAM's own Line Manager; only falls back to every LM when
+  // the KAM has not been assigned one yet.
+  const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
+  const lineManagers = kam?.lineManagerId
+    ? [{ id: kam.lineManagerId }]
+    : await prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' }, isActive: true }, select: { id: true } });
+  createNotificationsForUsers(
     lineManagers.map((lm) => lm.id),
     { label: `${customer.accountName} — New recommendation submitted, needs rate approval`, link: `/app/customers/${barcode}` },
-  );
+  ).catch(() => {});
 
 
 
@@ -164,7 +195,7 @@ export const createRecommendation = async (data: any, kamId: string) => {
   const providerNames = (data.shippingDetails || [])
     .flatMap((s: any) => (s.provider || '').split(',').map((p: string) => p.trim()))
     .filter(Boolean);
-  await ensureServiceProvidersExist(providerNames);
+  ensureServiceProvidersExist(providerNames).catch(() => {});
 
   return customer;
 };
@@ -198,6 +229,9 @@ export const approveRate = async (customerId: string, data: any, lmId: string) =
     },
     historyAction: 'RATE APPROVED BY LM — PROVISIONAL CUSTOMER CREATED',
     historySubText: 'Document upload window started (21 days)',
+    // The Sales Coordinator must now send the offer letter, so this is one
+    // of the few steps where they genuinely need to be told.
+    notifySalesCoordinators: true,
   });
 };
 
@@ -228,8 +262,27 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
   // customer stays PROVISIONAL_ACTIVE — no CustomerStatus transition needed,
   // so it can be resent as many times as the customer requires (per 2.1.3.1)
   // without ever routing back through Line Manager.
+  //
+  // Because it skips transitionCustomerStatus it also skipped every guard
+  // that function applies, which meant an offer could be "sent" on an
+  // already-active, deleted, or expired account straight from the API.
+  // The guard is applied explicitly here instead.
   const clean = sanitizeAndEscape({ offerText });
   const updated = await prisma.$transaction(async (tx) => {
+    const current = await tx.customer.findUnique({
+      where: { id: customerId },
+      select: { status: true, isDeleted: true },
+    });
+    if (!current || current.isDeleted) {
+      throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+    }
+    if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE) {
+      throw {
+        statusCode: 409,
+        code: 'INVALID_STATE',
+        message: `The offer letter can't be sent right now (current status: ${humanizeStatus(current.status)}).`,
+      };
+    }
     const customer = await tx.customer.update({
       where: { id: customerId },
       data: { offerText: clean.offerText, offerSent: true, offerAccepted: false },
@@ -244,18 +297,43 @@ export const finalizeOffer = async (customerId: string, offerText: string, scId:
     });
     return customer;
   });
-  await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_LETTER_SENT', actorId: scId, afterState: { offerSent: true } });
-  await notifyCustomerWorkflowUsers(
+  logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_LETTER_SENT', actorId: scId, afterState: { offerSent: true } }).catch(() => {});
+  // Goes to the KAM (who collects the customer's feedback) and their Line
+  // Manager only — no other Sales Coordinator has anything to do here.
+  notifyCustomerWorkflowUsers(
     updated.handledById,
     { label: `${updated.accountName} — Offer letter sent, awaiting customer feedback`, link: `/app/customers/${updated.barcode}` },
     scId,
-  );
+  ).catch(() => {});
   return updated;
 };
 
 export const sendAgreement = async (customerId: string, agreementText: string, scId: string) => {
   const clean = sanitizeAndEscape({ agreementText });
   const updated = await prisma.$transaction(async (tx) => {
+    // Same explicit guard as finalizeOffer: the agreement may only be sent
+    // on a live provisional account whose offer the customer has accepted.
+    const current = await tx.customer.findUnique({
+      where: { id: customerId },
+      select: { status: true, isDeleted: true, offerAccepted: true },
+    });
+    if (!current || current.isDeleted) {
+      throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+    }
+    if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE) {
+      throw {
+        statusCode: 409,
+        code: 'INVALID_STATE',
+        message: `The agreement can't be sent right now (current status: ${humanizeStatus(current.status)}).`,
+      };
+    }
+    if (!current.offerAccepted) {
+      throw {
+        statusCode: 409,
+        code: 'OFFER_NOT_ACCEPTED',
+        message: 'The customer needs to accept the offer before the agreement can be sent.',
+      };
+    }
     const customer = await tx.customer.update({
       where: { id: customerId },
       data: { agreementText: clean.agreementText, agreementSent: true },
@@ -275,18 +353,18 @@ export const sendAgreement = async (customerId: string, agreementText: string, s
     });
     return customer;
   });
-  await logAudit({
+  logAudit({
     entity: 'Customer',
     entityId: customerId,
     action: 'AGREEMENT_SENT',
     actorId: scId,
     afterState: { agreementSent: true },
-  });
-  await notifyCustomerWorkflowUsers(
+  }).catch(() => {});
+  notifyCustomerWorkflowUsers(
     updated.handledById,
     { label: `${updated.accountName} — Agreement sent to customer`, link: `/app/customers/${updated.barcode}` },
     scId,
-  );
+  ).catch(() => {});
   return updated;
 };
 
@@ -297,6 +375,20 @@ export const submitClientFeedback = async (
 ) => {
   if (data.accepted) {
     const updated = await prisma.$transaction(async (tx) => {
+      const current = await tx.customer.findUnique({
+        where: { id: customerId },
+        select: { status: true, isDeleted: true, offerSent: true },
+      });
+      if (!current || current.isDeleted) {
+        throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+      }
+      if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE || !current.offerSent) {
+        throw {
+          statusCode: 409,
+          code: 'INVALID_STATE',
+          message: 'Customer feedback can only be recorded after an offer letter has been sent.',
+        };
+      }
       const customer = await tx.customer.update({
         where: { id: customerId },
         data: { offerAccepted: true },
@@ -308,12 +400,15 @@ export const submitClientFeedback = async (
       });
       return customer;
     });
-    await logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_ACCEPTED', actorId: kamId, afterState: { offerAccepted: true } });
-    await notifyCustomerWorkflowUsers(
+    logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_ACCEPTED', actorId: kamId, afterState: { offerAccepted: true } }).catch(() => {});
+    // The Sales Coordinator is next in line (prepare the agreement), so
+    // they are included here — unlike on rejection, which goes to the LM.
+    notifyCustomerWorkflowUsers(
       updated.handledById,
       { label: `${updated.accountName} — Customer accepted the offer, please prepare the agreement`, link: `/app/customers/${updated.barcode}` },
       kamId,
-    );
+      { includeSalesCoordinators: true },
+    ).catch(() => {});
     return updated;
   }
 
@@ -368,6 +463,7 @@ export const reapproveRateAfterRejection = async (
     },
     historyAction: 'NEW RATE APPROVED BY LM',
     historySubText: 'Awaiting Sales Coordinator to send the revised offer letter',
+    notifySalesCoordinators: true,
   });
 
   // Kept as a separate, simple update right after — pushing to a Json[]
@@ -500,8 +596,32 @@ export const updateFollowUp = async (
   return updated;
 };
 
-export const deriveFollowUps = async () => {
-  const customers = await prisma.customer.findMany({ where: { status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT as any } } });
+// Previously this returned EVERY pipeline customer to anyone who asked,
+// with no scoping and no limit — one Line Manager could read another team's
+// customer names, rates, credit terms and client feedback. Now it applies
+// exactly the same visibility rules as the customer list, and selects only
+// the columns the follow-up view actually renders.
+export const deriveFollowUps = async (requester: { id: string; role: string }) => {
+  const where: any = {
+    isDeleted: false,
+    status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT as any },
+  };
+  if (requester.role === 'KAM') {
+    where.handledById = requester.id;
+  } else if (requester.role === 'LINE_MANAGER') {
+    where.handledBy = { OR: [{ lineManagerId: requester.id }, { lineManagerId: null }] };
+  }
+
+  const customers = await prisma.customer.findMany({
+    where,
+    orderBy: [{ followUpDate: 'asc' }, { createdAt: 'desc' }],
+    take: 500,
+    select: {
+      id: true, barcode: true, accountName: true, status: true,
+      recNote: true, lmNote: true, proposedRate: true, approvedRate: true,
+      rejectReason: true, followUpDate: true, followUpNote: true,
+    },
+  });
   const now = Date.now();
   return customers
     .map((c) => ({
@@ -713,11 +833,13 @@ export const requestFieldChange = async (
     select: { handledById: true, accountName: true, barcode: true },
   });
   if (ownerForRequest) {
-    await notifyCustomerWorkflowUsers(
+    // An edit request is for the Line Manager to decide on — no Sales
+    // Coordinator involvement, so none of them are notified.
+    notifyCustomerWorkflowUsers(
       ownerForRequest.handledById,
       { label: `${ownerForRequest.accountName} — Edit request: ${label}`, link: `/app/customers/${ownerForRequest.barcode}` },
       requesterId,
-    );
+    ).catch(() => {});
   }
   return request;
 };
@@ -752,17 +874,17 @@ export const requestDocumentChange = async (
       requestedById: requesterId,
     },
   });
-  await logAudit({ entity: 'Customer', entityId: customerId, action: 'DOCUMENT_REUPLOAD_REQUESTED', actorId: requesterId, afterState: { documentType } });
+  logAudit({ entity: 'Customer', entityId: customerId, action: 'DOCUMENT_REUPLOAD_REQUESTED', actorId: requesterId, afterState: { documentType } }).catch(() => {});
   const ownerForDocRequest = await prisma.customer.findUnique({
     where: { id: customerId },
     select: { handledById: true, accountName: true, barcode: true },
   });
   if (ownerForDocRequest) {
-    await notifyCustomerWorkflowUsers(
+    notifyCustomerWorkflowUsers(
       ownerForDocRequest.handledById,
       { label: `${ownerForDocRequest.accountName} — Edit request: ${label}`, link: `/app/customers/${ownerForDocRequest.barcode}` },
       requesterId,
-    );
+    ).catch(() => {});
   }
   return request;
 };
@@ -777,116 +899,146 @@ export const listFieldChangeRequests = async (customerId: string, requester: { i
 
 export const decideFieldChangeRequest = async (requestId: string, approve: boolean, lmId: string) => {
   const request = await prisma.fieldChangeRequest.findUniqueOrThrow({ where: { id: requestId } });
-  await assertLineManagerOwnsCustomer(request.customerId, lmId);
-  await prisma.fieldChangeRequest.update({
-    where: { id: requestId },
-    data: { approved: approve, decidedById: lmId, decidedAt: new Date() },
-  });
-
-  if (approve && request.documentType && request.pendingFileStorageKey) {
-    const existing = await prisma.onboardingDocument.findFirst({
-      where: { customerId: request.customerId, documentType: request.documentType },
-    });
-    const previousStorageKey = existing?.storageKey;
-    const doc = existing
-      ? await prisma.onboardingDocument.update({
-          where: { id: existing.id },
-          data: {
-            originalName: request.pendingFileName!,
-            storageKey: request.pendingFileStorageKey,
-            mimeType: request.pendingFileMime!,
-            sizeBytes: request.pendingFileSize!,
-            uploadedById: request.requestedById,
-            scanStatus: 'PENDING',
-          },
-        })
-      : await prisma.onboardingDocument.create({
-          data: {
-            customerId: request.customerId,
-            documentType: request.documentType,
-            originalName: request.pendingFileName!,
-            storageKey: request.pendingFileStorageKey,
-            mimeType: request.pendingFileMime!,
-            sizeBytes: request.pendingFileSize!,
-            uploadedById: request.requestedById,
-            scanStatus: 'PENDING',
-          },
-        });
-    if (previousStorageKey && previousStorageKey !== request.pendingFileStorageKey) {
-      await deleteFileFromSupabase(previousStorageKey);
-    }
-    await runFileScan(doc.id);
-    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'DOCUMENT_REUPLOAD_APPROVED', actorId: lmId, afterState: { documentType: request.documentType } });
-  } else if (approve && request.documentType) {
-    // Approved a re-upload slot request that has no file attached yet
-    // (e.g. requested via the old checkbox-only flow) — no-op besides the log.
-    await logAudit({ entity: 'Customer', entityId: request.customerId, action: 'DOCUMENT_REUPLOAD_APPROVED', actorId: lmId, afterState: { documentType: request.documentType } });
-  } else if (approve) {
-    const contactRef = parseContactKey(request.fieldKey);
-    if (contactRef) {
-      await prisma.contact.update({ where: { id: contactRef.contactId }, data: { [contactRef.column]: request.newValue } });
-    } else if (request.fieldKey === 'approvedRate') {
-      // Rate revision: keep the previous rate + rate reference in history,
-      // and issue a fresh rate reference for the newly approved rate.
-      const target = await prisma.customer.findUniqueOrThrow({ where: { id: request.customerId } });
-      const previousEntry = {
-        rate: target.approvedRate || target.proposedRate || '',
-        rateRef: target.rateRef || '',
-        changedAt: new Date().toISOString(),
-      };
-      const newRateRef = await generateUniqueRateRef();
-      await prisma.customer.update({
-        where: { id: request.customerId },
-        data: {
-          approvedRate: request.newValue,
-          rateRef: newRateRef,
-          revision: { increment: 1 },
-          rateHistory: { push: previousEntry },
-        },
-      });
-    } else {
-      if (isCreditPeriodField(request.fieldKey)) {
-        assertValidCreditPeriodValue(request.newValue || '');
-      }
-      await prisma.customer.update({ where: { id: request.customerId }, data: { [request.fieldKey]: request.newValue } });
-    }
-    await logAudit({
-      entity: 'Customer',
-      entityId: request.customerId,
-      action: 'FIELD_CHANGE_APPROVED',
-      actorId: lmId,
-      beforeState: { [request.fieldLabel]: request.oldValue },
-      afterState: { [request.fieldLabel]: request.newValue },
-    });
-  } else {
-    await logAudit({
-      entity: 'Customer',
-      entityId: request.customerId,
-      action: 'FIELD_CHANGE_REJECTED',
-      actorId: lmId,
-      beforeState: { [request.fieldLabel]: request.oldValue },
-      afterState: { [request.fieldLabel]: request.newValue },
-    });
+  if (request.approved !== null) {
+    throw { statusCode: 409, code: 'ALREADY_DECIDED', message: 'This request has already been decided. Please refresh the page.' };
   }
-  const decidedCustomer = await prisma.customer.findUniqueOrThrow({
-    where: { id: request.customerId },
-    include: CUSTOMER_WITH_HANDLER,
-  });
+  await assertLineManagerOwnsCustomer(request.customerId, lmId);
+
+  // Validate BEFORE marking the request decided, so a rejected value can
+  // never leave the request stuck in an "approved but not applied" state.
+  if (approve && !request.documentType && !parseContactKey(request.fieldKey) && isCreditPeriodField(request.fieldKey)) {
+    assertValidCreditPeriodValue(request.newValue || '');
+  }
+
+  // The decision flag and the actual data change now commit together — one
+  // can no longer succeed without the other.
+  const { decidedCustomer, previousStorageKey, newDocumentId, auditAction } = await prisma.$transaction(
+    async (tx) => {
+      await tx.fieldChangeRequest.update({
+        where: { id: requestId },
+        data: { approved: approve, decidedById: lmId, decidedAt: new Date() },
+      });
+
+      let previousStorageKey: string | null = null;
+      let newDocumentId: string | null = null;
+      let auditAction = 'FIELD_CHANGE_REJECTED';
+
+      if (approve && request.documentType && request.pendingFileStorageKey) {
+        auditAction = 'DOCUMENT_REUPLOAD_APPROVED';
+        const existing = await tx.onboardingDocument.findFirst({
+          where: { customerId: request.customerId, documentType: request.documentType },
+        });
+        previousStorageKey = existing?.storageKey ?? null;
+        const doc = existing
+          ? await tx.onboardingDocument.update({
+              where: { id: existing.id },
+              data: {
+                originalName: request.pendingFileName!,
+                storageKey: request.pendingFileStorageKey,
+                mimeType: request.pendingFileMime!,
+                sizeBytes: request.pendingFileSize!,
+                uploadedById: request.requestedById,
+                scanStatus: 'PENDING',
+              },
+            })
+          : await tx.onboardingDocument.create({
+              data: {
+                customerId: request.customerId,
+                documentType: request.documentType,
+                originalName: request.pendingFileName!,
+                storageKey: request.pendingFileStorageKey,
+                mimeType: request.pendingFileMime!,
+                sizeBytes: request.pendingFileSize!,
+                uploadedById: request.requestedById,
+                scanStatus: 'PENDING',
+              },
+            });
+        newDocumentId = doc.id;
+      } else if (approve && request.documentType) {
+        // Approved a re-upload slot request that has no file attached yet
+        // (e.g. requested via the old checkbox-only flow) — no-op besides the log.
+        auditAction = 'DOCUMENT_REUPLOAD_APPROVED';
+      } else if (approve) {
+        auditAction = 'FIELD_CHANGE_APPROVED';
+        const contactRef = parseContactKey(request.fieldKey);
+        if (contactRef) {
+          await tx.contact.update({ where: { id: contactRef.contactId }, data: { [contactRef.column]: request.newValue } });
+        } else if (request.fieldKey === 'approvedRate') {
+          // Rate revision: keep the previous rate + rate reference in history,
+          // and issue a fresh rate reference for the newly approved rate.
+          const target = await tx.customer.findUniqueOrThrow({ where: { id: request.customerId } });
+          const previousEntry = {
+            rate: target.approvedRate || target.proposedRate || '',
+            rateRef: target.rateRef || '',
+            changedAt: new Date().toISOString(),
+          };
+          const newRateRef = await generateUniqueRateRef();
+          await tx.customer.update({
+            where: { id: request.customerId },
+            data: {
+              approvedRate: request.newValue,
+              rateRef: newRateRef,
+              revision: { increment: 1 },
+              rateHistory: { push: previousEntry },
+            },
+          });
+        } else {
+          await tx.customer.update({ where: { id: request.customerId }, data: { [request.fieldKey]: request.newValue } });
+        }
+      }
+
+      const decidedCustomer = await tx.customer.findUniqueOrThrow({
+        where: { id: request.customerId },
+        include: CUSTOMER_WITH_HANDLER,
+      });
+
+      return { decidedCustomer, previousStorageKey, newDocumentId, auditAction };
+    },
+    { timeout: 20000 }
+  );
+
+  // File I/O and scanning stay OUTSIDE the transaction — they are slow and
+  // must never hold a database connection open.
+  if (previousStorageKey && previousStorageKey !== request.pendingFileStorageKey) {
+    deleteFileFromSupabase(previousStorageKey).catch(() => {});
+  }
+  // A rejected re-upload left its file sitting on disk forever, because the
+  // file is written at request time, before anyone has approved it. The
+  // FieldChangeRequest row itself is kept (who asked, for what, when, and
+  // the approved/rejected decision) — only the payload is removed.
+  if (!approve && request.pendingFileStorageKey) {
+    deleteFileFromSupabase(request.pendingFileStorageKey).catch(() => {});
+    prisma.fieldChangeRequest
+      .update({ where: { id: requestId }, data: { pendingFileStorageKey: null } })
+      .catch(() => {});
+  }
+  if (newDocumentId) {
+    runFileScan(newDocumentId).catch(() => {});
+  }
+
+  logAudit({
+    entity: 'Customer',
+    entityId: request.customerId,
+    action: auditAction,
+    actorId: lmId,
+    beforeState: request.documentType ? undefined : { [request.fieldLabel]: request.oldValue },
+    afterState: request.documentType ? { documentType: request.documentType } : { [request.fieldLabel]: request.newValue },
+  }).catch(() => {});
 
   // The requester gets a specific, personal message about their own
   // request's outcome...
-  await createNotificationsForUsers([request.requestedById], {
+  createNotificationsForUsers([request.requestedById], {
     label: `${decidedCustomer.accountName} — Your edit request for "${request.fieldLabel}" was ${approve ? 'approved' : 'rejected'}`,
     link: `/app/customers/${decidedCustomer.barcode}`,
-  });
+  }).catch(() => {});
   // ...and the rest of the workflow group (excluding the LM who just
-  // decided, and the requester who already got their own message above)
-  // gets a general heads-up that this record changed.
-  await notifyCustomerWorkflowUsers(
+  // decided) gets a general heads-up that this record changed.
+  notifyCustomerWorkflowUsers(
     decidedCustomer.handledById,
     { label: `${decidedCustomer.accountName} — Edit request ${approve ? 'approved' : 'rejected'}: ${request.fieldLabel}`, link: `/app/customers/${decidedCustomer.barcode}` },
     lmId,
-  );
+  ).catch(() => {});
+
   return decidedCustomer;
 };
 
@@ -968,8 +1120,11 @@ if (contactRef) {
       beforeState: { [label]: oldValue },
       afterState: { [label]: clean.v },
     });
-    await notifyCustomerWorkflowUsers(customer.handledById);
-    return prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+    notifyCustomerWorkflowUsers(customer.handledById, {
+      label: `${customer.accountName} — ${label} was updated`,
+      link: `/app/customers/${customer.barcode}`,
+    }, actorId).catch(() => {});
+    return prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: CUSTOMER_WITH_HANDLER });
   }
 
   if (!EDITABLE_FIELDS[fieldKey]) throw { statusCode: 400, code: 'INVALID_FIELD', message: 'This field cannot be edited' };
@@ -1001,15 +1156,18 @@ if (contactRef) {
     });
   }
 
-  await logAudit({
+  logAudit({
     entity: 'Customer',
     entityId: customerId,
     action: 'FIELD_DIRECTLY_EDITED',
     actorId,
     beforeState: { [label]: oldValue },
     afterState: { [label]: clean.v },
-  });
-  await notifyCustomerWorkflowUsers(customer.handledById);
+  }).catch(() => {});
+  notifyCustomerWorkflowUsers(customer.handledById, {
+    label: `${customer.accountName} — ${label} was updated`,
+    link: `/app/customers/${customer.barcode}`,
+  }, actorId).catch(() => {});
   return updated;
 };
 
@@ -1024,11 +1182,12 @@ export const uploadRecommendationAttachment = async (
   customerId: string,
   buffer: Buffer,
   originalName: string,
-  requesterId: string
+  requesterId: string,
+  requesterRole?: string
 ) => {
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
-  if (customer.recommendedById !== requesterId) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'Only the KAM who created this recommendation can attach this document' };
+  if (requesterRole !== 'SUPER_ADMIN' && customer.recommendedById !== requesterId) {
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'Only the KAM who created this recommendation can attach this document.' };
   }
   const { storageKey, mimeType, sizeBytes } = await uploadFileToSupabase(buffer, originalName);
   const cleanName = sanitizeAndEscape({ n: originalName }).n;
@@ -1096,15 +1255,18 @@ export const reassignCustomer = async (customerId: string, newKamId: string, act
     data: { handledById: newKamId },
     include: CUSTOMER_WITH_HANDLER,
   });
-  await logAudit({
+  logAudit({
     entity: 'Customer',
     entityId: customerId,
     action: 'CUSTOMER_REASSIGNED',
     actorId,
     beforeState: { handledById: previousKamId },
     afterState: { handledById: newKamId },
-  });
-  await notifyCustomerWorkflowUsers(newKamId);
+  }).catch(() => {});
+  notifyCustomerWorkflowUsers(newKamId, {
+    label: `${updated.accountName} — This customer has been assigned to you`,
+    link: `/app/customers/${updated.barcode}`,
+  }, actorId).catch(() => {});
   return updated;
 };
 
@@ -1130,7 +1292,11 @@ export const listCustomerEditHistory = async (customerId: string, requester: { i
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
-  if (requester.role === 'LINE_MANAGER' && customer.handledBy?.lineManagerId !== requester.id) {
+  if (
+    requester.role === 'LINE_MANAGER' &&
+    customer.handledBy?.lineManagerId != null &&
+    customer.handledBy.lineManagerId !== requester.id
+  ) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
   return prisma.auditLog.findMany({

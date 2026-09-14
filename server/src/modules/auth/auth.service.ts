@@ -111,7 +111,13 @@ export const login = async (
   return {
     accessToken,
     refreshToken: refreshTokenRaw,
-    user: { id: user.id, name: user.name, email: user.email, role: user.role.name },
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role.name,
+      mustChangePassword: user.mustChangePassword,
+    },
   };
 };
 
@@ -168,28 +174,17 @@ export const logout = async (refreshTokenRaw: string | undefined, userId: string
   await invalidateUserPermissionCache(userId);
 };
 
-export const requestPasswordReset = async (email: string) => {
-  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  // Do not reveal whether the email exists.
-  if (!user) return;
-
-  const rawToken = generateOpaqueToken();
-  await prisma.passwordResetToken.create({
-    data: {
-      userId: user.id,
-      tokenHash: hashOpaqueToken(rawToken),
-      expiresAt: new Date(Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60000),
-    },
-  });
-
-  await sendNotification({
-    to: user.email,
-    subject: 'Milex Password Reset',
-    resetToken: rawToken,
-    expiresInMinutes: RESET_TOKEN_EXPIRY_MINUTES,
-  });
-
-  return rawToken;
+// Self-service password reset is intentionally disabled: there is no email
+// provider configured, so a token could never actually reach the person.
+// Rather than silently generating a token nobody receives (and writing it
+// into the server log), we tell them plainly who can help. Password changes
+// by a signed-in user still work normally via changeOwnPassword.
+export const requestPasswordReset = async (_email: string) => {
+  throw {
+    statusCode: 400,
+    code: 'SELF_RESET_DISABLED',
+    message: 'Password resets are handled by your administrator. Please contact them to have your password reset.',
+  };
 };
 
 export const resetPassword = async (rawToken: string, newPassword: string) => {
@@ -268,10 +263,16 @@ export const changeOwnPassword = async (userId: string, currentPassword: string,
   const updatedHistory = [newHash, ...user.passwordHistory].slice(0, PASSWORD_HISTORY_SIZE);
 
   await prisma.$transaction([
-    prisma.user.update({ where: { id: userId }, data: { passwordHash: newHash, passwordHistory: updatedHistory } }),
+    prisma.user.update({
+      where: { id: userId },
+      // Changing the password clears any admin-set "must change on next
+      // login" flag — that requirement has now been satisfied.
+      data: { passwordHash: newHash, passwordHistory: updatedHistory, mustChangePassword: false },
+    }),
     prisma.refreshToken.updateMany({ where: { userId }, data: { revoked: true } }),
   ]);
 
+  await invalidateUserPermissionCache(userId);
   await logAudit({ entity: 'User', entityId: userId, action: 'PASSWORD_CHANGED_SELF', actorId: userId });
 };
 
@@ -287,5 +288,6 @@ export const getMe = async (userId: string) => {
     role: user.role.name,
     permissions: user.role.permissions.map((rp) => rp.permission.key),
     mfaEnabled: user.mfaEnabled,
+    mustChangePassword: user.mustChangePassword,
   };
 };

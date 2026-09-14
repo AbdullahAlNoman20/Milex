@@ -8,6 +8,7 @@ import { listReportsForKam } from "../services/dailyReportService";
 import { humanizeStatus } from "../../../../Components/utils/format";
 import Loader from "../../../../Components/Shared/Loader";
 import Pagination from "../../../../Components/Shared/Pagination";
+import { downloadCsv } from "../../../../Components/utils/csv";
 
 const KpiCard = ({ icon: Icon, label, value, iconBg }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] flex items-center gap-3 min-w-0">
@@ -283,15 +284,8 @@ const TeamReportsPage = () => {
       );
     }
     if (rows.length === 0) return showToast("Nothing to export", "warning");
-    const headers = Object.keys(rows[0]);
-    const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => `"${String(r[h]).replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${activeKam.name.replace(/\s+/g, "_")}_${tab}${hasDateFilter ? "_filtered" : ""}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(`${activeKam.name.replace(/\s+/g, "_")}_${tab}${hasDateFilter ? "_filtered" : ""}.csv`, rows);
+    showToast("Export downloaded", "success");
   };
 
   if (isLoading) return <Loader fullScreen label="Loading team..." />;

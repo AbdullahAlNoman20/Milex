@@ -21,6 +21,31 @@ const DOCUMENT_CATEGORIES = [
   { key: "OTHERS", label: "Others Document" },
 ];
 
+const MAX_CREDIT_PERIOD_DAYS = 90;
+
+// Declared at module scope rather than inside the component body. They were
+// previously defined below the submit handler that uses them, which only
+// worked by hoisting luck and broke the moment anything was reordered.
+const isCreditPeriodField = (key, label = "") => {
+  const k = (key || "").toLowerCase();
+  const l = (label || "").toLowerCase();
+  return (
+    k.includes("creditperiod") ||
+    k.includes("credit_period") ||
+    (k.includes("credit") && k.includes("period")) ||
+    (l.includes("credit") && l.includes("period"))
+  );
+};
+
+const isUnlimitedCreditLimitField = (key, label = "") => {
+  const k = (key || "").toLowerCase();
+  const l = (label || "").toLowerCase();
+  return (
+    k.includes("unlimited") ||
+    (l.includes("unlimited") && l.includes("credit"))
+  );
+};
+
 const buildContactFieldDefs = (contacts) =>
   (contacts || []).flatMap((c) =>
     ["name", "designation", "mobile", "email"].map((col) => ({
@@ -126,65 +151,52 @@ const CustomerEditRequestModal = ({
 
     submitLockRef.current = true;
     setIsSubmitting(true);
+    // Each field is its own request, so one failing part-way through used to
+    // leave the person with a single "Failed to submit" message and no idea
+    // which of their changes actually went through. Successes and failures
+    // are now tracked separately and reported precisely.
+    const failed = [];
+    let succeeded = 0;
     try {
       for (const f of fieldTargets) {
-        if (isLineManager) {
-          await directFieldEdit(
-            customer.id,
-            f.key,
-            values[f.key].toString().trim(),
-          );
-        } else {
-          await requestFieldChange(
-            customer.id,
-            f.key,
-            values[f.key].toString().trim(),
-            reason.trim(),
-          );
+        try {
+          if (isLineManager) {
+            await directFieldEdit(customer.id, f.key, values[f.key].toString().trim());
+          } else {
+            await requestFieldChange(customer.id, f.key, values[f.key].toString().trim(), reason.trim());
+          }
+          succeeded += 1;
+        } catch (err) {
+          failed.push(`${f.label}: ${err?.message || 'could not be saved'}`);
         }
       }
       for (const d of docTargets) {
-        const req = await requestDocumentChange(
-          customer.id,
-          d.key,
-          reason.trim(),
-          docFiles[d.key],
-        );
-        if (isLineManager) await decideFieldChangeRequest(req.id, true);
+        try {
+          const req = await requestDocumentChange(customer.id, d.key, reason.trim(), docFiles[d.key]);
+          if (isLineManager) await decideFieldChangeRequest(req.id, true);
+          succeeded += 1;
+        } catch (err) {
+          failed.push(`${d.label}: ${err?.message || 'could not be uploaded'}`);
+        }
       }
-      showToast(
-        isLineManager ? "Changes saved" : "Edit request sent to Line Manager",
-        "success",
-      );
-      onDone?.();
-      onClose();
-    } catch (err) {
-      showToast(err?.message || "Failed to submit", "error");
+
+      if (failed.length === 0) {
+        showToast(isLineManager ? "Changes saved" : "Edit request sent to Line Manager", "success");
+        onDone?.();
+        onClose();
+        return;
+      }
+
+      if (succeeded > 0) {
+        showToast(`${succeeded} change(s) saved. These did not go through — ${failed.join(' | ')}`, "warning", 9000);
+        onDone?.();
+        return;
+      }
+      showToast(failed.join(' | '), "error", 9000);
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
     }
-  };
-
-  const MAX_CREDIT_PERIOD_DAYS = 90;
-
-  const isCreditPeriodField = (key, label = "") => {
-    const k = (key || "").toLowerCase();
-    const l = (label || "").toLowerCase();
-    return (
-      k.includes("creditperiod") ||
-      k.includes("credit_period") ||
-      (k.includes("credit") && k.includes("period")) ||
-      (l.includes("credit") && l.includes("period"))
-    );
-  };
-  const isUnlimitedCreditLimitField = (key, label = "") => {
-    const k = (key || "").toLowerCase();
-    const l = (label || "").toLowerCase();
-    return (
-      k.includes("unlimited") ||
-      (l.includes("unlimited") && l.includes("credit"))
-    );
   };
 
   const renderFieldInput = (f) => {

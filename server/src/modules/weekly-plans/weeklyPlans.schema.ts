@@ -3,6 +3,9 @@ import { z } from 'zod';
 
 const visitSchema = z
   .object({
+    // Present for rows that already exist in the database, null for newly
+    // added ones — lets the server update in place and keep visit ids stable.
+    id: z.string().max(100).optional().nullable(),
     // Calendar-based scheduling now — this is an ISO date ("YYYY-MM-DD"),
     // not a weekday name.
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Please choose a valid date.'),

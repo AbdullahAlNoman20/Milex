@@ -35,6 +35,23 @@ const HistoryEntry = ({ entry }) => {
         <p className="text-[10px] text-slate-400">{new Date(entry.createdAt).toLocaleString()}</p>
       </div>
       <p className="text-[11px] text-slate-500">By: {entry.actor?.name || 'System'}</p>
+      {/* Makes the outcome of every edit request explicit in one place:
+          who asked, what for, and whether it was approved or rejected. */}
+      {entry.action === 'FIELD_CHANGE_APPROVED' && (
+        <p className="text-[11px] font-bold text-emerald-700">Request approved and applied</p>
+      )}
+      {entry.action === 'FIELD_CHANGE_REJECTED' && (
+        <p className="text-[11px] font-bold text-red-600">Request rejected — no change was made</p>
+      )}
+      {entry.action === 'DOCUMENT_REUPLOAD_REQUESTED' && (
+        <p className="text-[11px] font-bold text-amber-600">Document re-upload requested</p>
+      )}
+      {entry.action === 'DOCUMENT_REUPLOAD_APPROVED' && (
+        <p className="text-[11px] font-bold text-emerald-700">Document re-upload approved and replaced</p>
+      )}
+      {entry.action === 'FIELD_CHANGE_REQUESTED' && (
+        <p className="text-[11px] font-bold text-amber-600">Edit requested — awaiting Line Manager decision</p>
+      )}
       {keys.length > 0 && (
         <div className="pt-1">
           {keys.map((k) => (

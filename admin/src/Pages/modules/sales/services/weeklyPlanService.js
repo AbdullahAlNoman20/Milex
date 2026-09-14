@@ -21,14 +21,20 @@ export const savePlan = async (plan) => {
     method: 'POST',
     body: {
       weekStartDate: plan.weekStartDate,
-      existingVisits: plan.existingVisits.map(({ day, customerName, customerId, purpose, outcomeNotes }) => ({
+      // `id` is sent so the server can update rows in place instead of
+      // deleting and recreating them. Recreating changed every visit's id,
+      // which silently broke ReportVisit.sourceVisitId and made Daily
+      // Report outcomes disappear from Team Reports.
+      existingVisits: plan.existingVisits.map(({ id, day, customerName, customerId, purpose, outcomeNotes }) => ({
+        id: typeof id === 'string' && !id.startsWith('v_') ? id : null,
         day,
         customerName,
         customerId,
         purpose,
         outcomeNotes,
       })),
-      prospectVisits: plan.prospectVisits.map(({ day, customerName, customerId, purpose, outcomeNotes }) => ({
+      prospectVisits: plan.prospectVisits.map(({ id, day, customerName, customerId, purpose, outcomeNotes }) => ({
+        id: typeof id === 'string' && !id.startsWith('v_') ? id : null,
         day,
         customerName,
         customerId,

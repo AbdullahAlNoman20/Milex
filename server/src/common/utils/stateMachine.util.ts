@@ -1,8 +1,7 @@
-// server/src/common/utils/stateMachine.util.ts — FULL REPLACE
+// server/src/common/utils/stateMachine.util.ts
 import { prisma } from '../../config/db';
 import { logAudit } from './auditLog.util';
 import { CUSTOMER_STATUS_TRANSITIONS } from '../constants/status.constant';
-import { emitNotificationToUser } from '../../config/socket';
 import { createNotificationsForUsers } from '../../modules/notifications/notifications.service';
 
 import { humanizeStatus } from './humanize.util';
@@ -14,45 +13,59 @@ const toSentenceCase = (s: string): string => {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 };
 
+export interface NotifyAudience {
+  // Sales Coordinators are only pulled in for the handful of steps where
+  // the ball is actually in their court (send the offer, resend a revised
+  // offer, prepare the agreement). Previously EVERY workflow action wrote a
+  // row for every Sales Coordinator in the system, which buried their real
+  // tasks and multiplied database writes by the size of the SC team.
+  includeSalesCoordinators?: boolean;
+}
+
 export const notifyCustomerWorkflowUsers = async (
   handledById: string,
   notification?: { label: string; link: string; isOverdue?: boolean },
   excludeUserId?: string,
+  audience: NotifyAudience = {},
 ) => {
   try {
-    // These three lookups don't depend on each other — running them in
-    // parallel instead of one-after-another cuts the time spent figuring
-    // out "who to notify" roughly to a third, which matters because this
-    // whole function runs on the critical path before the live push fires.
-    const [handler, unassignedFallback, scs] = await Promise.all([
-      prisma.user.findUnique({ where: { id: handledById }, select: { lineManagerId: true } }),
-      prisma.user.findMany({ where: { role: { name: 'LINE_MANAGER' }, isActive: true }, select: { id: true } }),
-      prisma.user.findMany({ where: { role: { name: 'SALES_COORDINATOR' }, isActive: true }, select: { id: true } }),
-    ]);
-
     const notifyIds = new Set<string>([handledById]);
 
+    const handler = await prisma.user.findUnique({
+      where: { id: handledById },
+      select: { lineManagerId: true },
+    });
+
     if (handler?.lineManagerId) {
-      // Scoped: only the Line Manager this KAM/SC is actually assigned to
-      // gets pinged — not every Line Manager in the system.
+      // Scoped: only the Line Manager this KAM/SC is actually assigned to.
       notifyIds.add(handler.lineManagerId);
     } else {
-      // No LM assigned yet — fall back to notifying every active LM so
-      // nothing silently falls through the cracks.
-      unassignedFallback.forEach((u) => notifyIds.add(u.id));
+      // No LM assigned yet — fall back to every active LM so nothing
+      // silently falls through the cracks.
+      const allLms = await prisma.user.findMany({
+        where: { role: { name: 'LINE_MANAGER' }, isActive: true },
+        select: { id: true },
+      });
+      allLms.forEach((u) => notifyIds.add(u.id));
     }
 
-    scs.forEach((u) => notifyIds.add(u.id));
+    if (audience.includeSalesCoordinators) {
+      const scs = await prisma.user.findMany({
+        where: { role: { name: 'SALES_COORDINATOR' }, isActive: true },
+        select: { id: true },
+      });
+      scs.forEach((u) => notifyIds.add(u.id));
+    }
 
     if (excludeUserId) notifyIds.delete(excludeUserId);
+    if (notifyIds.size === 0) return;
 
-    if (notification) {
-      await createNotificationsForUsers(Array.from(notifyIds), notification);
-    } else {
-      notifyIds.forEach((id) => emitNotificationToUser(id));
-    }
+    await createNotificationsForUsers(
+      Array.from(notifyIds),
+      notification ?? { label: 'A customer record you follow was updated', link: '/app/customers' },
+    );
   } catch (err) {
-    console.warn('[socket] notifyCustomerWorkflowUsers failed (non-fatal):', (err as Error)?.message);
+    console.warn('[notifications] notifyCustomerWorkflowUsers failed (non-fatal):', (err as Error)?.message);
   }
 };
 
@@ -76,6 +89,8 @@ interface TransitionParams {
   // real person who just clicked a button — otherwise that person would be
   // wrongly excluded from their own notification.
   notifyExcludeActor?: boolean;
+  // Only true for the steps that hand work to the Sales Coordinator.
+  notifySalesCoordinators?: boolean;
 }
 
 export const transitionCustomerStatus = async ({
@@ -87,10 +102,12 @@ export const transitionCustomerStatus = async ({
   historySubText = '',
   ip,
   notifyExcludeActor = true,
+  notifySalesCoordinators = false,
 }: TransitionParams) => {
   const updated = await prisma.$transaction(async (tx) => {
     const customer = await tx.customer.findUnique({ where: { id: customerId } });
-    if (!customer) throw new Error('Customer not found');
+    if (!customer) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+    if (customer.isDeleted) throw { statusCode: 409, code: 'CUSTOMER_DELETED', message: 'This customer has been removed, so it can no longer be changed.' };
 
     const allowed = CUSTOMER_STATUS_TRANSITIONS[customer.status] || [];
     if (!allowed.includes(toStatus)) {
@@ -127,23 +144,28 @@ export const transitionCustomerStatus = async ({
       },
     });
 
-    await logAudit({
-      entity: 'Customer',
-      entityId: customerId,
-      action: historyAction,
-      actorId,
-      beforeState,
-      afterState: { status: toStatus },
-     ip,
-    });
-
-    return updated;
+    return { updated, beforeState };
   });
 
-  await notifyCustomerWorkflowUsers(
-    updated.handledById,
-    { label: `${updated.accountName} — ${toSentenceCase(historyAction)}`, link: `/app/customers/${updated.barcode}` },
+  // Audit and notification are deliberately OFF the response path. Waiting
+  // on them was adding 100-300ms to every approve/reject click, and neither
+  // should ever be able to fail the state change that already committed.
+  logAudit({
+    entity: 'Customer',
+    entityId: customerId,
+    action: historyAction,
+    actorId,
+    beforeState: updated.beforeState,
+    afterState: { status: toStatus },
+    ip,
+  }).catch(() => {});
+
+  notifyCustomerWorkflowUsers(
+    updated.updated.handledById,
+    { label: `${updated.updated.accountName} — ${toSentenceCase(historyAction)}`, link: `/app/customers/${updated.updated.barcode}` },
     notifyExcludeActor ? actorId : undefined,
-  );
-  return updated;
+    { includeSalesCoordinators: notifySalesCoordinators },
+  ).catch(() => {});
+
+  return updated.updated;
 };

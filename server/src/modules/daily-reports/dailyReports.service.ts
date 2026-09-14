@@ -27,11 +27,17 @@ export const getReportByDate = async (kamId: string, date: string) => {
   // Always pull the latest Weekly Plan entries for this date, so newly
   // added/edited plan rows keep showing up even after a report already
   // exists for the day (e.g. the KAM adds another planned visit later).
-  const plans = await prisma.weeklyPlan.findMany({
-    where: { kamId },
-    include: { existingVisits: true, prospectVisits: true },
+  //
+  // This used to load EVERY weekly plan and EVERY visit this KAM had ever
+  // created and then filter by day in memory — after a few months that is
+  // thousands of rows fetched to find two. The filter now happens in the
+  // database, against the new Visit(day) index.
+  const scheduled = await prisma.visit.findMany({
+    where: {
+      day: date,
+      OR: [{ existingPlan: { kamId } }, { prospectPlan: { kamId } }],
+    },
   });
-  const scheduled = plans.flatMap((p) => [...p.existingVisits, ...p.prospectVisits]).filter((v) => v.day === date);
   const scheduledById = new Map(scheduled.map((v) => [v.id, v]));
 
   if (existing) {
@@ -117,7 +123,6 @@ const cleanVisit = (v: any) => ({
 });
 
 export const upsertReport = async (kamId: string, data: { date: string; visits: any[] }) => {
-  const existing = await prisma.dailyReport.findUnique({ where: { kamId_date: { kamId, date: data.date } } });
 
   // A visit added directly on this page (no sourceVisitId — i.e. not already
   // synced from a Weekly Plan) is pushed into that date's Weekly Plan as a
@@ -129,52 +134,73 @@ export const upsertReport = async (kamId: string, data: { date: string; visits: 
   const weekStartDate = getWeekStartForDate(data.date);
   const needsSync = data.visits.some((v) => !v.sourceVisitId && v.customerName?.trim());
 
-  let visitsForSave = data.visits;
-  if (needsSync) {
-    const plan = await prisma.weeklyPlan.upsert({
-      where: { kamId_weekStartDate: { kamId, weekStartDate } },
-      update: {},
-      create: { kamId, weekStartDate },
-    });
+  // Everything below runs in ONE transaction. Previously the old rows were
+  // deleted in one call and recreated in another — if anything failed in
+  // between (connection blip, timeout), that day's report was left empty
+  // with no way to recover it.
+  let wasUpdate = false;
 
-    visitsForSave = [];
-    for (const v of data.visits) {
-      if (v.sourceVisitId || !v.customerName?.trim()) {
-        visitsForSave.push(v);
-        continue;
+  const report = await prisma.$transaction(
+    async (tx) => {
+      let visitsForSave = data.visits;
+
+      if (needsSync) {
+        const plan = await tx.weeklyPlan.upsert({
+          where: { kamId_weekStartDate: { kamId, weekStartDate } },
+          update: {},
+          create: { kamId, weekStartDate },
+        });
+
+        visitsForSave = [];
+        for (const v of data.visits) {
+          if (v.sourceVisitId || !v.customerName?.trim()) {
+            visitsForSave.push(v);
+            continue;
+          }
+          // eslint-disable-next-line no-await-in-loop
+          const created = await tx.visit.create({
+            data: {
+              day: data.date,
+              customerName: v.customerName,
+              customerId: v.customerId || null,
+              purpose: v.purpose || '',
+              prospectPlanId: plan.id,
+            },
+          });
+          visitsForSave.push({ ...v, sourceVisitId: created.id });
+        }
       }
-      // eslint-disable-next-line no-await-in-loop
-      const created = await prisma.visit.create({
-        data: {
-          day: data.date,
-          customerName: v.customerName,
-          customerId: v.customerId || null,
-          purpose: v.purpose || '',
-          prospectPlanId: plan.id,
-        },
+
+      const cleaned = visitsForSave.map(cleanVisit);
+      const existing = await tx.dailyReport.findUnique({ where: { kamId_date: { kamId, date: data.date } } });
+
+      if (existing) {
+        wasUpdate = true;
+        await tx.reportVisit.deleteMany({ where: { dailyReportId: existing.id } });
+        return tx.dailyReport.update({
+          where: { id: existing.id },
+          data: { visits: { create: cleaned } },
+          include: { visits: true },
+        });
+      }
+
+      return tx.dailyReport.create({
+        data: { kamId, date: data.date, visits: { create: cleaned } },
+        include: { visits: true },
       });
-      visitsForSave.push({ ...v, sourceVisitId: created.id });
-    }
-    await notifyLineManagerOfPlanChange(kamId);
-  }
+    },
+    { timeout: 20000 }
+  );
 
-  const cleaned = visitsForSave.map(cleanVisit);
+  // Audit + notification are deliberately off the response path — they must
+  // never slow down or fail the save the person just made.
+  logAudit({
+    entity: 'DailyReport',
+    entityId: report.id,
+    action: wasUpdate ? 'DAILY_REPORT_UPDATED' : 'DAILY_REPORT_SUBMITTED',
+    actorId: kamId,
+  }).catch(() => {});
+  if (needsSync) notifyLineManagerOfPlanChange(kamId).catch(() => {});
 
-  if (existing) {
-    await prisma.reportVisit.deleteMany({ where: { dailyReportId: existing.id } });
-    const updated = await prisma.dailyReport.update({
-      where: { id: existing.id },
-      data: { visits: { create: cleaned } },
-      include: { visits: true },
-    });
-    await logAudit({ entity: 'DailyReport', entityId: updated.id, action: 'DAILY_REPORT_UPDATED', actorId: kamId });
-    return updated;
-  }
-
-  const created = await prisma.dailyReport.create({
-    data: { kamId, date: data.date, visits: { create: cleaned } },
-    include: { visits: true },
-  });
-  await logAudit({ entity: 'DailyReport', entityId: created.id, action: 'DAILY_REPORT_SUBMITTED', actorId: kamId });
-  return created;
+  return report;
 };

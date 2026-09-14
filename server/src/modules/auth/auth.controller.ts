@@ -68,9 +68,9 @@ export const logoutHandler = async (req: Request, res: Response, next: NextFunct
 export const forgotPasswordHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await authService.requestPasswordReset(req.body.email);
-    // Always same response — do not reveal account existence.
     return sendSuccess(res, { message: 'If the account exists, a reset link has been sent' });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);
   }
 };

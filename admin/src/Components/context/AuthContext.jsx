@@ -8,9 +8,10 @@ import React, {
 } from "react";
 import { ALL_ROLES } from "../constants/roles";
 import { apiLogin, apiFetchMe, apiLogout } from "../services/api";
+import { disconnectSocket } from "../services/socketService";
 
 export const AuthContext = createContext(null);
- 
+
 const SESSION_KEY = "milex_auth_session";
 const SESSION_VERSION = 2;
 
@@ -112,6 +113,11 @@ export const AuthProvider = ({ children }) => {
     } catch {
       /* proceed to clear client state regardless of server call outcome */
     }
+    // The socket authenticates once at handshake time and then stays open.
+    // Without closing it here, the previous person's live connection would
+    // survive a logout and keep delivering their notifications to whoever
+    // signs in next on the same browser tab.
+    disconnectSocket();
     setCurrentUser(null);
     clearSession();
   }, []);

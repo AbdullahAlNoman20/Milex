@@ -7,7 +7,9 @@ import { asString, asOptionalString } from '../../common/utils/requestParams.uti
 export const listCustomersHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(300, Math.max(1, Number(req.query.pageSize) || 100));
+    // Raised from 300: the client pages through the full set, and a larger
+    // page means far fewer round trips once there are thousands of records.
+    const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize) || 500));
     const result = await customersService.listCustomers(
       page,
       pageSize,
@@ -150,9 +152,9 @@ export const listFieldChangeRequestsHandler = async (req: Request, res: Response
 export const decideFieldChangeRequestHandler = wrap((req) => customersService.decideFieldChangeRequest(asString(req.params.requestId), req.body.approve, req.user!.id));
 export const directFieldEditHandler = wrap((req) => customersService.directFieldEdit(asString(req.params.id), req.body.fieldKey, req.body.newValue, req.user!.id, req.user!.role));
 
-export const listFollowUpsHandler = async (_req: Request, res: Response, next: NextFunction) => {
+export const listFollowUpsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const items = await customersService.deriveFollowUps();
+    const items = await customersService.deriveFollowUps({ id: req.user!.id, role: req.user!.role });
     return sendSuccess(res, { items });
   } catch (err) {
     next(err);
@@ -163,7 +165,7 @@ export const uploadRecommendationAttachmentHandler = async (req: Request, res: R
   try {
     const file = (req as any).file as Express.Multer.File | undefined;
     if (!file) return sendError(res, 400, 'MISSING_FILE', 'No file uploaded');
-    const doc = await customersService.uploadRecommendationAttachment(asString(req.params.id), file.buffer, file.originalname, req.user!.id);
+    const doc = await customersService.uploadRecommendationAttachment(asString(req.params.id), file.buffer, file.originalname, req.user!.id, req.user!.role);
     return sendSuccess(res, { document: doc }, 201);
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);

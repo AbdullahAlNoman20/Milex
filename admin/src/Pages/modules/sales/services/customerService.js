@@ -1,10 +1,40 @@
 // src/Pages/modules/sales/services/customerService.js
-import { request, API_BASE_URL } from '../../../../Components/services/api';
+import { request, uploadRequest, API_BASE_URL } from '../../../../Components/services/api';
 
+const PAGE_SIZE = 500;
+const MAX_PAGES = 200; // hard ceiling: 100,000 records
+
+// Fetches EVERY customer, not just the first page. The old version asked
+// for a single page of 300 and the server capped it there, so record 301
+// onward simply vanished from every list, count and dashboard figure.
+// Page 1 is fetched first to learn the total, then any remaining pages are
+// fetched in parallel batches so the wall-clock time stays flat as the
+// database grows.
 export const fetchCustomers = async (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  const { data } = await request(`/customers${query ? `?${query}` : ''}`);
-  return data.items;
+  const buildQuery = (page) =>
+    new URLSearchParams({ ...params, page: String(page), pageSize: String(PAGE_SIZE) }).toString();
+
+  const { data: first } = await request(`/customers?${buildQuery(1)}`);
+  const items = Array.isArray(first.items) ? [...first.items] : [];
+  const totalPages = Math.min(first.totalPages || 1, MAX_PAGES);
+  if (totalPages <= 1) return items;
+
+  const remaining = [];
+  for (let p = 2; p <= totalPages; p += 1) remaining.push(p);
+
+  const BATCH = 4;
+  for (let i = 0; i < remaining.length; i += BATCH) {
+
+    const results = await Promise.all(
+      remaining.slice(i, i + BATCH).map((p) =>
+        request(`/customers?${buildQuery(p)}`)
+          .then((r) => r.data.items || [])
+          .catch(() => [])
+      )
+    );
+    results.forEach((chunk) => items.push(...chunk));
+  }
+  return items;
 };
 
 export const fetchCustomerByBarcode = async (barcode) => {
@@ -109,21 +139,8 @@ export const uploadOnboardingDocument = async (customerId, { documentType, docum
   if (documentNumber) formData.append('documentNumber', documentNumber);
   if (expiryDate) formData.append('expiryDate', expiryDate);
   formData.append('file', file);
-  const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
-  const res = await fetch(
-    `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/onboarding/${customerId}/documents`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        ...(csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {}),
-      },
-      body: formData,
-    }
-  );
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
-  return json.data.document;
+  const data = await uploadRequest(`/onboarding/${encodeURIComponent(customerId)}/documents`, formData);
+  return data.document;
 };
 
 export const requestTimeExtension = async (customerId, requestedDays, reason) => {
@@ -197,19 +214,8 @@ export const requestDocumentChange = async (id, documentType, reason, file) => {
   formData.append('documentType', documentType);
   if (reason) formData.append('reason', reason);
   formData.append('file', file);
-  const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
-  const res = await fetch(
-    `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/customers/${id}/field-change-request/document`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {},
-      body: formData,
-    }
-  );
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
-  return json.data.request;
+  const data = await uploadRequest(`/customers/${encodeURIComponent(id)}/field-change-request/document`, formData);
+  return data.request;
 };
 
 export const getEditableFields = async (scope) => {
@@ -245,19 +251,8 @@ export const reassignCustomer = async (id, newKamId) => {
 export const uploadRecommendationAttachment = async (customerId, file) => {
   const formData = new FormData();
   formData.append('file', file);
-  const csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
-  const res = await fetch(
-    `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'}/customers/${customerId}/recommendation-attachment`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: csrfToken ? { 'x-csrf-token': decodeURIComponent(csrfToken) } : {},
-      body: formData,
-    }
-  );
-  const json = await res.json();
-  if (!res.ok || !json.success) throw new Error(json?.error?.message || 'Upload failed');
-  return json.data.document;
+  const data = await uploadRequest(`/customers/${encodeURIComponent(customerId)}/recommendation-attachment`, formData);
+  return data.document;
 };
 
 export const getCustomerEditHistory = async (id) => {
