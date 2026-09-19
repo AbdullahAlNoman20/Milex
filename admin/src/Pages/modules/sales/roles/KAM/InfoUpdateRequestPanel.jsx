@@ -17,6 +17,19 @@ const InfoUpdateRequestPanel = ({ customer, mode }) => {
   const submitLockRef = useRef(false);
 
   if (mode === 'offer-feedback') {
+    // Belt and braces: even if a stale page still has this panel on screen,
+    // it stops offering an answer once one has been recorded.
+    if (customer.offerAccepted || customer.offerRejected) {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest text-center">
+            {customer.offerAccepted
+              ? 'Offer accepted — recorded'
+              : 'Offer rejected — back with the Line Manager'}
+          </p>
+        </div>
+      );
+    }
 
     const handleAccept = async () => {
       if (submitLockRef.current) return;

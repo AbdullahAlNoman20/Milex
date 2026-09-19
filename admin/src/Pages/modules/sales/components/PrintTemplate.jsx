@@ -134,7 +134,7 @@ const OfferRow = ({ head, label, children, indent = '3mm', labelWidth = '45mm' }
   </div>
 );
 
-const OfferLetter = ({ c }) => (
+export const OfferLetter = ({ c }) => (
   <div className="text-black" style={{ fontFamily: "'Times New Roman', Times, serif", fontSize: '11pt', lineHeight: 1.15 }}>
     <div className="flex justify-between">
       <div style={{ maxWidth: '110mm' }}>
@@ -307,6 +307,241 @@ const OfferLetter = ({ c }) => (
   </div>
 );
 
+const formatLongDate = (value, day = 'numeric') =>
+  new Date(value || Date.now()).toLocaleDateString('en-US', { month: 'long', day, year: 'numeric' });
+
+const formatWeekdayOfDate = (value) =>
+  `${new Date(value || Date.now()).toLocaleDateString('en-US', { weekday: 'long' })} of ${formatLongDate(value)}`;
+
+// Rate For (shippingDetails[].rateFor) decides which contract prints.
+const getContractVariant = (c) => {
+  const kinds = (c.shippingDetails || []).map((s) => String(s.rateFor || '').toLowerCase());
+  const hasImport = kinds.some((k) => k.includes('import'));
+  const hasExport = kinds.some((k) => k.includes('export'));
+  if (kinds.some((k) => k.includes('both')) || (hasImport && hasExport)) return 'both';
+  if (hasImport) return 'import';
+  if (hasExport) return 'export';
+  if (c.serviceRequired === 'IB') return 'import';
+  if (c.serviceRequired === 'OB') return 'export';
+  return 'both';
+};
+
+// 1pt of empty-paragraph height in the source .doc = pt * 1.15
+const AgSp = ({ pt }) => <div style={{ height: `${pt * 1.15}pt` }} />;
+
+const AgClause = ({ label, children, labelWidth = '6.35mm', className = '' }) => (
+  <div className={`flex ${className}`}>
+    <div className="shrink-0" style={{ width: labelWidth }}>{label}</div>
+    <div className="flex-1 text-justify">{children}</div>
+  </div>
+);
+
+const AgSigRow = ({ label, value }) => (
+  <div className="flex">
+    <div className="shrink-0" style={{ width: '25.4mm' }}>{label}</div>
+    <div>: {value}</div>
+  </div>
+);
+
+const AgreementLetter = ({ c }) => {
+  const co = c.accountName || '';
+  const code = c.barcode || '';
+  const variant = getContractVariant(c);
+
+  // Date fields: change names if yours differ (all fall back to today).
+  const agreementDate = formatWeekdayOfDate(c.agreementSentAt || c.agreementDate);
+  const startDate = formatWeekdayOfDate(c.offerAcceptedAt || c.effectiveDate);
+  const offerDate = formatLongDate(c.offerSentAt || c.offerSentDate, '2-digit');
+
+  // Final account profile values
+  const limit = Number(c.creditLimitTk) || 0;
+  const days = Number(c.creditPeriodDays) || 0;
+  const limitText = limit
+    ? `Taka ${limit.toLocaleString('en-US')}/= (${numberToWordsBDT(limit).replace(/ Only$/, '')} Taka)`
+    : '';
+  const daysText = days ? `${days} (${threeDigitsToWords(days)})` : '';
+  const signName = c.managingPartnerName || '';
+  const signDesignation = c.managingPartnerDesignation || ''; // change field name if different
+
+  const AR = <b>ANROOT LOGEX LTD.</b>;
+  const CO = <b>{co}</b>;
+
+  const tariffKinds = { import: ['in', 'customs'], export: ['out', 'customs'], both: ['out', 'in', 'customs'] }[variant];
+  const tariffLead = variant === 'import' ? 18 : 9;
+  const tariffGap = variant === 'export' ? 18 : 9;
+
+  const renderTariff = (kind, no) => {
+    const label = `(b.${no})`;
+    if (kind === 'out') {
+      return (
+        <p className="text-justify" style={{ paddingLeft: '11.1mm', textIndent: '1mm' }}>
+          <b>{label} Tariff for Outgoing Prepaid Shipment</b>: The applicable tariff for Outgoing prepaid Documents &amp; Non-Documents will be as per the exclusive Net Destinations Rate Scale designed specifically by ({code}, dated {offerDate}) for {CO}.
+        </p>
+      );
+    }
+    if (kind === 'in') {
+      return (
+        <p className="text-justify" style={{ paddingLeft: '12.8mm' }}>
+          <b>{label} Tariff for Incoming Service on Payment Collect basis</b>: {AR} will charge to {CO} according to the Inbound rate according to {code} (IB) dated {offerDate}.
+        </p>
+      );
+    }
+    return (
+      <p className="text-justify" style={{ paddingLeft: '12.8mm' }}>
+        <b>{label} Tariff for Customs Clearance Service</b>: {AR} will charge {CO}. fixed clearing charge in addition to the duty, taxes, VAT, AIT and other Govt. Levies at actual basis if applicable.
+      </p>
+    );
+  };
+
+  return (
+    <div className="text-black" style={{ fontFamily: "'Times New Roman', Times, serif", fontSize: '9pt', lineHeight: 1.15 }}>
+      <AgSp pt={11} />
+      <p className="text-center font-bold" style={{ fontSize: '10pt' }}>AGREEMENT FOR INTERNATIONAL</p>
+      <p className="text-center font-bold" style={{ fontSize: '10pt' }}>AIR EXPRESS SERVICE (DOOR TO DOOR)</p>
+      <AgSp pt={10} />
+      <p className="text-justify">This agreement is made on {agreementDate}</p>
+      <AgSp pt={10} />
+      <p className="font-bold" style={{ fontSize: '10pt' }}>BETWEEN</p>
+      <AgSp pt={5} />
+
+      <AgClause label="(1)" labelWidth="7.62mm">
+        <b>{co}, {c.address}</b>
+      </AgClause>
+      <AgSp pt={3} />
+      <p style={{ paddingLeft: '7.62mm' }}>And</p>
+      <AgSp pt={3} />
+      <AgClause label="(2)" labelWidth="7.62mm">
+        {AR}, House#09, (Level- 04) Road# 17 Block# E, Banani, Dhaka# 1213 (herein after called the {AR})
+      </AgClause>
+      <AgSp pt={4} />
+
+      <p style={{ fontSize: '10pt' }}><b>IT IS HEREBY AGREED</b> as follows:</p>
+      <AgSp pt={4} />
+
+      <AgClause label="(a)">
+        This agreement will be for one year from {startDate} and shall automatically renew for additional one-year periods
+        and thereafter until terminated by either party on advance written notice.
+      </AgClause>
+      <AgSp pt={3} />
+
+      <AgClause label="(b)">
+        {AR} will provide courier service for the {CO} as per the {AR} offer letter <b>{code}</b> dated {offerDate} which includes Outgoing door to door delivery service within the {AR} network,
+        Incoming delivery service for all over Bangladesh and Customs Clearance Service subject to the authorization from {CO}
+      </AgClause>
+
+      {tariffKinds.flatMap((kind, i) => [
+        <AgSp key={`sp-${kind}`} pt={i === 0 ? tariffLead : tariffGap} />,
+        <div key={kind}>{renderTariff(kind, i + 1)}</div>,
+      ])}
+      <AgSp pt={9} />
+
+      <AgClause label="(c)">
+        {AR} will take the exchange rate announced by the International Air Express Association of Bangladesh (IAEAB) and accordingly {CO} will settle the invoices of {AR} In case IAEAB fail to announce exchange rate,
+        {AR} will take the weighted average exchange rate of (TT) of the Commercial Banks as announced by the Bangladesh Bank.
+      </AgClause>
+      <AgSp pt={3} />
+      <p className="text-justify" style={{ paddingLeft: '6.35mm', fontSize: '10pt' }}>
+        <b>ANROOT LOGEX LTD.</b> will add Fuel Surcharge (FSC) in its invoices for <b style={{ fontSize: '9pt' }}>{co}</b> for Outgoing prepaid shipments of <b style={{ fontSize: '9pt' }}>{co}</b>
+      </p>
+      <AgSp pt={10} />
+
+      <AgClause label="(d)">
+        In case of partial or full missing of shipment {AR} will give compensation to {CO} Based on the Terms, Conditions &amp; Amount written on the reverse page of {AR} Airway bill.
+      </AgClause>
+      <AgSp pt={9} />
+
+      <AgClause label="(e)">
+        {CO} can also use {AR} service (outgoing) on Cash on Delivery (COD). Please note that if the Consignee / Recipient / Payer refuse to make payment for any shipment/shipments then {AR}
+        will raise the invoice here locally to {CO} for full settlement of the total dues within 7 (seven) days from date of debit note.
+      </AgClause>
+      <AgSp pt={12} />
+
+      <AgClause label="(f)" className="font-bold">
+        ANROOT LOGEX LTD. will provide credit to {co} for availing following services of ANROOT LOGEX LTD. Under code number {code}.
+      </AgClause>
+      <AgSp pt={18} />
+
+      <AgClause label="(3)" labelWidth="7.62mm" className="font-bold">Outgoing delivery on prepaid basis:</AgClause>
+      <AgSp pt={9} />
+
+      <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
+        <b>(3.i) Time Limit:</b> {AR} will raise invoice on monthly basis and {CO} will settle total dues of {AR} within {daysText} days from the receipt of invoice.
+      </p>
+      <AgSp pt={9} />
+      <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
+        <b>(3.ii) Credit Limit:</b> {AR} will give credit up to maximum of {limitText} per month to {CO}
+      </p>
+      <AgSp pt={9} />
+      <p className="text-justify" style={{ paddingLeft: '3.8mm', textIndent: '7.3mm' }}>
+        <b>(3.iii)</b> {CO} needs to settle full dues of ANROOT LOGEX LTD. before exceeding any of the said limits.
+      </p>
+      <AgSp pt={9} />
+
+      <AgClause label="(g)">
+        <b style={{ fontSize: '10pt' }}>Termination:</b> Either party may terminate the agreement without assigning any reason upon giving not less than 30 (thirty days) prior written notice to the other party.
+      </AgClause>
+      <AgSp pt={19} />
+
+      <AgClause label="(h)"><b style={{ fontSize: '10pt' }}>Indemnity:</b></AgClause>
+      <AgSp pt={10} />
+
+      <p className="text-justify" style={{ paddingLeft: '12.7mm' }}>
+        (i.1) The {CO} shall indemnify and keep indemnified {AR} against any expenses, cost, claims, loss, damages or penalties incurred by ANROOT LOGEX LTD. howsoever occasioned,
+        including any damage or loss caused to any third parties, arising out of any acts or omissions on the part of the {CO} and/or its staff-members.
+      </p>
+      <AgSp pt={9} />
+      <p className="text-justify" style={{ paddingLeft: '12.7mm' }}>
+        (i.2) The {CO} shall indemnify and keep indemnified {AR} from and against payment of all fees, taxes and levies and other such liabilities whether past, present or future to the state and/or Central Government,
+        Municipal Corporation or any other Govt. body or authority or person in respect of the any activity/operation arising out of this Agreement and keep {AR} indemnified against all costs, charges, expenses that {AR}
+        may incur on account of failure on the part of {CO} to discharge its liabilities.
+      </p>
+      <AgSp pt={18} />
+
+      <AgClause label="(i)">
+        <b style={{ fontSize: '10pt' }}>Applicable Law:</b> This agreement shall be constructed and enforced according to the laws of the people&apos;s Republic of Bangladesh.
+      </AgClause>
+      <AgSp pt={10} />
+
+      <p className="text-justify">
+        <b style={{ fontSize: '10pt' }}>Terms &amp; Conditions of Carriage</b><span style={{ fontSize: '10pt' }}>: </span>All service provided by {AR} will be in accordance with and subject to the ANROOT LOGEX LTD. Terms and Conditions of carriage as stated on the reverse side of the ANROOT LOGEX LTD. Air waybill.
+        {CO} will be responsible for ensuring that all shipments tendered for dispatch by {CO} comply with all applicable laws, rules, regulations and status of the country of Origin, Destination and Transit, and
+        {CO} shall be responsible for (and reimburse to {AR} if paid by {AR} on behalf of {CO} all customs duties, levies, impositions of other charges with respect to any shipment.
+      </p>
+      <AgSp pt={3} />
+
+      <p className="text-justify" style={{ fontSize: '10pt' }}>
+        <b>IN WITNESS WHEREOF</b> the parties hereto have hereunto set their hands the day and year first above mentioned.
+      </p>
+
+      <div style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+        <AgSp pt={20} />
+        <p className="text-center font-bold italic" style={{ fontSize: '13pt' }}>Acceptance:</p>
+        <p className="text-center font-bold italic underline" style={{ fontSize: '10pt' }}>Accepted and signed on behalf of:</p>
+        <AgSp pt={10} />
+        <div className="flex font-bold" style={{ fontSize: '10pt' }}>
+          <div className="shrink-0 pr-2" style={{ width: '88.9mm' }}>{co}</div>
+          <div>ANROOT LOGEX LTD.</div>
+        </div>
+        <AgSp pt={50} />
+        <div className="flex" style={{ fontSize: '10pt' }}>
+          <div className="shrink-0" style={{ width: '88.9mm' }}>
+            <div style={{ width: '66mm', borderTop: '1px solid #000' }}>
+              <AgSigRow label="Name" value={signName} />
+              <AgSigRow label="Designation" value={signDesignation} />
+              <AgSigRow label="Company Stamp" value="" />
+            </div>
+          </div>
+          <div style={{ width: '66.5mm', borderTop: '1px solid #000' }}>
+            <AgSigRow label="Name" value="Rashed A K Chowdhury" />
+            <AgSigRow label="Designation" value="Chief Commercial Officer" />
+            <AgSigRow label="Company Stamp" value="" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PrintTemplate = ({ data, onClose }) => {
  useEffect(() => {
     if (!data) return undefined;
@@ -330,13 +565,14 @@ const PrintTemplate = ({ data, onClose }) => {
     <div className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
       <style>{`
         @media print {
-          @page { size: A4; margin: ${data.type === 'offer' ? '23mm 13mm 10mm 25mm' : '10mm'}; }
+          @page { size: A4; margin: ${data.type === 'offer' ? '23mm 13mm 10mm 25mm' : data.type === 'agreement' ? '47mm 20.3mm 25.4mm 20.3mm' : '10mm'}; }
+          ${data.type === 'agreement' ? `@page { @top-right { content: "Page " counter(page) " of " counter(pages); font: 12pt 'Times New Roman', Times, serif; text-align: right; vertical-align: bottom; } }` : ''}
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
 
-     <div className={`bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:w-full print:max-w-none print:min-h-0 ${data.type === 'offer' ? 'print:p-0' : 'print:p-5'}`}>
-        {data.type !== 'profile' && data.type !== 'offer' && (
+     <div className={`bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:w-full print:max-w-none print:min-h-0 ${data.type === 'offer' || data.type === 'agreement' ? 'print:p-0' : 'print:p-5'}`}>
+        {data.type !== 'profile' && data.type !== 'offer' && data.type !== 'agreement' && (
           <div className="flex justify-between items-end border-b-2 border-slate-800 pb-4 mb-8">
             <h1 className="text-4xl font-black text-emerald-800 italic tracking-tighter">MILEX</h1>
             <p className="text-right text-xs  mt-2 font-mono bg-slate-100 px-2 py-1 inline-block border font-bold text-slate-800">
@@ -347,9 +583,7 @@ const PrintTemplate = ({ data, onClose }) => {
 
         {data.type === 'offer' && <OfferLetter c={c} />}
 
-        {data.type === 'agreement' && (
-          <div className="space-y-4 text-sm whitespace-pre-wrap leading-relaxed">{c.agreementText}</div>
-        )}
+        {data.type === 'agreement' && <AgreementLetter c={c} />}
 
         {data.type === 'recommendation' && (() => {
           const keyContact = getContactByType(c.contacts, 'KEY_CONTACT_PERSON');

@@ -233,8 +233,16 @@ const CustomerDetail = () => {
       );
     }
 
-    // The customer's answer, collected by the KAM.
+    // The customer's answer, collected by the KAM. Once it has been given,
+    // the form disappears — there is nothing left to answer, and leaving it
+    // on screen invites the same answer being sent twice.
     if (customer.status === STATUS.OFFER_REVIEW) {
+      if (customer.offerAccepted) {
+        return <Waiting>Offer accepted — waiting for the Sales Coordinator to send the agreement</Waiting>;
+      }
+      if (customer.offerRejected) {
+        return <Waiting>Offer rejected — back with the Line Manager for a new rate</Waiting>;
+      }
       if (role === ROLES.KAM || isSuperAdmin) {
         return (
           <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />
@@ -302,7 +310,9 @@ const CustomerDetail = () => {
               Waiting for the Sales Coordinator to send the offer letter
             </Waiting>
           );
-        if (!customer.offerAccepted)
+        // Only while the answer is still outstanding. Once it is given the
+        // form goes, whichever way the customer went.
+        if (!customer.offerAccepted && !customer.offerRejected)
           return (
             <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />
           );

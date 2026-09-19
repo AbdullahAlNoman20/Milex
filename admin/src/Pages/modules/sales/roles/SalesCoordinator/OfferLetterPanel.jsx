@@ -1,5 +1,5 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx
-import { useState, useRef } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 import { Mail, Printer, PenTool, Paperclip, X, ChevronDown, Send, Loader2 } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { uploadOnboardingDocument } from '../../services/customerService';
@@ -7,6 +7,7 @@ import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
 import { buildRateRefs } from '../../../../../Components/utils/format';
+import { OfferLetter } from '../../components/PrintTemplate';
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
@@ -25,6 +26,17 @@ const OfferLetterPanel = ({ customer }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLockRef = useRef(false);
   const isResend = customer.revision > 0 && !!customer.rejectReason;
+
+  // Letter content is 172mm (~650px) wide; scale it to fit the panel.
+  const previewRef = useRef(null);
+  const [scale, setScale] = useState(0.47);
+  useLayoutEffect(() => {
+    const el = previewRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([entry]) => setScale(Math.min(1, entry.contentRect.width / 650)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const handleAttachment = (e) => {
     const file = e.target.files?.[0];
@@ -115,12 +127,24 @@ const OfferLetterPanel = ({ customer }) => {
         </div>
       )}
 
-      <textarea
-        className="w-full text-xs font-mono border border-slate-300 p-3 rounded-lg min-h-[220px] outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
-        value={offerText}
-        maxLength={5000}
-        onChange={(e) => setOfferText(e.target.value)}
-      />
+      <div
+        ref={previewRef}
+        className="w-full max-h-[460px] overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white p-2"
+      >
+        <div style={{ width: '172mm', zoom: scale }}>
+          <OfferLetter c={customer} />
+        </div>
+      </div>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer font-bold text-slate-600">Email message</summary>
+        <textarea
+          className="mt-2 w-full text-xs font-mono border border-slate-300 p-3 rounded-lg min-h-[160px] outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+          value={offerText}
+          maxLength={5000}
+          onChange={(e) => setOfferText(e.target.value)}
+        />
+      </details>
 
       <div>
         <label className="block text-xs font-bold text-slate-700 mb-1.5">

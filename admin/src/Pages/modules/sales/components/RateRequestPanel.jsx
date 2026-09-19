@@ -186,7 +186,6 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
             <div className="space-y-2">
               <textarea
                 className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500 min-h-[60px]"
-                placeholder="Why does this customer need a different rate?"
                 value={reason}
                 maxLength={1000}
                 onChange={(e) => setReason(e.target.value)}
