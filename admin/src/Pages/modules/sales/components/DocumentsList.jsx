@@ -7,6 +7,8 @@ import { useSales } from "../hooks/useSales";
 
 const CATEGORY_LABELS = {
   SIGNED_OFFER_LETTER: "Signed Offer Letter (Customer Copy)",
+  // Kept only so historical uploads of this now-retired category still show
+  // a readable name instead of a raw key.
   OFFER_RATE_RECEIPT: "Signed Offer & Rate Receipt (Hard Copy Scan)",
   OFFER_LETTER_EXCEL: "Offer Letter Attachment (Rate File)",
   SIGNED_AGREEMENT: "Signed Agreement",
@@ -102,41 +104,42 @@ const DocumentsList = ({ customer, documents = [] }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
-      <h3 className="font-bold text-slate-900 text-base">Uploaded Documents</h3>
-      <div className="space-y-2">
+    <div>
+      <div className="px-1 pb-2.5">
+        <h3 className="font-bold text-sm text-slate-900">Uploaded Documents</h3>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {allEntries.map((doc) => (
           <div
             key={doc.id}
-            className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 gap-3"
+            className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between gap-3 text-xs"
           >
-            <div className="min-w-0 flex items-center gap-2">
+            <div className="min-w-0 flex items-start gap-2">
               {doc.isVirtual ? (
-                <Mail size={14} className="text-emerald-500 shrink-0" />
+                <Mail size={14} className="text-emerald-500 shrink-0 mt-0.5" />
               ) : (
-                <FileText size={14} className="text-slate-400 shrink-0" />
+                <FileText
+                  size={14}
+                  className="text-slate-400 shrink-0 mt-0.5"
+                />
               )}
               <div className="min-w-0">
-                <p className="font-bold text-purple-700">
-                  {doc.isVirtual ? doc.label : (CATEGORY_LABELS[doc.documentType] || doc.documentType)}
+                <p className="font-bold text-purple-700 break-words">
+                  {doc.isVirtual
+                    ? doc.label
+                    : CATEGORY_LABELS[doc.documentType] || doc.documentType}
                 </p>
-                <p className="text-slate-500 truncate">{doc.originalName}</p>
-                {!doc.isVirtual && (doc.documentNumber || doc.expiryDate) && (
-                  <p className="text-slate-400 mt-0.5">
-                    {doc.documentNumber ? `No: ${doc.documentNumber}` : ""}
-                    {doc.documentNumber && doc.expiryDate ? " · " : ""}
-                    {doc.expiryDate
-                      ? `Expires: ${new Date(doc.expiryDate).toLocaleDateString()}`
-                      : ""}
-                  </p>
-                )}
+                <p className="text-slate-600 break-words mt-0.5">
+                  {doc.originalName}
+                </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => handleOpen(doc)}
               disabled={openingId === doc.id}
-              className="shrink-0 flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded hover:bg-emerald-100 transition disabled:opacity-50"
+              className="shrink-0 inline-flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded hover:bg-emerald-100 transition disabled:opacity-50"
             >
               {openingId === doc.id ? (
                 <Loader2 size={12} className="animate-spin" />

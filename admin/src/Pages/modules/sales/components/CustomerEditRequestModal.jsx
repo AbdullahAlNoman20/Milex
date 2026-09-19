@@ -12,11 +12,10 @@ import { useToast } from "../../../../Components/hooks/useToast";
 import { humanizeStatus } from "../../../../Components/utils/format";
 
 const DOCUMENT_CATEGORIES = [
-  { key: "SIGNED_OFFER_LETTER", label: "Signed Offer Letter *" },
-  { key: "OFFER_RATE_RECEIPT", label: "Signed Offer & Rate Receipt *" },
+  { key: "SIGNED_OFFER_LETTER", label: "Signed Offer Letter" },
   { key: "SIGNED_AGREEMENT", label: "Signed Agreement" },
-  { key: "CUSTOMER_TIN", label: "Customer TIN *" },
-  { key: "CUSTOMER_BIN", label: "Customer BIN *" },
+  { key: "CUSTOMER_TIN", label: "Customer TIN" },
+  { key: "CUSTOMER_BIN", label: "Customer BIN" },
   { key: "TRADE_LICENSE", label: "Trade License *" },
   { key: "OTHERS", label: "Others Document" },
 ];

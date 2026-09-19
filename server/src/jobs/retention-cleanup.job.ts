@@ -4,6 +4,53 @@ import path from "path";
 import { prisma } from "../config/db";
 import { env } from "../config/env";
 import { deleteFileFromSupabase } from "../modules/file-storage/fileStorage.service";
+import { EDIT_HISTORY_ACTIONS } from "../modules/customers/customers.service";
+
+const ACTIVITY_KEEP_PER_USER = 100;
+
+// Keeps each person's activity trail at its most recent 100 entries, exactly
+// as the Activity page shows it — anything older is removed from the database
+// rather than just hidden.
+//
+// Edit-history actions are deliberately excluded from the trim: the customer
+// Edit History view reads those same AuditLog rows, and that record must stay
+// complete for as long as the customer exists.
+const trimActivityLogs = async () => {
+  let removedLogins = 0;
+  let removedActions = 0;
+
+  const users = await prisma.user.findMany({ select: { id: true } });
+
+  for (const { id } of users) {
+    // eslint-disable-next-line no-await-in-loop
+    const staleLogins = await prisma.loginLog.findMany({
+      where: { userId: id },
+      orderBy: { createdAt: "desc" },
+      skip: ACTIVITY_KEEP_PER_USER,
+      select: { id: true },
+    });
+    if (staleLogins.length > 0) {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await prisma.loginLog.deleteMany({ where: { id: { in: staleLogins.map((x) => x.id) } } });
+      removedLogins += r.count;
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    const staleActions = await prisma.auditLog.findMany({
+      where: { actorId: id, action: { notIn: EDIT_HISTORY_ACTIONS } },
+      orderBy: { createdAt: "desc" },
+      skip: ACTIVITY_KEEP_PER_USER,
+      select: { id: true },
+    });
+    if (staleActions.length > 0) {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await prisma.auditLog.deleteMany({ where: { id: { in: staleActions.map((x) => x.id) } } });
+      removedActions += r.count;
+    }
+  }
+
+  return { removedLogins, removedActions };
+};
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -17,12 +64,14 @@ export const runRetentionCleanup = async () => {
   const revokedTokens = await prisma.refreshToken.deleteMany({
     where: { OR: [{ revoked: true }, { expiresAt: { lt: new Date(now) } }] },
   });
-  const oldLoginLogs = await prisma.loginLog.deleteMany({
-    where: { createdAt: { lt: new Date(now - NINETY_DAYS_MS) } },
-  });
-  const oldAuditLogs = await prisma.auditLog.deleteMany({
-    where: { createdAt: { lt: new Date(now - NINETY_DAYS_MS) } },
-  });
+  // Superseded by the per-user 100-entry trim below, which is stricter — a
+  // second age-based sweep would only ever delete rows that are already gone.
+  const oldLoginLogs = { count: 0 };
+  const activityTrim = await trimActivityLogs();
+  // AuditLog is deliberately NEVER purged: the customer Edit History view
+  // and every compliance question read from it. Nothing else in this job
+  // is coupled to it either.
+  const oldAuditLogs = { count: 0 };
   const usedResetTokens = await prisma.passwordResetToken.deleteMany({
     where: { OR: [{ used: true }, { expiresAt: { lt: new Date(now) } }] },
   });
@@ -45,19 +94,25 @@ export const runRetentionCleanup = async () => {
     select: { id: true, pendingFileStorageKey: true },
     take: 500,
   });
-  for (const row of decidedWithFiles) {
-    const key = row.pendingFileStorageKey as string;
-    // eslint-disable-next-line no-await-in-loop
-    const stillInUse = await prisma.onboardingDocument.findFirst({
-      where: { storageKey: key },
-      select: { id: true },
+  if (decidedWithFiles.length > 0) {
+    // One query instead of one per row — this used to be a clean N+1 that
+    // grew linearly with every decided edit request in the system.
+    const keys = decidedWithFiles.map((r) => r.pendingFileStorageKey as string);
+    const inUse = await prisma.onboardingDocument.findMany({
+      where: { storageKey: { in: keys } },
+      select: { storageKey: true },
     });
-    if (stillInUse) continue;
-    // eslint-disable-next-line no-await-in-loop
-    await deleteFileFromSupabase(key);
-    // eslint-disable-next-line no-await-in-loop
-    await prisma.fieldChangeRequest.update({ where: { id: row.id }, data: { pendingFileStorageKey: null } });
-    orphanedRequestFiles += 1;
+    const inUseSet = new Set(inUse.map((d) => d.storageKey));
+    const removable = decidedWithFiles.filter((r) => !inUseSet.has(r.pendingFileStorageKey as string));
+
+    await Promise.all(removable.map((r) => deleteFileFromSupabase(r.pendingFileStorageKey as string)));
+    if (removable.length > 0) {
+      await prisma.fieldChangeRequest.updateMany({
+        where: { id: { in: removable.map((r) => r.id) } },
+        data: { pendingFileStorageKey: null },
+      });
+    }
+    orphanedRequestFiles = removable.length;
   }
 
   // Second sweep: anything on disk that no database row references at all
@@ -66,21 +121,32 @@ export const runRetentionCleanup = async () => {
   try {
     const dir = path.resolve(env.UPLOAD_DIR);
     const names = await fs.readdir(dir);
-    for (const name of names) {
-      // eslint-disable-next-line no-await-in-loop
-      const stat = await fs.stat(path.join(dir, name)).catch(() => null);
-      // Only consider files older than a day, so an in-flight upload is
-      // never deleted out from under the request that is creating it.
-      if (!stat || !stat.isFile() || now - stat.mtimeMs < 24 * 60 * 60 * 1000) continue;
-      // eslint-disable-next-line no-await-in-loop
-      const [doc, req] = await Promise.all([
-        prisma.onboardingDocument.findFirst({ where: { storageKey: name }, select: { id: true } }),
-        prisma.fieldChangeRequest.findFirst({ where: { pendingFileStorageKey: name }, select: { id: true } }),
+
+    const stats = await Promise.all(
+      names.map(async (name) => ({ name, stat: await fs.stat(path.join(dir, name)).catch(() => null) }))
+    );
+    // Only files older than a day, so an in-flight upload is never deleted
+    // out from under the request that is creating it.
+    const candidates = stats
+      .filter(({ stat }) => stat?.isFile() && now - stat.mtimeMs >= 24 * 60 * 60 * 1000)
+      .map(({ name }) => name);
+
+    if (candidates.length > 0) {
+      // Two queries total, instead of two per file on disk.
+      const [docs, reqs] = await Promise.all([
+        prisma.onboardingDocument.findMany({ where: { storageKey: { in: candidates } }, select: { storageKey: true } }),
+        prisma.fieldChangeRequest.findMany({
+          where: { pendingFileStorageKey: { in: candidates } },
+          select: { pendingFileStorageKey: true },
+        }),
       ]);
-      if (doc || req) continue;
-      // eslint-disable-next-line no-await-in-loop
-      await deleteFileFromSupabase(name);
-      orphanedDiskFiles += 1;
+      const referenced = new Set([
+        ...docs.map((d) => d.storageKey),
+        ...reqs.map((r) => r.pendingFileStorageKey as string),
+      ]);
+      const orphans = candidates.filter((name) => !referenced.has(name));
+      await Promise.all(orphans.map((name) => deleteFileFromSupabase(name)));
+      orphanedDiskFiles = orphans.length;
     }
   } catch {
     /* upload directory unreadable — non-fatal, reported as 0 */
@@ -88,8 +154,8 @@ export const runRetentionCleanup = async () => {
 
   return {
     revokedTokens: revokedTokens.count,
-    oldLoginLogs: oldLoginLogs.count,
-    oldAuditLogs: oldAuditLogs.count,
+    oldLoginLogs: oldLoginLogs.count + activityTrim.removedLogins,
+    oldAuditLogs: oldAuditLogs.count + activityTrim.removedActions,
     usedResetTokens: usedResetTokens.count,
     oldNotificationReads: oldNotificationReads.count,
     oldNotifications: oldNotifications.count,

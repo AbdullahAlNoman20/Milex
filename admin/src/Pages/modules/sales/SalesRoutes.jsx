@@ -17,6 +17,7 @@ import TeamReportsPage from './pages/TeamReportsPage';
 import MyActivityPage from './pages/MyActivityPage';
 import TeamActivityPage from './pages/TeamActivityPage';
 import NotificationsPage from './pages/NotificationsPage';
+import CustomerAssignmentsPage from './pages/CustomerAssignmentsPage';
 import AdminOverview from './roles/Admin/AdminOverview';
 import SuperAdminOverview from './roles/SuperAdmin/SuperAdminOverview';
 
@@ -28,7 +29,10 @@ const SalesRoutes = [
   {
     path: 'recommendations/new',
     element: (
-      <RoleRoute allowedRoles={[ROLES.KAM]} requiredPermissions={[PERMISSIONS.CREATE_RECOMMENDATION]}>
+      <RoleRoute
+        allowedRoles={[ROLES.KAM, ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN]}
+        requiredPermissions={[PERMISSIONS.CREATE_RECOMMENDATION]}
+      >
         <NewRecommendationWizard />
       </RoleRoute>
     ),
@@ -44,7 +48,7 @@ const SalesRoutes = [
   {
     path: 'weekly-plans/review',
     element: (
-      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER]}>
+      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT]}>
         <WeeklyPlanReviewList />
       </RoleRoute>
     ),
@@ -60,7 +64,7 @@ const SalesRoutes = [
   {
     path: 'follow-ups',
     element: (
-      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER]}>
+      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT]}>
         <FollowUpReminderPanel />
       </RoleRoute>
     ),
@@ -68,8 +72,16 @@ const SalesRoutes = [
   {
     path: 'team-reports',
     element: (
-      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.SUPER_ADMIN]}>
+      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN]}>
         <TeamReportsPage />
+      </RoleRoute>
+    ),
+  },
+  {
+    path: 'assignments',
+    element: (
+      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN]}>
+        <CustomerAssignmentsPage />
       </RoleRoute>
     ),
   },
@@ -78,7 +90,7 @@ const SalesRoutes = [
   {
     path: 'team-activity',
     element: (
-      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.SUPER_ADMIN]}>
+      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN]}>
         <TeamActivityPage />
       </RoleRoute>
     ),

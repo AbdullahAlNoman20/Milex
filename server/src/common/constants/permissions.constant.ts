@@ -32,6 +32,13 @@ export const PERMISSIONS = Object.freeze({
   VIEW_ACTIVITY_LOG: 'VIEW_ACTIVITY_LOG',
   DELETE_CUSTOMER: 'DELETE_CUSTOMER',
   REASSIGN_CUSTOMER: 'REASSIGN_CUSTOMER',
+  // Asking for a different rate, and answering that request. Kept separate
+  // because a Line Manager may raise one but only the Head of Department
+  // may answer it.
+  REQUEST_NEW_RATE: 'REQUEST_NEW_RATE',
+  GRANT_NEW_RATE: 'GRANT_NEW_RATE',
+  // Seeing across the whole department rather than one Line Manager's team.
+  VIEW_ALL_TEAMS: 'VIEW_ALL_TEAMS',
 });
 
 export type PermissionKey = keyof typeof PERMISSIONS;

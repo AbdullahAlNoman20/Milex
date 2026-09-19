@@ -1,38 +1,68 @@
 // admin/src/Pages/modules/sales/pages/TaskQueue.jsx
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Search, X } from 'lucide-react';
 import { useSales } from '../hooks/useSales';
-import { STATUS } from '../constants/salesStatus';
+import { usePagedCustomers } from '../hooks/usePagedCustomers';
 import StatusBadge from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
 import Pagination from '../../../../Components/Shared/Pagination';
 import { formatRevision } from '../../../../Components/utils/format';
 
-const TaskQueue = () => {
-  const { customers, isLoading, loadError, setSelectedCustomer } = useSales();
-  const navigate = useNavigate();
+const PAGE_SIZE = 10;
 
-  const pendingCustomers = useMemo(
-    () => customers.filter((c) => c.status !== STATUS.ACTIVE),
-    [customers]
-  );
+const TaskQueue = () => {
+  const { setSelectedCustomer, reloadToken } = useSales();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
-  const totalPages = Math.max(1, Math.ceil(pendingCustomers.length / PAGE_SIZE));
-  const pageClamped = Math.min(page, totalPages);
-  const pagedCustomers = pendingCustomers.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
+  const [search, setSearch] = useState('');
+
+  const changeSearch = (value) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const { items, total, totalPages, isLoading, error } = usePagedCustomers({
+    group: 'pipeline',
+    page,
+    pageSize: PAGE_SIZE,
+    search,
+    reloadToken,
+  });
 
   const openCustomer = (c) => {
     setSelectedCustomer(c);
     navigate(`/app/customers/${encodeURIComponent(c.barcode)}`);
   };
 
-  if (isLoading) return <Loader fullScreen label="Loading tasks..." />;
-  if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
+  if (error) return <p className="text-sm text-red-600 font-semibold">{error}</p>;
 
   return (
     <div className="max-w-7xl px-3 sm:mx-auto animate-in fade-in duration-300">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">Task Queue & In-Progress Workflows</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">Task Queue &amp; In-Progress Workflows</h2>
+        <div className="relative w-full sm:w-72">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => changeSearch(e.target.value)}
+            maxLength={100}
+            placeholder="Search name, code or reference..."
+            className="w-full pl-9 pr-8 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => changeSearch('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-x-auto">
         <table className="w-full text-left border-collapse min-w-[720px]">
           <thead>
@@ -46,14 +76,20 @@ const TaskQueue = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
-            {pendingCustomers.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={6} className="p-10">
+                  <Loader label="Loading tasks..." />
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-slate-400">
-                  No active tasks.
+                  {search.trim() ? 'No task matches your search.' : 'No active tasks.'}
                 </td>
               </tr>
             ) : (
-              pagedCustomers.map((c) => (
+              items.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold">
@@ -90,7 +126,13 @@ const TaskQueue = () => {
           </tbody>
         </table>
       </div>
-      <Pagination page={pageClamped} totalPages={totalPages} totalItems={pendingCustomers.length} pageSize={PAGE_SIZE} onChange={setPage} />
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={total}
+        pageSize={PAGE_SIZE}
+        onChange={setPage}
+      />
     </div>
   );
 };

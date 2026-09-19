@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
-import { escapeHtml } from '../../../../Components/utils/sanitize';
+import { buildRateRefs } from '../../../../Components/utils/format';
 
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
 const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
@@ -151,7 +151,7 @@ const PrintTemplate = ({ data, onClose }) => {
           <div className="flex justify-between items-end border-b-2 border-slate-800 pb-4 mb-8">
             <h1 className="text-4xl font-black text-emerald-800 italic tracking-tighter">MILEX</h1>
             <p className="text-right text-xs  mt-2 font-mono bg-slate-100 px-2 py-1 inline-block border font-bold text-slate-800">
-              ID: {escapeHtml(c.barcode)}
+              ID: {c.barcode}
             </p>
           </div>
         )}
@@ -169,7 +169,7 @@ const PrintTemplate = ({ data, onClose }) => {
           const financialContact = getContactByType(c.contacts, 'FINANCIAL_CONTACT');
           const seniorContact = getContactByType(c.contacts, 'SENIOR_MANAGEMENT');
           const shipping = c.shippingDetails || [];
-          const rateRefDisplay = c.rateRef ? `${c.rateRef}${c.revision > 0 ? `(Revised-${c.revision})` : ''}` : '';
+          const rateRefDisplay = buildRateRefs(c).join('  /  ');
 
           return (
             <div className="text-slate-900 text-[11px]">
@@ -241,7 +241,7 @@ const PrintTemplate = ({ data, onClose }) => {
               <RTable
                 rows={[
                   ['Business Type', c.businessType],
-                  ['Service Required', c.serviceRequired === 'BOTH' ? 'Inbound (IB) / Outbound (OB)' : c.serviceRequired === 'IB' ? 'Inbound (IB)' : c.serviceRequired === 'OB' ? 'Outbound (OB)' : ''],
+                  ['Service Required', c.serviceRequired === 'BOTH' ? 'IB & OB' : c.serviceRequired === 'IB' ? 'Inbound (IB)' : c.serviceRequired === 'OB' ? 'Outbound (OB)' : ''],
                   ['Account Mode', c.accountMode],
                   ['Account Type', c.accountType === 'CREDIT CUSTOMER' ? 'Credit' : 'Cash'],
                   ['Credit Limit (TK)', c.creditLimitTk],
@@ -537,7 +537,7 @@ const PrintTemplate = ({ data, onClose }) => {
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2 flex-1">
                     <span className="text-[10px] font-semibold shrink-0" style={{ width: '110px' }}>Rate Ref. No.:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.rateRef}</span>
+                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{buildRateRefs(c).join(' / ')}</span>
                   </div>
                   <div className="flex items-center gap-2" style={{ flex: '0 0 220px' }}>
                     <span className="text-[10px] font-semibold shrink-0" style={{ width: '40px' }}>Date:</span>

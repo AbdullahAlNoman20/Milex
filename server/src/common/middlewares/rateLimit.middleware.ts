@@ -1,6 +1,6 @@
 // server/src/common/middlewares/rateLimit.middleware.ts
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { Request } from 'express';
 import { env } from '../../config/env';
 
@@ -11,9 +11,18 @@ import { env } from '../../config/env';
 // Anonymous traffic still falls back to IP, which is exactly what a flood
 // looks like — so DDoS protection is preserved.
 const sessionKey = (req: Request): string => {
+  // Keyed off the USER ID, not the token itself. Hashing the raw token meant
+  // the bucket reset every time the 15-minute access cookie rotated, which
+  // quietly made the limit far weaker than the configured value. The id is
+  // read with decode() (no verification) — an attacker forging it only ever
+  // shares someone else's smaller budget, never gains a bigger one.
+  const authenticatedId = (req as any).user?.id;
+  if (typeof authenticatedId === 'string' && authenticatedId) return `u:${authenticatedId}`;
+
   const token = (req as any).cookies?.access_token;
   if (typeof token === 'string' && token.length > 0) {
-    return `s:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
+    const decoded = jwt.decode(token) as { sub?: string } | null;
+    if (decoded?.sub) return `u:${decoded.sub}`;
   }
   return `i:${ipKeyGenerator(req.ip ?? '')}`;
 };

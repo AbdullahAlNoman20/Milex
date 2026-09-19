@@ -5,14 +5,29 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-
 }
 
 enum RoleName {
   KAM
   SALES_COORDINATOR
   LINE_MANAGER
+  // Sits above Line Manager: every employee reports up to this role, and it
+  // is the authority that sets a new best rate when a Line Manager asks for
+  // one. It is not an administrator — user and system management stay with
+  // SUPER_ADMIN.
+  HEAD_OF_DEPARTMENT
   SUPER_ADMIN
+  // Created automatically when a customer goes active, so the account exists
+  // and can be signed in to. There is no customer-facing dashboard yet; this
+  // is the identity the future one will attach to.
+  CUSTOMER
+}
+
+// Who a rate came from, kept alongside every rate so it stays visible after
+// the rate has been revised several times through the rejection loop.
+enum RateSource {
+  LINE_MANAGER
+  HEAD_OF_DEPARTMENT
 }
 
 enum CustomerStatus {
@@ -79,6 +94,9 @@ model User {
   id                 String    @id @default(uuid())
   name               String
   email              String    @unique
+  // Set only on a CUSTOMER account: links the login back to the customer
+  // record whose barcode is its username.
+  customerId         String?   @unique
   passwordHash       String
   passwordHistory    String[]  @default([])
   roleId             String
@@ -97,15 +115,15 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  customersHandled   Customer[]        @relation("HandledBy")
-  customersCreated   Customer[]        @relation("RecommendedBy")
-  weeklyPlans        WeeklyPlan[]
-  dailyReports       DailyReport[]
-  auditLogs          AuditLog[]
-  refreshTokens      RefreshToken[]
+  customersHandled    Customer[]           @relation("HandledBy")
+  customersCreated    Customer[]           @relation("RecommendedBy")
+  weeklyPlans         WeeklyPlan[]
+  dailyReports        DailyReport[]
+  auditLogs           AuditLog[]
+  refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
-  loginLogs          LoginLog[]
-  notifications      Notification[]
+  loginLogs           LoginLog[]
+  notifications       Notification[]
 
   @@index([lineManagerId])
 }
@@ -149,8 +167,8 @@ model LoginLog {
 }
 
 model Customer {
-  id                       String             @id @default(uuid())
-  barcode                  String             @unique
+  id                       String      @id @default(uuid())
+  barcode                  String      @unique
   accountName              String
   address                  String
   phone                    String
@@ -161,66 +179,76 @@ model Customer {
   accountType              String
   creditLimitTk            String?
   creditPeriodDays         String?
-  creditPeriodExtendedByLM Boolean            @default(false)
+  creditPeriodExtendedByLM Boolean     @default(false)
   proposedRate             String?
   approvedRate             String?
+  // Which role actually set the rate currently in force, and the note that
+  // came with it. Shown on the rate screen and in every notification about
+  // it, so the origin is never ambiguous after a few revisions.
+  rateSource               RateSource?
+  rateSetById              String?
+  // The role of whoever created the recommendation. Their own approval step
+  // is skipped, because they set that value themselves at creation time.
+  createdByRole            RoleName?
   lmNote                   String?
   recNote                  String?
   rejectReason             String?
   rateRef                  String?
   offerText                String?
-  offerSent                Boolean            @default(false)
-  offerAccepted            Boolean            @default(false)
+  offerSent                Boolean     @default(false)
+  offerAccepted            Boolean     @default(false)
   agreementText            String?
-  agreementSent            Boolean            @default(false)
+  agreementSent            Boolean     @default(false)
   // The customer rejected the offer and a new rate is awaited from the Line
   // Manager. The account deliberately stays PROVISIONAL_ACTIVE throughout,
   // so the 21-day document window keeps counting down.
-  offerRejected            Boolean            @default(false)
+  offerRejected            Boolean     @default(false)
 
   // Final Account Profile Data (filled by KAM/SC once Agreement is signed)
-  finalProfileCompleted    Boolean            @default(false)
-  accountConfigMode        String             @default("PROVISIONAL")
-  managingPartnerName      String?
-  binNumber                String?
-  tinNumber                String?
-  destinations             String?
-  preferredCarrier         String?
-  natureOfBusiness         String?
-  gainType                 String?
-  financeMode              String?
-  area                     String?
-  zone                     String?
-  specialInstructions      String?
+  finalProfileCompleted Boolean @default(false)
+  accountConfigMode     String  @default("PROVISIONAL")
+  managingPartnerName   String?
+  binNumber             String?
+  tinNumber             String?
+  destinations          String?
+  preferredCarrier      String?
+  natureOfBusiness      String?
+  gainType              String?
+  financeMode           String?
+  area                  String?
+  zone                  String?
+  specialInstructions   String?
 
-  revision                 Int                @default(0)
-  status                   CustomerStatus     @default(PENDING_RATE_PREPARATION)
-  accountProfileType       AccountProfileType @default(REGULAR)
-  isDeleted                Boolean            @default(false)
-  rateHistory              Json[]             @default([])
+  revision           Int                @default(0)
+  status             CustomerStatus     @default(PENDING_RATE_PREPARATION)
+  accountProfileType AccountProfileType @default(REGULAR)
+  isDeleted          Boolean            @default(false)
+  rateHistory        Json[]             @default([])
 
-  pendingInfoUpdateField    String?
-  pendingInfoUpdateValue    String?
-  pendingInfoUpdateAt       DateTime?
+  pendingInfoUpdateField String?
+  pendingInfoUpdateValue String?
+  pendingInfoUpdateAt    DateTime?
 
-  provisionalCreatedAt      DateTime?
-  provisionalExpiryDate     DateTime?
-  provisionalExtensionDays  Int               @default(0)
+  provisionalCreatedAt     DateTime?
+  provisionalExpiryDate    DateTime?
+  provisionalExtensionDays Int       @default(0)
 
-  followUpDate              DateTime?
-  followUpNote              String?
+  followUpDate DateTime?
+  followUpNote String?
 
   recommendedById String
-  recommendedBy   User    @relation("RecommendedBy", fields: [recommendedById], references: [id])
+  recommendedBy   User   @relation("RecommendedBy", fields: [recommendedById], references: [id])
   handledById     String
-  handledBy       User    @relation("HandledBy", fields: [handledById], references: [id])
+  handledBy       User   @relation("HandledBy", fields: [handledById], references: [id])
 
-  contacts        Contact[]
-  shippingDetails ShippingDetail[]
-  documents       OnboardingDocument[]
-  extensionRequests TimeExtensionRequest[]
+  contacts            Contact[]
+  shippingDetails     ShippingDetail[]
+  documents           OnboardingDocument[]
+  extensionRequests   TimeExtensionRequest[]
   fieldChangeRequests FieldChangeRequest[]
-  history         CustomerHistoryEntry[]
+  history             CustomerHistoryEntry[]
+  rateRequests        RateRequest[]
+  correspondence      CustomerCorrespondence[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -233,17 +261,73 @@ model Customer {
   @@index([isDeleted])
   @@index([isDeleted, createdAt])
   @@index([status, offerRejected])
+  @@index([accountProfileType, status])
+  @@index([handledById, status])
+}
+
+// A request for a different rate. Raised by a Line Manager asking the Head of
+// Department for a better one, by a KAM asking for a revision, or by anyone
+// acting on a customer who asks for a new rate after the account is already
+// live — which is why this is not tied to a particular workflow status.
+model RateRequest {
+  id               String      @id @default(uuid())
+  customerId       String
+  customer         Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  requestedById    String
+  requestedByRole  RoleName
+  reason           String
+  // Filled in when the request is answered.
+  grantedRate      String?
+  grantedNote      String?
+  grantedById      String?
+  grantedByRole    RateSource?
+  grantedAt        DateTime?
+  // null while open, true once a rate was given, false if declined.
+  approved         Boolean?
+  // Set when the customer rejected an offer and this request exists to
+  // replace the rate that was rejected.
+  followsRejection Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([approved])
+  // Backs the Head of Department's own queue: every request still waiting on
+  // a decision, across all customers.
+  @@index([approved, createdAt])
+}
+
+// Every offer letter and agreement ever sent, numbered in order. The customer
+// record only ever holds the latest text; this is the permanent set, so an
+// earlier version can always be produced.
+model CustomerCorrespondence {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // OFFER_LETTER | AGREEMENT
+  kind       String
+  // 1 for the first copy sent, incrementing per kind per customer.
+  copyNumber Int
+  body       String
+  rateRef    String?
+  rateAtSend String?
+  sentById   String
+  // MAIL | HARD_COPY
+  sentVia    String?
+  createdAt  DateTime @default(now())
+
+  @@unique([customerId, kind, copyNumber])
+  @@index([customerId, kind])
 }
 
 model Contact {
-  id           String      @id @default(uuid())
-  customerId   String
-  customer     Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  type         ContactType
-  name         String
-  designation  String?
-  mobile       String?
-  email        String?
+  id          String      @id @default(uuid())
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type        ContactType
+  name        String
+  designation String?
+  mobile      String?
+  email       String?
 
   @@index([customerId])
 }
@@ -254,12 +338,12 @@ model ShippingDetail {
   customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   shipmentType      String[]
   shipmentTypeOther String?
-  rateFor      String
-  country      String
-  volume       String
-  weight       String
-  revenue      String
-  provider     String
+  rateFor           String
+  country           String
+  volume            String
+  weight            String
+  revenue           String
+  provider          String
 
   @@index([customerId])
 }
@@ -271,27 +355,27 @@ model ServiceProvider {
 }
 
 model FieldChangeRequest {
-  id            String    @id @default(uuid())
-  customerId    String
-  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  fieldKey      String
-  fieldLabel    String
-  oldValue      String?
-  newValue      String?
-  reason        String?
+  id                    String    @id @default(uuid())
+  customerId            String
+  customer              Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  fieldKey              String
+  fieldLabel            String
+  oldValue              String?
+  newValue              String?
+  reason                String?
   // When set, this request is "please let me re-upload this document
   // category" rather than a plain text-field change — newValue stays null
   // until the KAM/SC actually uploads the replacement after approval.
-  documentType  String?
+  documentType          String?
   pendingFileStorageKey String?
   pendingFileName       String?
   pendingFileMime       String?
   pendingFileSize       Int?
-  requestedById String
-  approved      Boolean?
-  decidedById   String?
-  decidedAt     DateTime?
-  createdAt     DateTime  @default(now())
+  requestedById         String
+  approved              Boolean?
+  decidedById           String?
+  decidedAt             DateTime?
+  createdAt             DateTime  @default(now())
 
   @@index([customerId])
   @@index([approved])
@@ -322,36 +406,41 @@ model CustomerHistoryEntry {
 }
 
 model OnboardingDocument {
-  id             String    @id @default(uuid())
-  customerId     String
-  customer       Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  originalName   String
-  documentType   String    @default("Other")
-  documentNumber String?
-  expiryDate     DateTime?
-  storageKey   String
-  mimeType     String
-  sizeBytes    Int
-  scanStatus   String   @default("PENDING")
-  uploadedById String
-  createdAt    DateTime @default(now())
+  id                   String    @id @default(uuid())
+  // Set once the one-month-before renewal reminder has gone out, so the
+  // nightly job never sends the same reminder twice.
+  expiryReminderSentAt DateTime?
+  customerId           String
+  customer             Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  originalName         String
+  documentType         String    @default("Other")
+  documentNumber       String?
+  expiryDate           DateTime?
+  storageKey           String
+  mimeType             String
+  sizeBytes            Int
+  scanStatus           String    @default("PENDING")
+  uploadedById         String
+  createdAt            DateTime  @default(now())
 
   @@index([customerId])
   @@index([storageKey])
   @@index([customerId, documentType])
+  // Backs the nightly sweep that looks for licences about to lapse.
+  @@index([expiryDate])
 }
 
 model TimeExtensionRequest {
-  id           String   @id @default(uuid())
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id            String    @id @default(uuid())
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   requestedById String
   requestedDays Int
-  reason       String
-  approved     Boolean?
-  decidedById  String?
-  decidedAt    DateTime?
-  createdAt    DateTime @default(now())
+  reason        String
+  approved      Boolean?
+  decidedById   String?
+  decidedAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([customerId])
 }
@@ -372,16 +461,19 @@ model WeeklyPlan {
 }
 
 model Visit {
-  id                 String      @id @default(uuid())
-  day                String
-  customerName       String
-  customerId         String?
-  purpose            String
-  outcomeNotes       String?
-  existingPlanId     String?
-  existingPlan       WeeklyPlan? @relation("ExistingVisits", fields: [existingPlanId], references: [id], onDelete: Cascade)
-  prospectPlanId     String?
-  prospectPlan       WeeklyPlan? @relation("ProspectVisits", fields: [prospectPlanId], references: [id], onDelete: Cascade)
+  id             String      @id @default(uuid())
+  // Lets a save tell apart a row the person deliberately removed from one
+  // that appeared after their page was loaded — see upsertDraft().
+  createdAt      DateTime    @default(now())
+  day            String
+  customerName   String
+  customerId     String?
+  purpose        String
+  outcomeNotes   String?
+  existingPlanId String?
+  existingPlan   WeeklyPlan? @relation("ExistingVisits", fields: [existingPlanId], references: [id], onDelete: Cascade)
+  prospectPlanId String?
+  prospectPlan   WeeklyPlan? @relation("ProspectVisits", fields: [prospectPlanId], references: [id], onDelete: Cascade)
 
   @@index([existingPlanId])
   @@index([prospectPlanId])
@@ -389,29 +481,29 @@ model Visit {
 }
 
 model DailyReport {
-  id        String       @id @default(uuid())
+  id        String        @id @default(uuid())
   kamId     String
-  kam       User         @relation(fields: [kamId], references: [id])
+  kam       User          @relation(fields: [kamId], references: [id])
   date      String
   visits    ReportVisit[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@unique([kamId, date])
   @@index([kamId, date])
 }
 
 model ReportVisit {
-  id                     String      @id @default(uuid())
-  customerName           String
-  customerId             String?
-  purpose                String?
-  completed              Boolean?
-  reasonIfNotCompleted   String?
-  outcomeNotes           String?
-  sourceVisitId          String?
-  dailyReportId          String
-  dailyReport            DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  id                   String      @id @default(uuid())
+  customerName         String
+  customerId           String?
+  purpose              String?
+  completed            Boolean?
+  reasonIfNotCompleted String?
+  outcomeNotes         String?
+  sourceVisitId        String?
+  dailyReportId        String
+  dailyReport          DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
 
   @@index([dailyReportId])
   @@index([sourceVisitId])

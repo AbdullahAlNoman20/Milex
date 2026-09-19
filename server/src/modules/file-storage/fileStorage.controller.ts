@@ -51,6 +51,14 @@ export const downloadHandler = async (
     });
     const fullPath = fileStorageService.streamFile(storageKey);
     res.setHeader("X-Content-Type-Options", "nosniff");
+    // Belt-and-braces against a stored-XSS style payload rendering in the
+    // browser: the file is served as an opaque download, never inline, and
+    // never in a document context that could execute.
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${storageKey.replace(/[^a-zA-Z0-9._-]/g, "_")}"`,
+    );
     res.sendFile(fullPath, (err) => {
       if (err) next(err);
     });

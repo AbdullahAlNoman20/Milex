@@ -1,6 +1,6 @@
 // src/Components/hooks/useNotifications.js
 import { useContext } from 'react';
-import { NotificationContext } from '../context/NotificationContext';
+import { NotificationContext } from '../context/NotificationContextObject';
 
 export const useNotifications = () => {
   const ctx = useContext(NotificationContext);

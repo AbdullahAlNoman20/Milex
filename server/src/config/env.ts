@@ -34,6 +34,9 @@ export const env = Object.freeze({
     .map((o) => o.trim().replace(/\/$/, ""))
     .filter(Boolean),
   FIELD_ENCRYPTION_KEY: required("FIELD_ENCRYPTION_KEY"),
+  // Separate secret for signing short-lived file download links. Falls back
+  // to the JWT secret so existing deployments keep working unchanged.
+  FILE_SIGNING_SECRET: process.env.FILE_SIGNING_SECRET || required("JWT_ACCESS_SECRET"),
   COOKIE_DOMAIN: process.env.COOKIE_DOMAIN || "localhost",
   IS_PRODUCTION: process.env.NODE_ENV === "production",
   // Optional — only needed if/when this app scales to multiple PM2

@@ -2,21 +2,16 @@
 import { Request, Response, NextFunction } from 'express';
 import * as authService from './auth.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
-import { env } from '../../config/env';
-import { issueCsrfCookie } from '../../common/middlewares/csrf.middleware';
+import { issueCsrfCookie, COOKIE_SECURITY } from '../../common/middlewares/csrf.middleware';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
 const ACCESS_COOKIE_NAME = 'access_token';
 
+const AUTH_COOKIE_OPTS = { httpOnly: true, ...COOKIE_SECURITY } as const;
+
 const setAuthCookies = (res: Response, accessToken: string, refreshToken: string) => {
-  const cookieOpts = {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none' as const,
-    domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
-  };
-  res.cookie(ACCESS_COOKIE_NAME, accessToken, { ...cookieOpts, maxAge: 15 * 60 * 1000 });
-  res.cookie(REFRESH_COOKIE_NAME, refreshToken, { ...cookieOpts, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie(ACCESS_COOKIE_NAME, accessToken, { ...AUTH_COOKIE_OPTS, maxAge: 15 * 60 * 1000 });
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, { ...AUTH_COOKIE_OPTS, maxAge: 7 * 24 * 60 * 60 * 1000 });
   issueCsrfCookie(res);
 };
 export const loginHandler = async (req: Request, res: Response, next: NextFunction) => {
@@ -51,14 +46,8 @@ export const logoutHandler = async (req: Request, res: Response, next: NextFunct
   try {
     const refreshToken = req.cookies?.[REFRESH_COOKIE_NAME];
     if (req.user) await authService.logout(refreshToken, req.user.id);
-    const clearOpts = {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none' as const,
-      domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
-    };
-    res.clearCookie(ACCESS_COOKIE_NAME, clearOpts);
-    res.clearCookie(REFRESH_COOKIE_NAME, clearOpts);
+    res.clearCookie(ACCESS_COOKIE_NAME, AUTH_COOKIE_OPTS);
+    res.clearCookie(REFRESH_COOKIE_NAME, AUTH_COOKIE_OPTS);
     return sendSuccess(res, { loggedOut: true });
   } catch (err) {
     next(err);
@@ -107,14 +96,8 @@ export const confirmMfaHandler = async (req: Request, res: Response, next: NextF
 export const changePasswordHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     await authService.changeOwnPassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
-    const clearOpts = {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none' as const,
-      domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
-    };
-    res.clearCookie(ACCESS_COOKIE_NAME, clearOpts);
-    res.clearCookie(REFRESH_COOKIE_NAME, clearOpts);
+    res.clearCookie(ACCESS_COOKIE_NAME, AUTH_COOKIE_OPTS);
+    res.clearCookie(REFRESH_COOKIE_NAME, AUTH_COOKIE_OPTS);
     return sendSuccess(res, { changed: true, requiresRelogin: true });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);

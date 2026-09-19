@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import * as controller from './customers.controller';
 import { requireAuth } from '../../common/middlewares/auth.middleware';
+import { requireStaff } from '../../common/middlewares/staffOnly.middleware';
 import { requirePermission } from '../../common/middlewares/permission.middleware';
 import { validateBody, validateQuery } from '../../common/middlewares/validate.middleware';
 import { verifyCsrf } from '../../common/middlewares/csrf.middleware';
@@ -21,13 +22,17 @@ import {
   fieldChangeRequestSchema,
   reassignCustomerSchema,
   reapproveRateSchema,
-
+  accountConfigModeSchema,
+  decideFieldChangeSchema,
+  directFieldEditSchema,
+  reviseRateSchema,
 } from './customers.schema';
 import { uploadMiddleware } from '../../common/middlewares/upload.middleware';
 
 const router = Router();
 
 router.use(requireAuth);
+router.use(requireStaff);
 router.use(verifyCsrf);
 
 router.get(
@@ -59,7 +64,7 @@ router.post('/:id/draft-offer', requirePermission(PERMISSIONS.DRAFT_OFFER), cont
 router.post('/:id/finalize-offer', requirePermission(PERMISSIONS.FINALIZE_OFFER), validateBody(offerTextSchema), controller.finalizeOfferHandler);
 router.post('/:id/send-agreement', requirePermission(PERMISSIONS.FINALIZE_AGREEMENT), validateBody(agreementTextSchema), controller.sendAgreementHandler);
 router.post('/:id/client-feedback', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(clientFeedbackSchema), controller.clientFeedbackHandler);
-router.post('/:id/revise-rate', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION), controller.reviseRateHandler);
+router.post('/:id/revise-rate', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION), validateBody(reviseRateSchema), controller.reviseRateHandler);
 router.post('/:id/draft-agreement', requirePermission(PERMISSIONS.DRAFT_AGREEMENT), controller.draftAgreementHandler);
 router.post('/:id/finalize-agreement', requirePermission(PERMISSIONS.FINALIZE_AGREEMENT), validateBody(agreementTextSchema), controller.finalizeAgreementHandler);
 router.post('/:id/activate-provisional', requirePermission(PERMISSIONS.UPLOAD_SIGNED_AGREEMENT), controller.activateProvisionalHandler);
@@ -68,17 +73,18 @@ router.post('/:id/request-info-update', requirePermission(PERMISSIONS.REQUEST_IN
 router.post('/:id/decide-info-update', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), validateBody(decideInfoUpdateSchema), controller.decideInfoUpdateHandler);
 router.patch('/:id/follow-up', requirePermission(PERMISSIONS.VIEW_FOLLOWUP_REMINDERS), validateBody(followUpUpdateSchema), controller.updateFollowUpHandler);
 router.patch('/:id/final-profile', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), validateBody(finalProfileSchema), controller.updateFinalProfileHandler);
-router.post('/:id/account-config-mode', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), controller.setAccountConfigModeHandler);
+router.post('/:id/account-config-mode', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), validateBody(accountConfigModeSchema), controller.setAccountConfigModeHandler);
 router.post('/:id/final-onboarding-regular', requirePermission(PERMISSIONS.SUBMIT_FINAL_ONBOARDING), controller.submitFinalOnboardingRegularHandler);
 router.post('/:id/field-change-request', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(fieldChangeRequestSchema), controller.requestFieldChangeHandler);
 router.post('/:id/field-change-request/document', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), uploadMiddleware.single('file'), controller.requestDocumentChangeHandler);
 router.get('/:id/field-change-request', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE), controller.listFieldChangeRequestsHandler);
-router.post('/field-change-request/:requestId/decision', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), controller.decideFieldChangeRequestHandler);
-router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE, PERMISSIONS.REQUEST_INFO_UPDATE), controller.directFieldEditHandler);
+router.post('/field-change-request/:requestId/decision', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), validateBody(decideFieldChangeSchema), controller.decideFieldChangeRequestHandler);
+router.patch('/:id/direct-field-edit', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE, PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(directFieldEditSchema), controller.directFieldEditHandler);
 router.post('/:id/recommendation-attachment', requirePermission(PERMISSIONS.CREATE_RECOMMENDATION, PERMISSIONS.REVISE_RECOMMENDATION), uploadMiddleware.single('file'), controller.uploadRecommendationAttachmentHandler);
 router.post('/:id/reassign', requirePermission(PERMISSIONS.REASSIGN_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), validateBody(reassignCustomerSchema), controller.reassignCustomerHandler);
 router.post('/:id/reapprove-rate', requirePermission(PERMISSIONS.APPROVE_RATE), validateBody(reapproveRateSchema), controller.reapproveRateHandler);
 router.delete('/:id', requirePermission(PERMISSIONS.DELETE_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.deleteCustomerHandler);
 router.get('/:id/edit-history', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listEditHistoryHandler);
+router.get('/:id/correspondence', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listCorrespondenceHandler);
 
 export default router;

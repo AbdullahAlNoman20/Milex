@@ -44,7 +44,9 @@ export const setUserPasswordHandler = async (req: Request, res: Response, next: 
 export const listUsersHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    // The admin console pages client-side over the whole directory, so a
+    // hard 100 cap here silently hid every user past the first hundred.
+    const pageSize = Math.min(5000, Math.max(1, Number(req.query.pageSize) || 1000));
     const result = await usersService.listUsers(page, pageSize);
     return sendSuccess(res, result);
   } catch (err: any) {

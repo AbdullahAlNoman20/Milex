@@ -5,37 +5,80 @@ import { GAIN_TYPE_OPTIONS, FINANCE_MODE_OPTIONS } from '../constants/formOption
 
 const findLabel = (options, value) => options.find((o) => o.value === value)?.label || value || '—';
 
-const Field = ({ label, value }) => (
-  <div>
-    <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-widest mb-1">{label}</span>
-    <span className="font-medium text-slate-700 text-sm">{value || '—'}</span>
-  </div>
-);
-
 const FinalAccountProfileView = ({ customer }) => {
   if (!customer?.finalProfileCompleted) return null;
 
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-      <h3 className="font-bold text-slate-900 text-base flex items-center">
-        <ClipboardCheck size={18} className="mr-2 text-purple-600" /> Final Account Profile Data
-      </h3>
+  const rows = [
+    ['Managing Partner', customer.managingPartnerName, 'BIN Number', customer.binNumber],
+    ['TIN Number', customer.tinNumber, 'Destinations', customer.destinations],
+    ['Preferred Carrier', customer.preferredCarrier, 'Nature of Business', customer.natureOfBusiness],
+    ['Area', customer.area, 'Zone', customer.zone],
+    ['Type', findLabel(GAIN_TYPE_OPTIONS, customer.gainType), 'Mode', findLabel(FINANCE_MODE_OPTIONS, customer.financeMode)],
+    ['Final Amount Limit (BDT)', customer.creditLimitTk, 'Final Time Limit (Days)', customer.creditPeriodDays],
+  ];
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="Managing Partner" value={customer.managingPartnerName} />
-        <Field label="BIN Number" value={customer.binNumber} />
-        <Field label="TIN Number" value={customer.tinNumber} />
-        <Field label="Destinations" value={customer.destinations} />
-        <Field label="Preferred Carrier" value={customer.preferredCarrier} />
-        <Field label="Nature of Business" value={customer.natureOfBusiness} />
-        <Field label="Area" value={customer.area} />
-        <Field label="Zone" value={customer.zone} />
-        <Field label="Type" value={findLabel(GAIN_TYPE_OPTIONS, customer.gainType)} />
-        <Field label="Mode" value={findLabel(FINANCE_MODE_OPTIONS, customer.financeMode)} />
-        <Field label="Final Amount Limit (BDT)" value={customer.creditLimitTk} />
-        <Field label="Final Time Limit (Days)" value={customer.creditPeriodDays} />
+  return (
+    <div>
+      <div className="px-1 pb-2.5">
+        <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+          <ClipboardCheck size={16} className="text-purple-600" /> Final Account Profile Data
+        </h3>
       </div>
-      {customer.specialInstructions && <Field label="Special Instructions" value={customer.specialInstructions} />}
+
+      <table className="w-full text-sm border-collapse table-fixed bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <colgroup>
+          <col className="w-[30%] sm:w-[22%]" />
+          <col className="w-[70%] sm:w-[28%]" />
+          <col className="hidden sm:table-column sm:w-[22%]" />
+          <col className="hidden sm:table-column sm:w-[28%]" />
+        </colgroup>
+        <tbody>
+          {rows.map(([l1, v1, l2, v2], i) => (
+            <tr key={i} className={`border-b border-slate-100 last:border-b-0 ${i % 2 ? 'bg-slate-50/60' : ''}`}>
+              <td className="px-4 sm:px-5 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                {l1}
+              </td>
+              <td className="px-4 sm:px-5 py-3 align-top font-medium text-slate-800 break-words">
+                {v1 || '—'}
+              </td>
+              <td className="hidden sm:table-cell px-5 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide border-l border-slate-100">
+                {l2}
+              </td>
+              <td className="hidden sm:table-cell px-5 py-3 align-top font-medium text-slate-800 break-words">
+                {v2 || '—'}
+              </td>
+            </tr>
+          ))}
+          {/* mobile: right-hand pair stacked */}
+          {rows.map(([, , l2, v2], i) => (
+            <tr key={`m-${i}`} className={`sm:hidden border-b border-slate-100 last:border-b-0 ${i % 2 ? 'bg-slate-50/60' : ''}`}>
+              <td className="px-4 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                {l2}
+              </td>
+              <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
+                {v2 || '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {customer.specialInstructions && (
+        <div className="mt-3">
+          <table className="w-full text-sm border-collapse bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <tbody>
+              <tr>
+                <td className="px-4 sm:px-5 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide w-[30%] sm:w-[22%]">
+                  Special Instructions
+                </td>
+                <td className="px-4 sm:px-5 py-3 align-top font-medium text-slate-800 break-words">
+                  {customer.specialInstructions}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

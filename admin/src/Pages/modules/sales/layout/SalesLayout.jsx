@@ -6,7 +6,6 @@ import SalesSidebar from './SalesSidebar';
 import React,{ useEffect, useState } from 'react';
 import Toast from '../../../../Components/Shared/Toast';
 import { useToast } from '../../../../Components/hooks/useToast';
-import { getSocket } from '../../../../Components/services/socketService';
 import ErrorBoundary from '../../../../Components/Shared/ErrorBoundary';
 import BarcodeSearchBar from '../components/BarcodeSearchBar';
 import PrintTemplate from '../components/PrintTemplate';

@@ -1,6 +1,6 @@
 // src/Components/hooks/useToast.js
 import { useContext } from 'react';
-import { ToastContext } from '../context/ToastContext';
+import { ToastContext } from '../context/ToastContextObject';
 
 export const useToast = () => {
   const ctx = useContext(ToastContext);

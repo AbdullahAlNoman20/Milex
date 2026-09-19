@@ -1,8 +1,9 @@
 // src/Components/Shared/BarcodeBadge.jsx
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { FileDigit } from 'lucide-react';
 
-const BARCODE_PATTERN = /^(REF-)?[A-Z0-9]{5,20}(-R[0-9]+)?$/;
+// Allows the optional IB direction marker that inbound references carry.
+const BARCODE_PATTERN = /^(REF-)?[A-Z0-9]{5,24}(-R[0-9]+)?$/;
 
 const BarcodeBadge = ({ value, variant = 'default', className = '', showBars = true }) => {
   const isValid = useMemo(() => typeof value === 'string' && BARCODE_PATTERN.test(value), [value]);
@@ -11,7 +12,7 @@ const BarcodeBadge = ({ value, variant = 'default', className = '', showBars = t
     let seed = 0;
     const base = value.replace(/^REF-/, '').split('-R')[0];
     for (let i = 0; i < base.length; i++) seed = (seed * 31 + base.charCodeAt(i)) >>> 0;
-    return Array.from({ length: 32 }, (_, i) => {
+    return Array.from({ length: 32 }, () => {
       seed = (seed * 1103515245 + 12345) >>> 0;
       return (seed % 100) > 50 ? 2 : 4;
     });

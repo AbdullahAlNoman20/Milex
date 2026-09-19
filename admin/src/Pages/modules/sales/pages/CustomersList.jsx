@@ -1,7 +1,9 @@
- // admin/src/Pages/modules/sales/pages/CustomersList.jsx
-import { useMemo, useState, useEffect } from 'react';
+// admin/src/Pages/modules/sales/pages/CustomersList.jsx
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, X } from 'lucide-react';
 import { useSales } from '../hooks/useSales';
+import { usePagedCustomers } from '../hooks/usePagedCustomers';
 import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Countdown from '../../../../Components/Shared/Countdown';
@@ -15,62 +17,102 @@ const TABS = [
   { key: 'pending', label: 'Pending' },
 ];
 
+const PAGE_SIZE = 10;
+
 const CustomersList = () => {
-  const { customers, isLoading, loadError, setSelectedCustomer } = useSales();
+  const { setSelectedCustomer, reloadToken } = useSales();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(TABS.some((t) => t.key === tabParam) ? tabParam : 'customer');
-  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(
+    TABS.some((t) => t.key === tabParam) ? tabParam : 'customer'
+  );
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
+  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
 
+  // The tab can also arrive from the URL (the dashboard tiles link straight
+  // to a specific tab), so this reconciles React state with that external
+  // source. It only assigns when the value has actually changed, so there is
+  // no cascade.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (tabParam && TABS.some((t) => t.key === tabParam)) setActiveTab(tabParam);
+    if (tabParam && TABS.some((t) => t.key === tabParam)) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setActiveTab(tabParam);
+      setPage(1);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
   }, [tabParam]);
 
-  useEffect(() => {
+  // Anything that narrows the result set also sends the reader back to the
+  // first page, done in the handler that caused it rather than in an effect
+  // reacting to it afterwards.
+  const changeTab = (key) => {
+    setActiveTab(key);
     setPage(1);
-  }, [activeTab]);
+  };
+  const changeSearch = (value) => {
+    setSearch(value);
+    setPage(1);
+  };
 
-  const grouped = useMemo(
-    () => ({
-      pending: customers.filter((c) => [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(c.status)),
-      provisional: customers.filter((c) => c.accountProfileType === 'PROVISIONAL' && c.status !== STATUS.ACTIVE),
-      customer: customers.filter((c) => c.status === STATUS.ACTIVE),
-    }),
-    [customers]
-  );
+  const { items, total, totalPages, counts, isLoading, error } = usePagedCustomers({
+    group: activeTab,
+    page,
+    pageSize: PAGE_SIZE,
+    search,
+    withCounts: true,
+    reloadToken,
+  });
 
-  const rows = grouped[activeTab] || [];
-  const columnCount = activeTab === 'provisional' ? 6 : 5;
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const pageClamped = Math.min(page, totalPages);
-  const pagedRows = rows.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
+  const columnCount = activeTab === 'provisional' ? 7 : 6;
 
   const openCustomer = (c) => {
     setSelectedCustomer(c);
     navigate(`/app/customers/${encodeURIComponent(c.barcode)}`);
   };
 
-  if (isLoading) return <Loader fullScreen label="Loading customers..." />;
-  if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
+  if (error) return <p className="text-sm text-red-600 font-semibold">{error}</p>;
 
   return (
     <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-      <h2 className="text-2xl font-bold text-slate-800 mb-4">Customers</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h2 className="text-2xl font-bold text-slate-800">Customers</h2>
+        <div className="relative w-full sm:w-72">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => changeSearch(e.target.value)}
+            maxLength={100}
+            placeholder="Search name, code or reference..."
+            className="w-full pl-9 pr-8 py-2.5 rounded-lg border border-slate-200 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => changeSearch('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
 
-      <div className="flex gap-2 mb-6 border-b border-slate-200">
+      <div className="flex gap-2 mb-6 border-b border-slate-200 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
-            onClick={() => setActiveTab(t.key)}
-            className={`px-5 py-2.5 text-sm font-bold border-b-2 transition ${
-              activeTab === t.key ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400 hover:text-slate-600'
+            onClick={() => changeTab(t.key)}
+            className={`px-5 py-2.5 text-sm font-bold border-b-2 transition whitespace-nowrap ${
+              activeTab === t.key
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
           >
-            {t.label} <span className="ml-1 text-xs font-normal">({grouped[t.key].length})</span>
+            {t.label}{' '}
+            <span className="ml-1 text-xs font-normal">({counts ? counts[t.key] : '—'})</span>
           </button>
         ))}
       </div>
@@ -89,12 +131,22 @@ const CustomersList = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
-            {rows.length === 0 ? (
+            {isLoading ? (
               <tr>
-                <td colSpan={columnCount} className="p-8 text-center text-slate-400">No customers in this category.</td>
+                <td colSpan={columnCount} className="p-10">
+                  <Loader label="Loading customers..." />
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={columnCount} className="p-8 text-center text-slate-400">
+                  {search.trim()
+                    ? 'No customer matches your search in this category.'
+                    : 'No customers in this category.'}
+                </td>
               </tr>
             ) : (
-              pagedRows.map((c) => (
+              items.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50 transition">
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold">
@@ -118,7 +170,11 @@ const CustomersList = () => {
                   <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>
                   {activeTab === 'provisional' && (
                     <td className="p-4">
-                      {c.status === STATUS.PROVISIONAL_ACTIVE ? <Countdown expiryDate={c.provisionalExpiryDate} /> : <span className="text-xs text-slate-400">—</span>}
+                      {c.status === STATUS.PROVISIONAL_ACTIVE ? (
+                        <Countdown expiryDate={c.provisionalExpiryDate} />
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   )}
                   <td className="p-4 pr-6 text-right">
@@ -136,7 +192,13 @@ const CustomersList = () => {
           </tbody>
         </table>
       </div>
-      <Pagination page={pageClamped} totalPages={totalPages} totalItems={rows.length} pageSize={PAGE_SIZE} onChange={setPage} />
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={total}
+        pageSize={PAGE_SIZE}
+        onChange={setPage}
+      />
     </div>
   );
 };

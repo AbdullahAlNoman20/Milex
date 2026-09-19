@@ -9,11 +9,18 @@ export const listCustomersHandler = async (req: Request, res: Response, next: Ne
     const page = Math.max(1, Number(req.query.page) || 1);
     // Raised from 300: the client pages through the full set, and a larger
     // page means far fewer round trips once there are thousands of records.
-    const pageSize = Math.min(1000, Math.max(1, Number(req.query.pageSize) || 500));
+    // No practical ceiling: the client pages through the entire set, so a
+    // low cap here silently hid records that exist in the database.
+    const pageSize = Math.min(2000, Math.max(1, Number(req.query.pageSize) || 1000));
     const result = await customersService.listCustomers(
       page,
       pageSize,
-      { status: asOptionalString(req.query.status), search: asOptionalString(req.query.search) },
+      {
+        status: asOptionalString(req.query.status),
+        search: asOptionalString(req.query.search),
+        group: asOptionalString(req.query.group),
+        withCounts: asOptionalString(req.query.withCounts) === 'true',
+      },
       { id: req.user!.id, role: req.user!.role }
     );
     return sendSuccess(res, result);
@@ -37,7 +44,7 @@ export const getCustomerHandler = async (req: Request, res: Response, next: Next
 
 export const createRecommendationHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const customer = await customersService.createRecommendation(req.body, req.user!.id);
+    const customer = await customersService.createRecommendation(req.body, req.user!.id, req.user!.role);
     return sendSuccess(res, { customer }, 201);
   } catch (err) {
     next(err);
@@ -54,29 +61,42 @@ const wrap = (fn: (req: Request) => Promise<unknown>) => async (req: Request, re
   }
 };
 
-export const approveRateHandler = wrap((req) => customersService.approveRate(asString(req.params.id), req.body, req.user!.id));
+export const approveRateHandler = wrap((req) => customersService.approveRate(asString(req.params.id), req.body, req.user!.id, req.user!.role));
 export const rejectRateHandler = wrap((req) => customersService.rejectRate(asString(req.params.id), req.user!.id));
 export const draftOfferHandler = wrap((req) => customersService.draftOffer(asString(req.params.id), req.user!.id));
 export const finalizeOfferHandler = wrap((req) =>
-  customersService.finalizeOffer(asString(req.params.id), req.body.offerText, req.user!.id)
+  customersService.finalizeOffer(asString(req.params.id), req.body.offerText, req.user!.id, req.body.sentVia)
 );
+
+export const listCorrespondenceHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await customersService.listCorrespondence(asString(req.params.id), {
+      id: req.user!.id,
+      role: req.user!.role,
+    });
+    return sendSuccess(res, { items });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
 export const sendAgreementHandler = wrap((req) =>
   customersService.sendAgreement(asString(req.params.id), req.body.agreementText, req.user!.id)
 );
 export const clientFeedbackHandler = wrap((req) =>
-  customersService.submitClientFeedback(asString(req.params.id), req.body, req.user!.id)
+  customersService.submitClientFeedback(asString(req.params.id), req.body, req.user!.id, req.user!.role)
 );
 export const reviseRateHandler = wrap((req) =>
-  customersService.reviseRateAfterRejection(asString(req.params.id), req.body.proposedRate, req.user!.id)
+  customersService.reviseRateAfterRejection(asString(req.params.id), req.body.proposedRate, req.user!.id, req.user!.role)
 );
 export const draftAgreementHandler = wrap((req) => customersService.draftAgreement(asString(req.params.id), req.user!.id));
 export const finalizeAgreementHandler = wrap((req) =>
   customersService.finalizeAgreement(asString(req.params.id), req.body.agreementText, req.user!.id)
 );
-export const activateProvisionalHandler = wrap((req) => customersService.activateAsProvisional(asString(req.params.id), req.user!.id));
-export const activateDirectHandler = wrap((req) => customersService.activateDirectly(asString(req.params.id), req.user!.id));
+export const activateProvisionalHandler = wrap((req) => customersService.activateAsProvisional(asString(req.params.id), req.user!.id, req.user!.role));
+export const activateDirectHandler = wrap((req) => customersService.activateDirectly(asString(req.params.id), req.user!.id, req.user!.role));
 export const requestInfoUpdateHandler = wrap((req) =>
-  customersService.requestInfoUpdate(asString(req.params.id), req.body.field, req.body.newValue, req.user!.id)
+  customersService.requestInfoUpdate(asString(req.params.id), req.body.field, req.body.newValue, req.user!.id, req.user!.role)
 );
 export const decideInfoUpdateHandler = wrap((req) =>
   customersService.decideInfoUpdate(asString(req.params.id), req.body.approve, req.user!.id)
@@ -183,9 +203,11 @@ export const deleteCustomerHandler = async (req: Request, res: Response, next: N
   }
 };
 
-export const reassignCustomerHandler = wrap((req) => customersService.reassignCustomer(asString(req.params.id), req.body.newKamId, req.user!.id));
+export const reassignCustomerHandler = wrap((req) =>
+  customersService.reassignCustomer(asString(req.params.id), req.body.newKamId, req.user!.id, req.user!.role)
+);
 export const reapproveRateHandler = wrap((req) =>
-  customersService.reapproveRateAfterRejection(asString(req.params.id), req.body.approvedRate, req.body.lmNote, req.user!.id)
+  customersService.reapproveRateAfterRejection(asString(req.params.id), req.body.approvedRate, req.body.lmNote, req.user!.id, req.user!.role)
 );
 
 export const listEditHistoryHandler = async (req: Request, res: Response, next: NextFunction) => {

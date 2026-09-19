@@ -6,7 +6,7 @@ import { sendSuccess } from '../../common/utils/apiResponse.util';
 export const listAuditLogsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
+    const pageSize = Math.min(5000, Math.max(1, Number(req.query.pageSize) || 1000));
     const entity = typeof req.query.entity === 'string' ? req.query.entity : undefined;
 
     const [items, total] = await Promise.all([

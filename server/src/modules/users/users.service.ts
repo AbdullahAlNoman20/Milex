@@ -72,6 +72,16 @@ export const updateUser = async (
       message: 'A Super Admin account\'s role can\'t be changed here.',
     };
   }
+  // A customer's login is derived from their customer record, so turning it
+  // into a staff account would leave that record pointing at a user who is
+  // no longer the customer.
+  if (before.role.name === 'CUSTOMER' && updates.role && updates.role !== 'CUSTOMER') {
+    throw {
+      statusCode: 403,
+      code: 'CUSTOMER_ACCOUNT_PROTECTED',
+      message: 'A customer login can\'t be converted into a staff account.',
+    };
+  }
 
   if (updates.lineManagerId) {
     await assertUserIsLineManager(updates.lineManagerId);
@@ -203,16 +213,21 @@ export const listStaffDirectory = async (lineManagerId?: string) => {
 // uploads, weekly plans, etc.) — into one timeline. No new logging pipeline
 // needed; this just reads what's already being recorded.
 export const getUserActivity = async (userId: string) => {
+  // Hard ceiling of 100 entries per person: only the 100 most recent items
+  // are ever shown, oldest simply fall off the end. Nothing is deleted from
+  // AuditLog itself, so the full record stays intact for edit history and
+  // compliance — this is a display window only.
+  const ACTIVITY_LIMIT = 100;
   const [logins, actions] = await Promise.all([
     prisma.loginLog.findMany({
       where: { userId, success: true },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: ACTIVITY_LIMIT,
     }),
     prisma.auditLog.findMany({
       where: { actorId: userId },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: ACTIVITY_LIMIT,
     }),
   ]);
 
@@ -233,7 +248,7 @@ export const getUserActivity = async (userId: string) => {
     })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  return merged.slice(0, 150);
+  return merged.slice(0, ACTIVITY_LIMIT);
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

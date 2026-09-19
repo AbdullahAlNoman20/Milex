@@ -1,6 +1,7 @@
 // FILE: admin/src/Pages/modules/sales/roles/KAM/WeeklySalesPlan.jsx
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Trash2, Save, Pencil, Loader2, X, CalendarCheck, Lock } from "lucide-react";
+import { Plus, Trash2, Save, Pencil, Loader2, X, CalendarCheck, Lock, FileSpreadsheet } from "lucide-react";
+import WeeklyPlanImportModal from "./WeeklyPlanImportModal";
 import { useToast } from "../../../../../Components/hooks/useToast";
 import { todayLocalISO } from "../../../../../Components/utils/date";
 import {
@@ -19,6 +20,7 @@ const buildEmptyPlan = (weekStartDate = getWeekStart()) => ({
   weekStartDate,
   existingVisits: [],
   prospectVisits: [],
+  loadedAt: new Date().toISOString(),
 });
 
 const isNewRow = (id) => typeof id === "string" && id.startsWith("v_");
@@ -252,14 +254,18 @@ const WeeklySalesPlan = () => {
   const [activeTab, setActiveTab] = useState(VISIT_SECTIONS.EXISTING);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPreviousPlans, setShowPreviousPlans] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const loadPlans = useCallback(async () => {
     setIsLoading(true);
     try {
       const plans = await listPlansForKam();
+      const loadedAt = new Date().toISOString();
       setAllPlans(plans);
       const existingForWeek = plans.find((p) => p.weekStartDate === currentWeekStart);
-      setPlan(existingForWeek || buildEmptyPlan(currentWeekStart));
+      setPlan(
+        existingForWeek ? { ...existingForWeek, loadedAt } : buildEmptyPlan(currentWeekStart)
+      );
       setEditingRowIds(new Set());
     } catch (err) {
       showToast(err?.message || "Failed to load weekly plans", "error");
@@ -274,10 +280,7 @@ const WeeklySalesPlan = () => {
     loadPlans();
   }, [loadPlans]);
 
-  const addVisit = (section, visitData) => {
-    const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
-    setPlan((prev) => ({ ...prev, [key]: [...prev[key], visitData] }));
-  };
+
 
   // Saves the visit to the server immediately when added from the modal,
   // instead of leaving it only in local state until the person separately
@@ -296,7 +299,7 @@ const WeeklySalesPlan = () => {
         prospectVisits: updatedPlan.prospectVisits.map(sanitizeVisit),
       };
       const saved = await savePlan(sanitizedPlan);
-      setPlan(saved);
+      setPlan({ ...saved, loadedAt: new Date().toISOString() });
       setEditingRowIds(new Set());
       setAllPlans((prev) => {
         const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
@@ -333,14 +336,17 @@ const WeeklySalesPlan = () => {
     return true;
   };
 
+// Only the fields the server's schema accepts, and nothing else. The visit
+// objects held here also carry display-only state — completion status, the
+// unlock flag, the outcome pulled from the daily report — and a strict
+// schema rejects the whole save if any of that travels with it.
 const sanitizeVisit = (v) => ({
-    ...v,
-    customerName: v.customerName || "",
-    purpose: v.purpose || "",
+    id: v.id,
     day: v.day || "",
-    reasonIfNotCompleted: v.reasonIfNotCompleted || "",
-    outcomeNotes: v.outcomeNotes || "",
+    customerName: v.customerName || "",
     customerId: v.customerId ?? null,
+    purpose: v.purpose || "",
+    outcomeNotes: v.outcomeNotes ?? undefined,
   });
 
   const handleSave = async () => {
@@ -355,7 +361,9 @@ const sanitizeVisit = (v) => ({
         prospectVisits: plan.prospectVisits.map(sanitizeVisit),
       };
       const saved = await savePlan(sanitizedPlan);
-      setPlan(saved);
+      // The response is the authoritative state, so the freshness marker
+      // restarts from this moment rather than the original page load.
+      setPlan({ ...saved, loadedAt: new Date().toISOString() });
       setEditingRowIds(new Set());
       setAllPlans((prev) => {
         const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
@@ -370,8 +378,43 @@ const sanitizeVisit = (v) => ({
     }
   };
 
+  // Imported rows are saved immediately, in one write, for the same reason a
+  // visit added from the modal is: a spreadsheet the person just uploaded
+  // sitting only in the browser is a plan they think they have and don't.
+  const importVisits = async ({ existing, prospect }) => {
+    if (saveLockRef.current) return;
+    setShowImport(false);
+    if (existing.length === 0 && prospect.length === 0) return;
+    saveLockRef.current = true;
+    setIsSaving(true);
+    try {
+      const merged = {
+        ...plan,
+        existingVisits: [...plan.existingVisits, ...existing].map(sanitizeVisit),
+        prospectVisits: [...plan.prospectVisits, ...prospect].map(sanitizeVisit),
+      };
+      const saved = await savePlan(merged);
+      setPlan({ ...saved, loadedAt: new Date().toISOString() });
+      setEditingRowIds(new Set());
+      setAllPlans((prev) => {
+        const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
+        return [saved, ...others].sort((a, b) => (a.weekStartDate < b.weekStartDate ? 1 : -1));
+      });
+      showToast(
+        `${existing.length + prospect.length} visit(s) imported — ${existing.length} existing, ${prospect.length} prospect`,
+        'success',
+        7000
+      );
+    } catch (err) {
+      showToast(err?.message || 'Could not import the plan', 'error');
+    } finally {
+      saveLockRef.current = false;
+      setIsSaving(false);
+    }
+  };
+
   const loadWeekIntoForm = (p) => {
-    setPlan(p);
+    setPlan({ ...p, loadedAt: new Date().toISOString() });
     setEditingRowIds(new Set());
     setShowPreviousPlans(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -437,6 +480,15 @@ const sanitizeVisit = (v) => ({
               >
                 Previous Plans
               </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={() => setShowImport(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-[#E5E7EB] bg-white text-[#0D8A68] rounded-[10px] text-xs font-bold hover:bg-emerald-50/50 transition"
+                >
+                  <FileSpreadsheet size={13} /> Import from Excel
+                </button>
+              )}
               {!isReadOnly && (
                 <button
                   type="button"
@@ -634,6 +686,10 @@ const sanitizeVisit = (v) => ({
             addVisitAndSave(activeTab, visitData);
           }}
         />
+      )}
+
+      {showImport && (
+        <WeeklyPlanImportModal onClose={() => setShowImport(false)} onImport={importVisits} />
       )}
 
       {showPreviousPlans && (

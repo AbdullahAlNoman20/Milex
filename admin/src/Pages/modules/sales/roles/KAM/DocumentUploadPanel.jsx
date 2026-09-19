@@ -8,15 +8,16 @@ import { useSales } from '../../hooks/useSales';
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 const DOCUMENT_CATEGORIES = [
-  { key: 'SIGNED_OFFER_LETTER', label: 'Signed Offer Letter (Customer Copy) *', hasMeta: false },
-  { key: 'OFFER_RATE_RECEIPT', label: 'Signed Offer & Rate Receipt (Hard Copy Scan) *', hasMeta: false },
+  { key: 'SIGNED_OFFER_LETTER', label: 'Signed Offer Letter (Customer Copy)', hasMeta: false },
   { key: 'SIGNED_AGREEMENT', label: 'Signed Agreement', hasMeta: false },
   // TIN/BIN numbers are already captured in "Final Account Profile Data"
   // above — showing a duplicate Number field here just for the file upload
   // was redundant, so it's removed for these two categories.
-  { key: 'CUSTOMER_TIN', label: 'Customer TIN *', hasMeta: false },
-  { key: 'CUSTOMER_BIN', label: 'Customer BIN *', hasMeta: false },
-  { key: 'TRADE_LICENSE', label: 'Trade License *', hasMeta: true },
+  { key: 'CUSTOMER_TIN', label: 'Customer TIN', hasMeta: false },
+  { key: 'CUSTOMER_BIN', label: 'Customer BIN', hasMeta: false },
+  // The trade licence carries a real expiry date the business needs to act
+  // on, so it is the one category that must be present and dated.
+  { key: 'TRADE_LICENSE', label: 'Trade License *', hasMeta: true, requiresExpiry: true },
   { key: 'OTHERS', label: 'Others Document', hasMeta: true },
 ];
 
@@ -53,6 +54,12 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       e.target.value = '';
       return showToast('File exceeds 10MB limit', 'warning');
+    }
+    // The expiry drives a renewal reminder, so a trade licence without one
+    // would silently never be chased.
+    if (category.requiresExpiry && !expiry) {
+      e.target.value = '';
+      return showToast('Enter the expiry date before uploading the Trade License', 'warning');
     }
     onUpload(category.key, file, number, expiry);
     e.target.value = '';
@@ -96,7 +103,9 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
       {category.hasMeta && (
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Number</label>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">
+              Number
+            </label>
             <input
               className="w-full border border-slate-200 p-1.5 rounded text-xs outline-none focus:border-emerald-500"
               value={number}
@@ -105,10 +114,14 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
             />
           </div>
           <div>
-            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Expiry Date</label>
+            <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">
+              Expiry Date {category.requiresExpiry && <span className="text-red-500">*</span>}
+            </label>
             <input
               type="date"
-              className="w-full border border-slate-200 p-1.5 rounded text-xs outline-none focus:border-emerald-500"
+              className={`w-full border p-1.5 rounded text-xs outline-none focus:border-emerald-500 ${
+                category.requiresExpiry && !expiry ? 'border-red-300' : 'border-slate-200'
+              }`}
               value={expiry}
               onChange={(e) => setExpiry(e.target.value)}
             />
@@ -169,7 +182,7 @@ const OfferLetterAutoCard = ({ customer }) => {
   );
 };
 
-const REQUIRED_DOC_TYPES = ['SIGNED_OFFER_LETTER', 'OFFER_RATE_RECEIPT', 'CUSTOMER_TIN', 'CUSTOMER_BIN', 'TRADE_LICENSE'];
+const REQUIRED_DOC_TYPES = ['TRADE_LICENSE'];
 
 const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
   const { showToast } = useToast();
@@ -226,7 +239,9 @@ const DocumentUploadPanel = ({ customer, onUploaded, embedded = false }) => {
           <p className="text-xs text-slate-500 mt-1">
             Upload PDF, image, or Word files for each category. Maximum file size 10MB.
           </p>
-          <p className="text-[11px] text-red-500 font-semibold mt-1">* Required for final onboarding approval</p>
+          <p className="text-[11px] text-red-500 font-semibold mt-1">
+            * Trade License (with its expiry date) is required for final onboarding. Everything else is optional.
+          </p>
         </div>
         <button
           type="button"

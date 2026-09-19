@@ -104,12 +104,15 @@ export const getReportByDate = async (kamId: string, date: string) => {
   };
 };
 
-export const listReportsForKam = async (kamId: string) =>
+// No limit by default — Team Reports filters by date across the full history,
+// so anything the database holds must be reachable. Callers that only need a
+// recent window (the personal activity page) pass one explicitly.
+export const listReportsForKam = async (kamId: string, limit?: number) =>
   prisma.dailyReport.findMany({
     where: { kamId },
     include: { visits: true },
     orderBy: { date: 'desc' },
-    take: 60,
+    ...(limit ? { take: limit } : {}),
   });
 
 const cleanVisit = (v: any) => ({

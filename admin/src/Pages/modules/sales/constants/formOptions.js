@@ -21,15 +21,32 @@ export const BUSINESS_TYPE_OPTIONS = Object.freeze([
   'Pharmaceuticals',
 ]);
 
-export const ACCOUNT_MODE_OPTIONS = Object.freeze(['Express', 'Freight']);
+export const ACCOUNT_MODE_OPTIONS = Object.freeze(['Express', 'Freight', 'Express & Freight']);
 
 export const ACCOUNT_TYPE_OPTIONS = Object.freeze(['CREDIT CUSTOMER', 'CASH']);
 
-export const SERVICE_REQUIRED_OPTIONS = Object.freeze(['IB', 'OB', 'BOTH']);
+// Stored values stay 'IB' / 'OB' / 'BOTH' — only the wording shown changes,
+// so nothing already in the database has to be rewritten.
+export const SERVICE_REQUIRED_OPTIONS = Object.freeze([
+  { value: 'IB', label: 'IB' },
+  { value: 'OB', label: 'OB' },
+  { value: 'BOTH', label: 'IB & OB' },
+]);
 
 export const SHIPMENT_TYPE_OPTIONS = Object.freeze(['Document', 'Non-Document', 'Others']);
 
-export const RATE_FOR_OPTIONS = Object.freeze(['Import', 'Export', 'Both']);
+// 'Both' removed: a route is either inbound or outbound, and the combined
+// option made the shipping table ambiguous to read.
+export const RATE_FOR_OPTIONS = Object.freeze(['Import', 'Export']);
+
+// Free-typed designations produced a dozen spellings of the same three or
+// four titles, which made the printed profile inconsistent.
+export const DESIGNATION_OPTIONS = Object.freeze([
+  'MD',
+  'MP',
+  'Director',
+  'Proprietor',
+]);
 
 export const buildEmptyShippingRow = () => ({
   shipmentType: [],

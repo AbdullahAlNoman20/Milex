@@ -1,7 +1,7 @@
 // admin/src/Pages/modules/sales/services/userAdminService.js
 import { request } from '../../../../Components/services/api';
 
-export const listAllUsers = async (page = 1, pageSize = 200) => {
+export const listAllUsers = async (page = 1, pageSize = 5000) => {
   const { data } = await request(`/users?page=${page}&pageSize=${pageSize}`);
   return data;
 };

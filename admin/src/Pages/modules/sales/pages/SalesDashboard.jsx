@@ -1,72 +1,52 @@
-// src/Pages/modules/sales/pages/SalesDashboard.jsx
-import { useMemo } from 'react';
+// admin/src/Pages/modules/sales/pages/SalesDashboard.jsx
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FileText, ShieldCheck, Target, Clock, Plus } from 'lucide-react';
 import { useSales } from '../hooks/useSales';
+import { usePagedCustomers } from '../hooks/usePagedCustomers';
 import { useAuth } from '../../../../Components/hooks/useAuth';
-import { ROLES } from '../../../../Components/constants/roles';
 import { hasPermission, PERMISSIONS } from '../../../../Components/constants/permissions';
-import { STATUS } from '../constants/salesStatus';
 import StatusBadge from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
+import Pagination from '../../../../Components/Shared/Pagination';
 
-const roleQueueFilter = (role) => (c) => {
-  if (c.status === STATUS.ACTIVE) return false;
-  switch (role) {
-    case ROLES.SALES_COORDINATOR:
-      // A rejected offer is not theirs to act on until the Line Manager has
-      // approved a new rate, so it is excluded from their queue.
-      return (
-        c.status === STATUS.PROVISIONAL_ACTIVE &&
-        !c.offerRejected &&
-        (!c.offerSent || (c.offerAccepted && !c.agreementSent))
-      );
-    case ROLES.LINE_MANAGER:
-      // A customer who rejected the offer stays provisional (the document
-      // countdown keeps running) but still needs a new rate from the Line
-      // Manager — so it belongs in this queue.
-      if (c.status === STATUS.PROVISIONAL_ACTIVE && c.offerRejected) return true;
-      return [
-        STATUS.PENDING_APPROVAL,
-        STATUS.INFO_UPDATE_PENDING,
-        STATUS.PROVISIONAL_EXTENSION_REQUESTED,
-        STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
-        STATUS.OFFER_REJECTED,
-      ].includes(c.status);
-    case ROLES.KAM:
-      return c.status === STATUS.PROVISIONAL_ACTIVE && c.offerSent && !c.offerAccepted;
-    default:
-      return false;
-  }
-};
+const PAGE_SIZE = 8;
 
 const SalesDashboard = () => {
   const { currentUser } = useAuth();
-  const { customers, isLoading, loadError, setSelectedCustomer } = useSales();
+  const { setSelectedCustomer, reloadToken } = useSales();
   const navigate = useNavigate();
+  const [page, setPage] = useState(1);
 
-  const pendingTasks = useMemo(
-    () => customers.filter(roleQueueFilter(currentUser?.role)),
-    [customers, currentUser]
-  );
+  // The role's own action queue and every headline figure are computed in the
+  // database. They used to be derived by filtering a complete download of the
+  // customer table, which meant the dashboard's cost grew with the company.
+  const { items, total, totalPages, counts, isLoading, error } = usePagedCustomers({
+    group: 'queue',
+    page,
+    pageSize: PAGE_SIZE,
+    withCounts: true,
+    reloadToken,
+  });
 
-  const activeCount = useMemo(() => customers.filter((c) => c.status === STATUS.ACTIVE).length, [customers]);
-  const pipelineCount = customers.length - activeCount;
+  const activeCount = counts?.customer ?? 0;
+  const pipelineCount = counts?.pipeline ?? 0;
+  const totalCount = counts?.all ?? 0;
 
   const openCustomer = (task) => {
     setSelectedCustomer(task);
     navigate(`/app/customers/${encodeURIComponent(task.barcode)}`);
   };
 
-  if (isLoading) return <Loader fullScreen label="Loading dashboard..." />;
-  if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
+  if (isLoading && !counts) return <Loader fullScreen label="Loading dashboard..." />;
+  if (error) return <p className="text-sm text-red-600 font-semibold">{error}</p>;
 
   return (
     <div className="max-w-7xl px-3 sm:mx-auto animate-in fade-in duration-300">
       <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-end gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Overview</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">Key Account Performance & Activity</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">Key Account Performance &amp; Activity</p>
         </div>
         {hasPermission(currentUser?.role, PERMISSIONS.CREATE_RECOMMENDATION) && (
           <button
@@ -111,7 +91,7 @@ const SalesDashboard = () => {
             <ShieldCheck size={16} />
           </div>
           <p className="text-xs text-slate-500 font-medium mb-1">Your Queue</p>
-          <p className="text-2xl font-bold text-slate-800">{pendingTasks.length}</p>
+          <p className="text-2xl font-bold text-slate-800">{counts?.queue ?? 0}</p>
         </button>
         <div className="bg-gradient-to-br from-emerald-800 to-slate-900 p-5 rounded-xl border border-emerald-900 text-white">
           <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center mb-3">
@@ -119,7 +99,7 @@ const SalesDashboard = () => {
           </div>
           <p className="text-xs text-emerald-100 font-medium mb-1">Active Ratio</p>
           <p className="text-3xl font-bold">
-            {customers.length ? Math.round((activeCount / customers.length) * 100) : 0}
+            {totalCount ? Math.round((activeCount / totalCount) * 100) : 0}
             <span className="text-lg font-normal">%</span>
           </p>
         </div>
@@ -139,17 +119,22 @@ const SalesDashboard = () => {
           </button>
         </div>
         <div className="divide-y divide-slate-100 min-h-[160px]">
-          {pendingTasks.length === 0 ? (
+          {isLoading ? (
+            <div className="p-8">
+              <Loader label="Loading queue..." />
+            </div>
+          ) : items.length === 0 ? (
             <div className="p-8 text-center text-slate-400 font-medium">No tasks pending for your role</div>
           ) : (
-            pendingTasks.map((task) => (
-              <div key={task.id} className="p-3 sm:p-4 hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                <button
-                  type="button"
-                  onClick={() => openCustomer(task)}
-                  className="min-w-0 text-left"
-                >
-                  <p className="font-bold text-slate-800 truncate hover:text-emerald-700 transition">{task.accountName}</p>
+            items.map((task) => (
+              <div
+                key={task.id}
+                className="p-3 sm:p-4 hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4"
+              >
+                <button type="button" onClick={() => openCustomer(task)} className="min-w-0 text-left">
+                  <p className="font-bold text-slate-800 truncate hover:text-emerald-700 transition">
+                    {task.accountName}
+                  </p>
                   <div className="flex items-center mt-1 gap-3 flex-wrap">
                     <span className="font-mono text-xs text-slate-500 border rounded px-1.5">{task.barcode}</span>
                     <StatusBadge status={task.status} size="sm" />
@@ -166,6 +151,14 @@ const SalesDashboard = () => {
             ))
           )}
         </div>
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalItems={total}
+          pageSize={PAGE_SIZE}
+          onChange={setPage}
+          className="px-4"
+        />
       </div>
     </div>
   );

@@ -16,7 +16,13 @@ const adapter = new PrismaPg(pool);
 
 export const prisma = new PrismaClient({
   adapter,
-  log: env.IS_PRODUCTION ? ['error', 'warn'] : ['error', 'warn', 'query'],
+  // Query logging is opt-in rather than always-on in development: it buries
+  // the output of anything else that runs against the database, seeding most
+  // of all. Set PRISMA_LOG_QUERIES=true when you actually want to see them.
+  log:
+    !env.IS_PRODUCTION && process.env.PRISMA_LOG_QUERIES === 'true'
+      ? ['error', 'warn', 'query']
+      : ['error', 'warn'],
 });
 
 export const disconnectDb = async () => {

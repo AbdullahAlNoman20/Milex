@@ -28,7 +28,15 @@ const NotificationBell = () => {
     setOpen(false);
     if (!n.isRead) {
       markReadLocally([n.id]);
-      markNotificationRead(n.id).catch(() => refresh());
+      // A socket-pushed item carries a temporary client id ("live_…") that
+      // no server row matches, so calling the API with it silently did
+      // nothing and the badge crept back up on the next poll. For those we
+      // just refetch, which returns the real row already marked correctly.
+      if (typeof n.id === 'string' && n.id.startsWith('live_')) {
+        refresh();
+      } else {
+        markNotificationRead(n.id).catch(() => refresh());
+      }
     }
     navigate(n.link);
   };

@@ -59,7 +59,10 @@ useEffect(() => {
     // page looking empty even though their login/action history existed.
     // allSettled lets the activity log populate independently of whether
     // the reports call succeeds.
-    Promise.allSettled([getMyActivity(), listMyReports()])
+    // Only the reports from roughly the last quarter are needed to show
+    // skipped visits — pulling a KAM's entire history just to count them was
+    // fine at sixty rows and is not at two years' worth.
+    Promise.allSettled([getMyActivity(), listMyReports(90)])
       .then(([activityResult, reportsResult]) => {
         setItems(activityResult.status === 'fulfilled' ? activityResult.value : []);
         const reports = reportsResult.status === 'fulfilled' ? reportsResult.value : [];

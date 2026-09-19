@@ -8,13 +8,24 @@ const CSRF_COOKIE_NAME = 'csrf_token';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 const STATE_CHANGING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
+// Cross-site cookies REQUIRE secure+SameSite=None, but a browser silently
+// drops those over plain http — which is exactly what local development
+// uses, and why every POST used to 403 there. Production keeps the strict
+// cross-site setting; development falls back to a same-site cookie.
+export const COOKIE_SECURITY = Object.freeze({
+  secure: env.IS_PRODUCTION,
+  sameSite: (env.IS_PRODUCTION ? 'none' : 'lax') as 'none' | 'lax',
+  domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
+});
+
+const CSRF_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const issueCsrfCookie = (res: Response) => {
   const token = crypto.randomBytes(32).toString('hex');
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: false,
-    secure: true,
-    sameSite: 'none',
-    domain: env.COOKIE_DOMAIN === 'localhost' ? undefined : env.COOKIE_DOMAIN,
+    ...COOKIE_SECURITY,
+    maxAge: CSRF_COOKIE_MAX_AGE_MS,
   });
   return token;
 };

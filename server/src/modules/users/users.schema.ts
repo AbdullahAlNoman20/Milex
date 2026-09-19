@@ -10,7 +10,11 @@ export const createUserSchema = z
     // Admin already provisioned and no further one may ever be created
     // through the console. The schema is the enforcement point, so this
     // cannot be bypassed by calling the API directly.
-    role: z.enum(["KAM", "SALES_COORDINATOR", "LINE_MANAGER"], { message: 'Please choose a valid role.' }),
+    // CUSTOMER is absent as well as SUPER_ADMIN: a customer login is created
+    // automatically when their account goes active, never by hand here.
+    role: z.enum(["KAM", "SALES_COORDINATOR", "LINE_MANAGER", "HEAD_OF_DEPARTMENT"], {
+      message: 'Please choose a valid role.',
+    }),
     branchId: z.string().max(100).optional(),
     lineManagerId: z.string().max(100).optional().nullable(),
     sendWelcomeEmail: z.boolean().optional(),
@@ -24,7 +28,9 @@ export const updateUserSchema = z
     // An existing account may not be promoted to Super Admin either — that
     // would be the same thing as creating one.
     role: z
-      .enum(["KAM", "SALES_COORDINATOR", "LINE_MANAGER"], { message: 'Please choose a valid role.' })
+      .enum(["KAM", "SALES_COORDINATOR", "LINE_MANAGER", "HEAD_OF_DEPARTMENT"], {
+        message: 'Please choose a valid role.',
+      })
       .optional(),
     lineManagerId: z.string().max(100).optional().nullable(),
   })

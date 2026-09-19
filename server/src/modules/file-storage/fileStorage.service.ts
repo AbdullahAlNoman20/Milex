@@ -4,7 +4,6 @@
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
 import { env } from '../../config/env';
 import { validateUploadedFile } from '../../common/utils/fileValidation.util';
 
@@ -30,7 +29,10 @@ export const uploadFileToSupabase = async (buffer: Buffer, originalName: string)
   }
 
   const ext = originalName.includes('.') ? originalName.slice(originalName.lastIndexOf('.')) : '';
-  const key = `${uuidv4()}-${Date.now()}${ext}`;
+  // Node's own crypto.randomUUID() — same guarantees as the uuid package,
+  // which is ESM-only and therefore cannot be required from this CommonJS
+  // build at runtime.
+  const key = `${crypto.randomUUID()}-${Date.now()}${ext}`;
 
   await ensureUploadDir();
   const destPath = resolveWithinUploadDir(key);
@@ -62,7 +64,7 @@ export const getSignedDownloadUrl = async (storageKey: string, expiresInSeconds 
 
   const exp = Date.now() + expiresInSeconds * 1000;
   const sig = crypto
-    .createHmac('sha256', env.JWT_ACCESS_SECRET)
+    .createHmac('sha256', env.FILE_SIGNING_SECRET)
     .update(`${storageKey}.${exp}`)
     .digest('hex');
 
@@ -77,7 +79,7 @@ export const verifyDownloadSignature = (storageKey: string, exp: string, sig: st
   if (!expNum || Date.now() > expNum) return false;
 
   const expected = crypto
-    .createHmac('sha256', env.JWT_ACCESS_SECRET)
+    .createHmac('sha256', env.FILE_SIGNING_SECRET)
     .update(`${storageKey}.${exp}`)
     .digest('hex');
 

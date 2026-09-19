@@ -5,9 +5,16 @@ import { useNavigate } from "react-router-dom";
 import { listKams } from "../services/teamService";
 import { deleteCustomer, reassignCustomer } from "../services/customerService";
 import { useToast } from "../../../../Components/hooks/useToast";
+import { useConfirm } from "../../../../Components/hooks/useConfirm";
+import { useAuth } from "../../../../Components/hooks/useAuth";
+import { ROLES } from "../../../../Components/constants/roles";
 
+// Reassigning a customer is a normal management action; removing one is not,
+// so only a Super Admin ever sees that button.
 const AdminCustomerActions = ({ customer, onChanged }) => {
   const { showToast } = useToast();
+  const confirm = useConfirm();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [kams, setKams] = useState([]);
   const [selectedKam, setSelectedKam] = useState("");
@@ -15,6 +22,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showReassign, setShowReassign] = useState(false);
   const actionLockRef = useRef(false);
+  const canDelete = currentUser?.role === ROLES.SUPER_ADMIN;
 
   useEffect(() => {
     if (showReassign && kams.length === 0) {
@@ -27,6 +35,13 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
   const handleReassign = async () => {
     if (actionLockRef.current) return;
     if (!selectedKam) return showToast('Select a KAM to reassign to', 'warning');
+    const target = kams.find((k) => k.id === selectedKam);
+    const ok = await confirm({
+      title: 'Reassign this customer?',
+      message: `${customer.accountName} will move to ${target?.name || 'the selected KAM'}. The previous KAM will no longer see this record in their own list.`,
+      confirmLabel: 'Reassign',
+    });
+    if (!ok) return;
     actionLockRef.current = true;
     setIsReassigning(true);
     try {
@@ -44,7 +59,13 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
 
   const handleDelete = async () => {
     if (actionLockRef.current) return;
-    if (!window.confirm(`Delete customer "${customer.accountName}"? This cannot be undone from the UI.`)) return;
+    const ok = await confirm({
+      title: 'Delete this customer?',
+      message: `"${customer.accountName}" will be removed from every list and can only be brought back from a database backup. This cannot be undone from here.`,
+      confirmLabel: 'Delete customer',
+      tone: 'danger',
+    });
+    if (!ok) return;
     actionLockRef.current = true;
     setIsDeleting(true);
     try {
@@ -61,8 +82,11 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-red-200 p-5 space-y-3">
       <h3 className="font-bold text-slate-900 text-sm flex items-center">
-        <UserCog size={16} className="mr-2 text-red-500" /> Admin Actions
+        <UserCog size={16} className="mr-2 text-red-500" /> Customer Assignment
       </h3>
+      <p className="text-[11px] text-slate-500">
+        Currently handled by <strong>{customer.handledBy?.name || 'nobody'}</strong>. 
+      </p>
       {!showReassign ? (
         <button
           type="button"
@@ -108,6 +132,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
           </div>
         </div>
       )}
+      {canDelete && (
       <button
         type="button"
         disabled={isDeleting}
@@ -121,6 +146,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
         )}
         Delete Customer
       </button>
+      )}
     </div>
   );
 };

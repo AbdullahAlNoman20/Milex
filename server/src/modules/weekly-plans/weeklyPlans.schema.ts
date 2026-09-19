@@ -12,7 +12,9 @@ const visitSchema = z
     customerName: z.string().min(1, 'Please enter the customer name.').max(200),
     customerId: z.string().max(100).optional().nullable(),
     purpose: z.string().min(1, 'Please describe the purpose of this visit.').max(300),
-    outcomeNotes: z.string().max(500).optional(),
+    // The server sends this back as null for a visit with no daily-report
+    // entry yet, so the same shape has to be accepted on the way in.
+    outcomeNotes: z.string().max(500).optional().nullable(),
   })
   .strict();
 
@@ -21,6 +23,10 @@ export const upsertPlanSchema = z
     weekStartDate: z.string().min(1).max(20),
     existingVisits: z.array(visitSchema),
     prospectVisits: z.array(visitSchema),
+    // When the client last read this plan. Anything created on the server
+    // after that moment is something the person never saw, so their save
+    // leaves it alone instead of deleting it.
+    loadedAt: z.string().datetime().optional(),
   })
   .strict();
 
@@ -29,4 +35,8 @@ export const reviewPlanSchema = z
     approved: z.boolean(),
     comments: z.string().max(1000).optional(),
   })
+  .strict();
+
+export const submitPlanSchema = z
+  .object({ weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Please choose a valid week.') })
   .strict();

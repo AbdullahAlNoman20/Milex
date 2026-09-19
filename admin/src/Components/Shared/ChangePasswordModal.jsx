@@ -4,6 +4,8 @@ import { X, KeyRound, Loader2 } from 'lucide-react';
 import { changePassword } from '../services/authService';
 import { useToast } from '../hooks/useToast';
 import { useAuth } from '../hooks/useAuth';
+import PasswordField from './PasswordField';
+import { isPasswordValid } from './passwordRules';
 
 const ChangePasswordModal = ({ onClose }) => {
   const { showToast } = useToast();
@@ -18,6 +20,11 @@ const ChangePasswordModal = ({ onClose }) => {
     if (submitLockRef.current) return;
     if (!currentPassword || !newPassword) {
       return showToast('Fill in all fields', 'warning');
+    }
+    // Checked here as well as on the server so the person is told before the
+    // round trip, while the checklist above is still in front of them.
+    if (!isPasswordValid(newPassword)) {
+      return showToast('Your new password does not meet all the requirements listed', 'warning');
     }
     if (newPassword !== confirmPassword) {
       return showToast('New password and confirmation do not match', 'warning');
@@ -39,7 +46,7 @@ const ChangePasswordModal = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <KeyRound size={16} className="text-emerald-600" /> Change Password
@@ -48,31 +55,28 @@ const ChangePasswordModal = ({ onClose }) => {
             <X size={16} />
           </button>
         </div>
-        <input
-          type="password"
-          className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
+
+        <PasswordField
           placeholder="Current password"
+          autoComplete="current-password"
           value={currentPassword}
-          maxLength={200}
-          onChange={(e) => setCurrentPassword(e.target.value)}
+          onChange={setCurrentPassword}
         />
-        <input
-          type="password"
-          className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
+        <PasswordField
           placeholder="New password"
           value={newPassword}
-          maxLength={200}
-          onChange={(e) => setNewPassword(e.target.value)}
+          onChange={setNewPassword}
+          showChecklist
         />
-        <input
-          type="password"
-          className="w-full border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
+        <PasswordField
           placeholder="Confirm new password"
           value={confirmPassword}
-          maxLength={200}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={setConfirmPassword}
         />
-        <p className="text-[10px] text-slate-400">Must be 8+ characters with upper, lower, number, and special character.</p>
+        {confirmPassword && newPassword !== confirmPassword && (
+          <p className="text-[11px] text-red-600 font-semibold">Both passwords must match.</p>
+        )}
+
         <div className="flex gap-2">
           <button
             type="button"

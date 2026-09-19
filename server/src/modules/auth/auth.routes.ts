@@ -16,8 +16,8 @@ import {
 const router = Router();
 
 router.post('/login', loginIpLimiter, loginRateLimiter, validateBody(loginSchema), controller.loginHandler);
-router.post('/refresh', refreshRateLimiter, controller.refreshHandler);
-router.post('/logout', requireAuth, controller.logoutHandler);
+router.post('/refresh', refreshRateLimiter, verifyCsrf, controller.refreshHandler);
+router.post('/logout', requireAuth, verifyCsrf, controller.logoutHandler);
 router.post('/forgot-password', loginRateLimiter, validateBody(forgotPasswordSchema), controller.forgotPasswordHandler);
 router.post('/reset-password', loginRateLimiter, validateBody(resetPasswordSchema), controller.resetPasswordHandler);
 router.post('/mfa/setup', requireAuth, controller.setupMfaHandler);

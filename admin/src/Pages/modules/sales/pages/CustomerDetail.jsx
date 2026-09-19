@@ -1,12 +1,21 @@
 // admin/src/Pages/modules/sales/pages/CustomerDetail.jsx
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building, Printer, Timer, PencilLine, Eye } from "lucide-react";
+import {
+  ArrowLeft,
+  Building,
+  Printer,
+  Timer,
+  PencilLine,
+  Eye,
+  X,
+  History as HistoryIcon,
+} from "lucide-react";
 import { useSales } from "../hooks/useSales";
 import { useAuth } from "../../../../Components/hooks/useAuth";
 import { ROLES } from "../../../../Components/constants/roles";
 import { STATUS, getWorkflowStageLabel } from "../constants/salesStatus";
-import { formatRateRef } from "../../../../Components/utils/format";
+import { buildRateRefs } from "../../../../Components/utils/format";
 import StatusBadge from "../components/StatusBadge";
 import BarcodeBadge from "../../../../Components/Shared/BarcodeBadge";
 import ScannableBarcode from "../../../../Components/Shared/ScannableBarcode";
@@ -29,7 +38,9 @@ import TimeExtensionRequestPanel from "../roles/KAM/TimeExtensionRequestPanel";
 import FinalOnboardingReviewPanel from "../roles/LineManager/FinalOnboardingReviewPanel";
 import CustomerEditRequestModal from "../components/CustomerEditRequestModal";
 import AdminCustomerActions from "../components/AdminCustomerActions";
+import RateRequestPanel from "../components/RateRequestPanel";
 import CustomerEditHistoryModal from "../components/CustomerEditHistoryModal";
+import CorrespondenceList from "../components/CorrespondenceList";
 
 const PROVISIONAL_COUNTDOWN_STATUSES = [
   STATUS.PROVISIONAL_ACTIVE,
@@ -50,39 +61,59 @@ const CustomerDetail = () => {
   const { barcode } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const {
-    customers,
-    isLoading,
-    loadError,
-    setSelectedCustomer,
-    setPrintData,
-    findByBarcode,
-  } = useSales();
+  const { setSelectedCustomer, setPrintData, findByBarcode, reloadToken } =
+    useSales();
 
-  const listCustomer = useMemo(
-    () => customers.find((c) => c.barcode === barcode) || null,
-    [customers, barcode],
-  );
-
-  const [detail, setDetail] = useState(null);
+  // One piece of state describes the whole fetch: which barcode it belongs
+  // to, whether it finished, what came back. Deriving "loading" from that
+  // (rather than flipping a separate flag on the way in) means the effect
+  // only ever writes once, when the response lands.
+  const [result, setResult] = useState({
+    barcode: null,
+    customer: null,
+    error: null,
+  });
   const [refreshTick, setRefreshTick] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isRateHistoryOpen, setIsRateHistoryOpen] = useState(false);
 
-  const customer = detail && detail.barcode === barcode ? detail : listCustomer;
+  // A response for a previous barcode is stale the moment the route changes,
+  // so it counts as "still loading" rather than briefly showing the wrong
+  // customer's record.
+  const isLoading = result.barcode !== barcode;
+  const loadError = isLoading ? null : result.error;
+  // The full record comes from its own endpoint — no partially-populated
+  // stand-in taken from a preloaded list, so what is rendered is always the
+  // complete customer rather than the trimmed columns a list view needs.
+  const customer = isLoading ? null : result.customer;
 
+  // `reloadToken` already re-runs the fetch below whenever a mutation goes
+  // through the context, so panels that call this after their own direct
+  // service call are the only ones that need the extra tick.
   const refreshCustomer = useCallback(() => setRefreshTick((t) => t + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     if (!barcode) return undefined;
-    findByBarcode(barcode).then((full) => {
-      if (!cancelled && full) setDetail(full);
-    });
+    findByBarcode(barcode)
+      .then((full) => {
+        if (!cancelled)
+          setResult({ barcode, customer: full || null, error: null });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setResult({
+            barcode,
+            customer: null,
+            error: err?.message || "Could not load this customer record.",
+          });
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [barcode, listCustomer, refreshTick, findByBarcode]);
+  }, [barcode, refreshTick, reloadToken, findByBarcode]);
 
   useEffect(() => {
     if (customer) setSelectedCustomer(customer);
@@ -110,9 +141,15 @@ const CustomerDetail = () => {
   }
 
   const role = currentUser?.role;
-  const isDocHandler = role === ROLES.KAM || role === ROLES.SALES_COORDINATOR;
-  const isLmOrAdmin = role === ROLES.LINE_MANAGER || role === ROLES.SUPER_ADMIN;
+  const isLmOrAdmin =
+    role === ROLES.LINE_MANAGER ||
+    role === ROLES.HEAD_OF_DEPARTMENT ||
+    role === ROLES.SUPER_ADMIN;
   const isSuperAdmin = role === ROLES.SUPER_ADMIN;
+  const canAssignKam =
+    role === ROLES.LINE_MANAGER ||
+    role === ROLES.HEAD_OF_DEPARTMENT ||
+    role === ROLES.SUPER_ADMIN;
   // KAM/SC keep direct-edit access to the recommendation-form fields all the
   // way through the provisional period — only once the account is fully
   // ACTIVE does it become request-only (account-profile fields are always
@@ -122,7 +159,8 @@ const CustomerDetail = () => {
   // through an LM-approved edit request, matching the server-side rule.
   const canDirectEdit = isLmOrAdmin || (role === ROLES.KAM && !isActiveAccount);
   const restrictToRecommendationFields = !isLmOrAdmin && canDirectEdit;
-  const canEditProfile = role === ROLES.SALES_COORDINATOR || role === ROLES.KAM || isLmOrAdmin;
+  const canEditProfile =
+    role === ROLES.SALES_COORDINATOR || role === ROLES.KAM || isLmOrAdmin;
   const isProvisionalActive =
     customer.accountProfileType === "PROVISIONAL" &&
     customer.status === STATUS.PROVISIONAL_ACTIVE;
@@ -131,22 +169,27 @@ const CustomerDetail = () => {
     customer.status === STATUS.PROVISIONAL_EXPIRED;
   const canUploadDocs =
     isProvisionalActive && customer.offerAccepted && customer.agreementSent;
-  const isEditingProfile = canUploadDocs && isDocHandler;
+  // Only the Sales Coordinator files documents now; the KAM still sees the
+  // profile, read-only, so they know where the onboarding has got to.
+  const isEditingProfile = canUploadDocs && role === ROLES.SALES_COORDINATOR;
 
   const renderActionPanel = () => {
     if (customer.status === STATUS.ACTIVE) return null;
 
-    if (
-      customer.status === STATUS.INFO_UPDATE_PENDING &&
-      role === ROLES.LINE_MANAGER
-    ) {
+    // The Head of Department carries every approval the Line Manager does,
+    // across all teams rather than one — so anywhere a Line Manager acts,
+    // they can act too.
+    const isApprover =
+      role === ROLES.LINE_MANAGER || role === ROLES.HEAD_OF_DEPARTMENT;
+
+    if (customer.status === STATUS.INFO_UPDATE_PENDING && isApprover) {
       return <CustomerInfoApprovalPanel customer={customer} />;
     }
     if (
       [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(
         customer.status,
       ) &&
-      role === ROLES.LINE_MANAGER
+      isApprover
     ) {
       return <RateApprovalPanel customer={customer} />;
     }
@@ -156,7 +199,7 @@ const CustomerDetail = () => {
     // waiting on a Line-Manager-approved extension to reopen the window.
 
     if (customer.status === STATUS.OFFER_REJECTED) {
-      if (role === ROLES.LINE_MANAGER) {
+      if (isApprover) {
         return (
           <ReviseRateApprovalPanel
             customer={customer}
@@ -177,7 +220,7 @@ const CustomerDetail = () => {
       // 21-day document window is still running) but the rate goes back to
       // the Line Manager before anything else can happen.
       if (customer.offerRejected) {
-        if (role === ROLES.LINE_MANAGER || isSuperAdmin) {
+        if (isApprover || isSuperAdmin) {
           return (
             <ReviseRateApprovalPanel
               customer={customer}
@@ -237,13 +280,12 @@ const CustomerDetail = () => {
       }
       return (
         <Waiting>
-          Provisional period expired — waiting for KAM to request an
-          extension
+          Provisional period expired — waiting for KAM to request an extension
         </Waiting>
       );
     }
 
-     // NOTE: accountProfileType alone can't gate this — regular-mode final
+    // NOTE: accountProfileType alone can't gate this — regular-mode final
     // onboarding also transitions through PROVISIONAL_FINAL_REVIEW_PENDING
     // but sets accountProfileType to 'REGULAR' at that point (see
     // submitFinalOnboardingRegular), so checking for 'PROVISIONAL' here was
@@ -251,7 +293,7 @@ const CustomerDetail = () => {
     // still provisional-only by nature (PROVISIONAL_EXTENSION_REQUESTED only
     // ever fires from a provisional flow), so this still works correctly.
     if (
-      role === ROLES.LINE_MANAGER &&
+      isApprover &&
       [
         STATUS.PROVISIONAL_EXTENSION_REQUESTED,
         STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
@@ -269,88 +311,86 @@ const CustomerDetail = () => {
   };
 
   return (
-    <div className="max-w-[1400px] px-3 sm:px-4 md:px-0 mx-auto space-y-5 sm:space-y-6 animate-in fade-in duration-300 pt-4 md:pt-0 pb-12">
-      {/* The page body has no padding below md, so this used to sit flush
-          against the top edge of the screen. It is also now a proper
-          44px-tall target rather than bare text, which is the minimum a
-          thumb can reliably hit on a phone. */}
+    <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 space-y-4 sm:space-y-5 pt-4 pb-12 overflow-x-hidden">
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 px-3.5 py-2.5 rounded-lg shadow-sm hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition min-h-[40px]"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 px-3.5 py-2.5 rounded-lg hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition min-h-[40px]"
       >
         <ArrowLeft size={15} className="shrink-0" /> Back
       </button>
 
-      <div className="bg-white p-5 sm:p-8 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-center gap-4 overflow-hidden">
-        {/* min-w-0 is what allows this column to shrink below the intrinsic
-            width of its contents. Without it the barcode badge could force
-            the card — and therefore every card on the page — wider than the
-            phone screen. */}
-        <div className="min-w-0 w-full sm:w-auto">
-          <h2 className="text-xl sm:text-3xl font-black text-slate-800 mb-2 break-words">
-            {customer.accountName}
-          </h2>
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
-            <ScannableBarcode value={customer.barcode} />
-            {customer.rateRef && (
-              <BarcodeBadge
-                value={formatRateRef(customer)}
-                variant="blue"
-                showBars={false}
-              />
-            )}
+      {/* Header card */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-2xl font-bold text-slate-900 mb-2 break-words">
+              {customer.accountName}
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <ScannableBarcode value={customer.barcode} />
+              {buildRateRefs(customer).map((ref) => (
+                <BarcodeBadge
+                  key={ref}
+                  value={ref}
+                  variant="blue"
+                  showBars={false}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setIsHistoryModalOpen(true)}
-            className="text-slate-600 text-xs font-bold flex items-center bg-slate-50 px-3 py-2 rounded-md border border-slate-200 hover:bg-slate-100 transition"
-          >
-            <Eye size={14} className="mr-1.5" /> History
-          </button>
-          {canEditProfile && (
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              className="text-slate-600 text-xs font-bold flex items-center bg-slate-50 px-3 py-2 rounded-md border border-slate-200 hover:bg-slate-100 transition"
+              onClick={() => setIsHistoryModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-2 rounded-md border border-slate-200 hover:bg-slate-100 transition min-h-[36px]"
             >
-              <PencilLine size={14} className="mr-1.5" /> Edit
+              <Eye size={14} /> History
             </button>
-          )}
-          <StatusBadge status={customer.status} />
+            {canEditProfile && (
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-2 rounded-md border border-slate-200 hover:bg-slate-100 transition min-h-[36px]"
+              >
+                <PencilLine size={14} /> Edit
+              </button>
+            )}
+            <StatusBadge status={customer.status} />
+          </div>
         </div>
       </div>
 
-      {customer.offerRejected && customer.status === STATUS.PROVISIONAL_ACTIVE && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-5 flex flex-wrap items-start gap-3">
-          <Eye size={18} className="text-red-500 mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">
-              Offer Rejected by Customer
-            </p>
-            <p className="text-xs text-red-700 leading-relaxed">
-              The account remains provisional and the document upload window is
-              still running. A new rate from the Line Manager is needed before
-              a revised offer letter can be sent.
-            </p>
-            {customer.rejectReason && (
-              <p className="text-xs text-red-800 font-semibold mt-2 break-words">
-                Customer's feedback: {customer.rejectReason}
+      {customer.offerRejected &&
+        customer.status === STATUS.PROVISIONAL_ACTIVE && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 sm:p-5 flex gap-3">
+            <Eye size={16} className="text-red-500 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide mb-1">
+                Offer Rejected by Customer
               </p>
-            )}
+              <p className="text-xs text-red-700 leading-relaxed">
+                The account remains provisional and the document upload window
+                is still running. A new rate from the Line Manager is needed
+                before a revised offer letter can be sent.
+              </p>
+              {customer.rejectReason && (
+                <p className="text-xs text-red-800 font-semibold mt-2 break-words">
+                  Customer's feedback: {customer.rejectReason}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {customer.accountProfileType === "PROVISIONAL" &&
+        customer.provisionalExpiryDate &&
         PROVISIONAL_COUNTDOWN_STATUSES.includes(customer.status) && (
-          <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center">
-              <Timer size={18} className="text-purple-500 mr-3 shrink-0" />
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Timer size={16} className="text-purple-500 shrink-0" />
               <div>
-                <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest mb-1">
+                <p className="text-[11px] font-bold text-purple-600 uppercase tracking-wide mb-0.5">
                   Document Upload Window
                 </p>
                 <p className="text-xs text-purple-700">
@@ -360,154 +400,323 @@ const CustomerDetail = () => {
             </div>
             <Countdown
               expiryDate={customer.provisionalExpiryDate}
-              className="text-purple-900 text-lg"
+              className="text-purple-900 text-base sm:text-lg"
             />
           </div>
         )}
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        <div className="flex-1 min-w-0 space-y-6">
-          <div className="bg-white p-5 sm:p-8 rounded-xl shadow-sm border border-slate-200">
-            <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 pb-4 mb-6">
-              <h3 className="font-bold text-base text-slate-800 flex items-center">
-                <Building size={18} className="mr-2 text-slate-400" /> Account
-                Info
-              </h3>
-               <button
-                type="button"
-                onClick={() =>
-                  setPrintData({ type: "profile", customer })
-                }
-                className="text-emerald-600 text-xs font-bold flex items-center bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-100 hover:bg-emerald-100 transition"
-              >
-                <Printer size={14} className="mr-1.5" /> Print Form
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-7 gap-x-10 text-sm mb-8">
-              <div>
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  ADDRESS
-                </span>
-                <span className="font-semibold text-slate-800 leading-relaxed block">
-                  {customer.address}
-                </span>
-              </div>
-              <div>
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  BUSINESS TYPE
-                </span>
-                <span className="font-semibold text-slate-800">
-                  {customer.businessType}
-                </span>
-              </div>
-              <div>
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  MOBILE / EMAIL
-                </span>
-                <span className="font-semibold text-slate-800 block mb-0.5">
-                  {customer.phone || '—'}
-                </span>
-                <span className="text-slate-500 text-sm">{customer.email}</span>
-              </div>
-              <div>
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  CREDIT LIMIT / PERIOD
-                </span>
-                <span className="font-semibold text-slate-800">
-                  TK {customer.creditLimitTk} ({customer.creditPeriodDays} Days)
-                </span>
-              </div>
-              {(customer.approvedRate || customer.proposedRate) && (
-                <div>
-                  <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                    {customer.approvedRate ? 'APPROVED RATE' : 'PROPOSED RATE'}
-                  </span>
-                  <span className="font-semibold text-slate-800">
-                    {customer.approvedRate || customer.proposedRate}
-                  </span>
-                </div>
-              )}
-              <div>
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  SERVICE / MODE / TYPE
-                </span>
-                <span className="font-semibold text-slate-800">
-                  {customer.serviceRequired} · {customer.accountMode} ·{" "}
-                  {customer.accountType}
-                </span>
-              </div>
-             </div>
+      {customer.accountProfileType === "PROVISIONAL" &&
+        !customer.provisionalExpiryDate &&
+        customer.status === STATUS.PROVISIONAL_ACTIVE && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex items-center gap-2.5">
+            <Timer size={15} className="text-slate-400 shrink-0" />
+            <p className="text-xs text-slate-600">
+              The 21-day document window starts once the customer accepts the
+              offer.
+            </p>
+          </div>
+        )}
 
-            {Array.isArray(customer.rateHistory) && customer.rateHistory.length > 0 && (
-              <div className="mb-8">
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  RATE REVISION HISTORY
-                </span>
-                <div className="space-y-2">
-                  {customer.rateHistory.map((h, i) => (
-                    <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs flex flex-wrap justify-between gap-2">
-                      <span className="font-mono text-slate-500">{h.rateRef || '—'}</span>
-                      <span className="text-slate-700 font-semibold">{h.rate || '—'}</span>
-                      <span className="text-slate-400">{h.changedAt ? new Date(h.changedAt).toLocaleDateString() : ''}</span>
-                    </div>
-                  ))}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+        <div className="flex-1 w-full min-w-0 space-y-5">
+          {/* Account Info as table */}
+          <div className="space-y-5">
+            {/* Customer Overview */}
+            <div>
+              <div className="flex items-center justify-between gap-3 px-1 pb-2.5">
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <Building size={16} className="text-slate-400" /> Customer
+                  Overview
+                </h3>
+                <div className="flex items-center gap-2 shrink-0">
+                  {Array.isArray(customer.rateHistory) &&
+                    customer.rateHistory.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsRateHistoryOpen(true)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-100 transition"
+                      >
+                        <HistoryIcon size={13} /> Rate History
+                      </button>
+                    )}
+                  <button
+                    type="button"
+                    onClick={() => setPrintData({ type: "profile", customer })}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-100 hover:bg-emerald-100 transition"
+                  >
+                    <Printer size={13} /> Print form
+                  </button>
                 </div>
               </div>
-            )}
 
-            {(customer.shippingDetails || []).length > 0 && (
-              <div className="mb-8">
-                <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  SHIPPING & ROUTE DETAILS
-                </span>
-                <div className="space-y-2">
-                  {customer.shippingDetails.map((s) => (
-                    <div
-                      key={s.id}
-                      className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs grid grid-cols-2 sm:grid-cols-4 gap-2"
+              <table className="w-full text-sm border-collapse table-fixed bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <colgroup>
+                  <col className="w-[30%] sm:w-[22%]" />
+                  <col className="w-[70%] sm:w-[28%]" />
+                  <col className="hidden sm:table-column sm:w-[22%]" />
+                  <col className="hidden sm:table-column sm:w-[28%]" />
+                </colgroup>
+                <tbody>
+                  {[
+                    [
+                      "Address",
+                      customer.address,
+                      "Business Type",
+                      customer.businessType,
+                    ],
+                    [
+                      "Mobile",
+                      customer.phone || "—",
+                      "Email",
+                      customer.email || "—",
+                    ],
+                    [
+                      "Credit Limit",
+                      `TK ${customer.creditLimitTk}`,
+                      "Credit Period",
+                      `${customer.creditPeriodDays} Days`,
+                    ],
+                    [
+                      "Approved Rate",
+                      customer.approvedRate || "—",
+                      "Proposed Rate",
+                      customer.proposedRate || "—",
+                    ],
+                    [
+                      "Service",
+                      customer.serviceRequired,
+                      "Mode",
+                      customer.accountMode,
+                    ],
+                    ["Type", customer.accountType, "", ""],
+                  ].map(([l1, v1, l2, v2], i) => (
+                    <tr
+                      key={i}
+                      className={`border-b border-slate-100 last:border-b-0 ${i % 2 ? "bg-slate-50/60" : ""}`}
                     >
-                      <span>
-                        <strong>Type:</strong>{" "}
+                      <td className="px-4 sm:px-5 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                        {l1}
+                      </td>
+                      <td className="px-4 sm:px-5 py-3 align-top font-medium text-slate-800 break-words">
+                        {v1}
+                      </td>
+                      {l2 ? (
+                        <>
+                          <td className="hidden sm:table-cell px-5 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide border-l border-slate-100">
+                            {l2}
+                          </td>
+                          <td className="hidden sm:table-cell px-5 py-3 align-top font-medium text-slate-800 break-words">
+                            {v2}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="hidden sm:table-cell border-l border-slate-100" />
+                          <td className="hidden sm:table-cell" />
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                  {/* stacked view of the right-hand pair on mobile only */}
+                  <tr className="sm:hidden border-b border-slate-100 bg-slate-50/60">
+                    <td className="px-4 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                      Business Type
+                    </td>
+                    <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
+                      {customer.businessType}
+                    </td>
+                  </tr>
+                  <tr className="sm:hidden border-b border-slate-100">
+                    <td className="px-4 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                      Email
+                    </td>
+                    <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
+                      {customer.email || "—"}
+                    </td>
+                  </tr>
+                  <tr className="sm:hidden border-b border-slate-100 bg-slate-50/60">
+                    <td className="px-4 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                      Credit Period
+                    </td>
+                    <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
+                      {customer.creditPeriodDays} Days
+                    </td>
+                  </tr>
+                  <tr className="sm:hidden border-b border-slate-100">
+                    <td className="px-4 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                      Proposed Rate
+                    </td>
+                    <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
+                      {customer.proposedRate || "—"}
+                    </td>
+                  </tr>
+                  <tr className="sm:hidden">
+                    <td className="px-4 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                      Mode
+                    </td>
+                    <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
+                      {customer.accountMode}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+          {/* Approved Rate (current) — full revision history is in the Rate History modal */}
+          <div>
+            <div className="px-1 pb-2.5">
+              <h3 className="font-bold text-sm text-slate-900">
+                Approved Rate
+              </h3>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 px-4 sm:px-5 py-4">
+              <p className="text-sm font-semibold text-slate-800 break-words">
+                {customer.approvedRate || "—"}
+              </p>
+            </div>
+          </div>
+
+          {/* Shipping & Route Details */}
+          {(customer.shippingDetails || []).length > 0 && (
+            <div>
+              <div className="px-1 pb-2.5">
+                <h3 className="font-bold text-sm text-slate-900">
+                  Shipping & Route Details
+                </h3>
+              </div>
+
+              {/* mobile: stacked cards, no horizontal scroll */}
+              <div className="sm:hidden divide-y divide-slate-100 bg-white rounded-xl border border-slate-200 overflow-hidden">
+                {customer.shippingDetails.map((s) => (
+                  <div key={s.id} className="px-4 py-3 space-y-1.5 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">
+                        Type
+                      </span>
+                      <span className="text-slate-700 text-right break-words">
                         {(s.shipmentType || []).join(", ")}
                         {s.shipmentTypeOther ? ` (${s.shipmentTypeOther})` : ""}
                       </span>
-                      <span>
-                        <strong>Rate For:</strong> {s.rateFor}
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">
+                        Rate For
                       </span>
-                      <span>
-                        <strong>Country:</strong> {s.country}
+                      <span className="text-slate-700">{s.rateFor}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">
+                        Country
                       </span>
-                      <span>
-                        <strong>Volume/Weight:</strong> {s.volume} / {s.weight}
-                        kg
+                      <span className="text-slate-700">{s.country}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">
+                        Volume/Weight
                       </span>
-                      <span>
-                        <strong>Revenue:</strong> ${s.revenue}
-                      </span>
-                      <span className="col-span-2">
-                        <strong>Current Provider:</strong> {s.provider}
+                      <span className="text-slate-700">
+                        {s.volume} / {s.weight}kg
                       </span>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">
+                        Revenue
+                      </span>
+                      <span className="text-slate-700">${s.revenue}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">
+                        Provider
+                      </span>
+                      <span className="text-slate-700 text-right break-words">
+                        {s.provider}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
 
-            <span className="block text-slate-400 text-[11px] uppercase font-bold tracking-widest mb-2">
-              PRIMARY CONTACTS
-            </span>
+              {/* desktop/tablet: real table */}
+              <table className="hidden sm:table w-full text-xs border-collapse bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <thead>
+                  <tr className="bg-slate-200 text-slate-700">
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Shipment Type
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Rate For
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Country
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Volume
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Weight
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Revenue
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Current Provider
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customer.shippingDetails.map((s) => (
+                    <tr key={s.id} className="border-t border-slate-100">
+                      <td className="px-4 py-2.5 text-slate-700 break-words">
+                        {(s.shipmentType || []).join(", ")}
+                        {s.shipmentTypeOther ? ` (${s.shipmentTypeOther})` : ""}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700">
+                        {s.rateFor}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700">
+                        {s.country}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700">
+                        {s.volume}CBM
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700">
+                        {s.weight}KG
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700">
+                        ${s.revenue}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-700 break-words">
+                        {s.provider}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Primary Contacts */}
+          <div>
+            <div className="px-1 pb-2.5">
+              <h3 className="font-bold text-sm text-slate-900">
+                Primary Contacts
+              </h3>
+            </div>
             <CustomerContactsCard contacts={customer.contacts} />
-            {customer.recNote && (
-              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 mt-6">
-                <span className="block text-amber-600 text-[11px] uppercase font-bold tracking-widest mb-2">
-                  KAM RECOMMENDATION NOTE
-                </span>
-                <p className="italic text-amber-700 font-bold text-sm leading-relaxed">
-                  {customer.recNote}
-                </p>
-              </div>
-            )}
           </div>
+
+          {customer.recNote && (
+            <div className="p-4 sm:p-5 bg-amber-50 rounded-xl border border-amber-200">
+              <span className="block text-amber-600 text-[11px] font-bold uppercase tracking-wide mb-1.5">
+                KAM Recommendation Note
+              </span>
+              <p className="italic text-amber-700 font-medium text-sm leading-relaxed break-words">
+                {customer.recNote}
+              </p>
+            </div>
+          )}
 
           {isEditingProfile && (
             <FinalAccountProfilePanel
@@ -518,7 +727,7 @@ const CustomerDetail = () => {
           {!isEditingProfile && <FinalAccountProfileView customer={customer} />}
         </div>
 
-        <div className="w-full lg:w-[380px] shrink-0 space-y-6">
+        <div className="w-full lg:w-[360px] shrink-0 space-y-5">
           {renderActionPanel()}
           {isLmOrAdmin && (
             <FieldChangeRequestsPanel
@@ -526,8 +735,16 @@ const CustomerDetail = () => {
               onDecided={refreshCustomer}
             />
           )}
-          {isSuperAdmin && (
-            <AdminCustomerActions customer={customer} onChanged={refreshCustomer} />
+          <RateRequestPanel
+            customer={customer}
+            onUpdated={refreshCustomer}
+            reloadToken={refreshTick}
+          />
+          {canAssignKam && (
+            <AdminCustomerActions
+              customer={customer}
+              onChanged={refreshCustomer}
+            />
           )}
           <AuditTrail
             history={customer.history}
@@ -536,9 +753,13 @@ const CustomerDetail = () => {
         </div>
       </div>
 
-      {!canUploadDocs && <DocumentsList customer={customer} documents={customer.documents} />}
+      {!canUploadDocs && (
+        <DocumentsList customer={customer} documents={customer.documents} />
+      )}
 
-       {isEditModalOpen && (
+      <CorrespondenceList customerId={customer.id} reloadToken={refreshTick} />
+
+      {isEditModalOpen && (
         <CustomerEditRequestModal
           customer={customer}
           isLineManager={canDirectEdit}
@@ -549,7 +770,62 @@ const CustomerDetail = () => {
       )}
 
       {isHistoryModalOpen && (
-        <CustomerEditHistoryModal customerId={customer.id} onClose={() => setIsHistoryModalOpen(false)} />
+        <CustomerEditHistoryModal
+          customerId={customer.id}
+          onClose={() => setIsHistoryModalOpen(false)}
+        />
+      )}
+
+      {isRateHistoryOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setIsRateHistoryOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 flex items-center justify-between border-b border-slate-100 shrink-0">
+              <h3 className="font-bold text-base text-slate-800">
+                Rate Revision History
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsRateHistoryOpen(false)}
+                className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 transition"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              <table className="w-full text-xs border-collapse bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <thead>
+                  <tr className="bg-slate-200 text-slate-700">
+                    <th className="px-4 py-2.5 text-left font-bold">
+                      Rate Reference
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-bold">Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customer.rateHistory.map((h, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-4 py-2.5 font-mono text-slate-600">
+                        {h.rateRef || "—"}
+                      </td>
+                      <td className="px-4 py-2.5 font-semibold text-slate-700">
+                        {h.rate || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
