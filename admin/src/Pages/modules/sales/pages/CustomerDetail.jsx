@@ -42,7 +42,7 @@ import CustomerEditRequestModal from "../components/CustomerEditRequestModal";
 import AdminCustomerActions from "../components/AdminCustomerActions";
 import RateRequestPanel from "../components/RateRequestPanel";
 import CustomerEditHistoryModal from "../components/CustomerEditHistoryModal";
-import CorrespondenceList from "../components/CorrespondenceList";
+
 
 const PROVISIONAL_COUNTDOWN_STATUSES = [
   STATUS.PROVISIONAL_ACTIVE,
