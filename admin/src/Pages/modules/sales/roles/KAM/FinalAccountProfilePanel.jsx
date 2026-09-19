@@ -3,8 +3,26 @@ import { useState, useCallback, useRef } from 'react';
 import { ClipboardEdit, FileCheck, Loader2 } from 'lucide-react';
 import { updateFinalProfile, setAccountConfigMode, submitFinalOnboardingRegular, submitFinalOnboarding } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { GAIN_TYPE_OPTIONS, FINANCE_MODE_OPTIONS } from '../../constants/formOptions';
+import {
+  GAIN_TYPE_OPTIONS,
+  FINANCE_MODE_OPTIONS,
+  DESIGNATION_OPTIONS,
+  ACCOUNT_MODE_OPTIONS,
+} from '../../constants/formOptions';
+import SelectWithOther from '../../../../../Components/Shared/SelectWithOther';
 import DocumentUploadPanel from './DocumentUploadPanel';
+
+// The recommendation already captured most of this. Carrying it across as a
+// starting point means the person confirms what is there instead of typing
+// the same answers a second time — and a second typing is where the two
+// records start to disagree.
+const carriersFromRecommendation = (customer) => {
+  const names = (customer.shippingDetails || [])
+    .flatMap((s) => String(s.provider || '').split(','))
+    .map((n) => n.trim())
+    .filter(Boolean);
+  return [...new Set(names)];
+};
 
 const REQUIRED_DOC_TYPES = ['TRADE_LICENSE'];
 
@@ -31,19 +49,25 @@ const FieldInput = ({ label, keyName, form, isSavingField, onChange, onBlur, typ
 const FinalAccountProfilePanel = ({ customer, onSaved }) => {
   const { showToast } = useToast();
   const [mode, setMode] = useState(customer.accountConfigMode || 'PROVISIONAL');
+  const carrierOptions = carriersFromRecommendation(customer);
   const [form, setForm] = useState({
     managingPartnerName: customer.managingPartnerName || '',
+    managingPartnerDesignation: customer.managingPartnerDesignation || '',
     binNumber: customer.binNumber || '',
     tinNumber: customer.tinNumber || '',
     destinations: customer.destinations || '',
-    preferredCarrier: customer.preferredCarrier || '',
-    natureOfBusiness: customer.natureOfBusiness || '',
+    // Pre-filled from the carriers the customer named on their
+    // recommendation; still editable, because the preferred one may not be
+    // among the ones they currently use.
+    preferredCarrier: customer.preferredCarrier || carrierOptions[0] || '',
+    natureOfBusiness: customer.natureOfBusiness || customer.businessType || '',
     gainType: customer.gainType || '',
     financeMode: customer.financeMode || '',
     area: customer.area || '',
     zone: customer.zone || '',
     specialInstructions: customer.specialInstructions || '',
   });
+  const [accountMode, setAccountMode] = useState(customer.accountMode || '');
   const [isSavingField, setIsSavingField] = useState(null);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
   const submitFinalLockRef = useRef(false);
@@ -86,11 +110,11 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
     setIsSubmittingFinal(true);
     try {
       if (mode === 'REGULAR') {
-        await updateFinalProfile(customer.id, form);
+        await updateFinalProfile(customer.id, { ...form, accountMode });
         await submitFinalOnboardingRegular(customer.id);
         showToast('Submitted for Final Onboarding — awaiting Line Manager verification', 'success');
       } else {
-        await updateFinalProfile(customer.id, form);
+        await updateFinalProfile(customer.id, { ...form, accountMode });
         await submitFinalOnboarding(customer.id);
         showToast('Submitted for Final Onboarding — awaiting Line Manager verification', 'success');
       }
@@ -139,15 +163,64 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
         </p>
       </div>
 
-      <FieldInput label="Name of Managing Partner" keyName="managingPartnerName" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
+      <div className="grid grid-cols-[1fr_140px] gap-3 items-end">
+        <FieldInput label="Name of Managing Partner" keyName="managingPartnerName" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">Designation</label>
+          <select
+            className="w-full border border-slate-300 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-purple-500"
+            value={form.managingPartnerDesignation}
+            onChange={(e) => setField('managingPartnerDesignation', e.target.value)}
+            onBlur={() => handleFieldBlur('managingPartnerDesignation')}
+          >
+            <option value="">Select...</option>
+            {DESIGNATION_OPTIONS.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <FieldInput label="BIN Number" keyName="binNumber" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
         <FieldInput label="TIN Number" keyName="tinNumber" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
       </div>
       <FieldInput label="Destinations (comma separated)" keyName="destinations" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
       <div className="grid grid-cols-2 gap-3">
-        <FieldInput label="Preferred Carrier" keyName="preferredCarrier" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">Preferred Carrier</label>
+          <SelectWithOther
+            options={carrierOptions}
+            value={form.preferredCarrier}
+            onChange={(v) => {
+              setField('preferredCarrier', v);
+              handleFieldBlur('preferredCarrier');
+            }}
+            placeholder="Select a carrier..."
+          />
+          {carrierOptions.length > 0 && (
+            <p className="text-[10px] text-slate-400 mt-1">
+              From the providers named on the recommendation.
+            </p>
+          )}
+        </div>
         <FieldInput label="Nature of Business" keyName="natureOfBusiness" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1.5">Account Mode</label>
+        <select
+          className="w-full border border-slate-300 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-purple-500"
+          value={accountMode}
+          onChange={(e) => setAccountMode(e.target.value)}
+        >
+          <option value="">Select...</option>
+          {ACCOUNT_MODE_OPTIONS.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+        <p className="text-[10px] text-slate-400 mt-1">
+          Carried over from the recommendation — change it here if it has moved on.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <FieldInput label="Area" keyName="area" form={form} isSavingField={isSavingField} onChange={setField} onBlur={handleFieldBlur} />

@@ -88,8 +88,11 @@ export const listCorrespondence = async (id) => {
   return data.items;
 };
 
-export const sendAgreement = async (id, agreementText) => {
-  const { data } = await request(`/customers/${id}/send-agreement`, { method: 'POST', body: { agreementText } });
+export const sendAgreement = async (id, agreementText, sentVia) => {
+  const { data } = await request(`/customers/${id}/send-agreement`, {
+    method: 'POST',
+    body: sentVia ? { agreementText, sentVia } : { agreementText },
+  });
   return data.customer;
 };
 

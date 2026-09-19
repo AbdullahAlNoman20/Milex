@@ -115,7 +115,7 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
               onClick={() => handleFinalDecision(true)}
               className="bg-emerald-500 text-white font-bold py-3 rounded-xl flex justify-center items-center text-sm shadow hover:bg-emerald-600 transition disabled:opacity-50"
             >
-              <CheckCircle size={16} className="mr-1.5" /> Approve & Activate
+              Approve & Activate
             </button>
             <button
               type="button"

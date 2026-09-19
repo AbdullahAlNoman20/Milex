@@ -5,7 +5,18 @@ import { prisma } from "../../config/db";
 // broad access (SC's role is designed to work across every KAM's pipeline
 // per VIEW_ALL_KAM_DASHBOARDS). Line Manager is scoped to their own team
 // below instead of being fully unrestricted.
-const UNRESTRICTED_ROLES = ["SUPER_ADMIN", "SALES_COORDINATOR"];
+// Everyone working the pipeline needs the paperwork that belongs to it: the
+// KAM who owns the relationship, the Line Manager over them, the Head of
+// Department over the whole thing, and the Coordinator who files it. The
+// guard exists to keep a customer's documents inside the company, not to
+// keep colleagues from doing their jobs.
+const UNRESTRICTED_ROLES = [
+  "SUPER_ADMIN",
+  "HEAD_OF_DEPARTMENT",
+  "LINE_MANAGER",
+  "SALES_COORDINATOR",
+  "KAM",
+];
 
 const customerLmSelect = {
   handledById: true,

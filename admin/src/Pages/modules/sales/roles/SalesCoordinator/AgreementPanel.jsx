@@ -1,18 +1,25 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx
 import { useState, useRef, useLayoutEffect } from 'react';
-import { Mail, Printer, PenTool } from 'lucide-react';
+import { Mail, Printer, PenTool, ChevronDown, Send, Loader2 } from 'lucide-react';
 import { sendAgreement } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
+import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { useSales } from '../../hooks/useSales';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
+import { buildRateRefs } from '../../../../../Components/utils/format';
 import { AgreementLetter } from '../../components/PrintTemplate';
 
 const AgreementPanel = ({ customer, onSent }) => {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const { setPrintData } = useSales();
   const agreementText =
     customer.agreementText ||
     `This agreement is made between MILEX and ${customer.accountName}.\n\nThe customer agrees to the rates defined in Annexure ${customer.rateRef || ''} with a credit limit of BDT ${customer.creditLimitTk}.\n\n${SIGNATURE_LIBRARY.SALES}`;
+
+  const [isSendMenuOpen, setIsSendMenuOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   // Letter content is 169.4mm (~640px) wide; scale it to fit the panel.
   const previewRef = useRef(null);
@@ -24,16 +31,40 @@ const AgreementPanel = ({ customer, onSent }) => {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const submitLockRef = useRef(false);
 
-  const handleSend = async () => {
+  // Opening the person's own mail client keeps the sending account, the
+  // signature and the sent-items record where they already are.
+  const openMailClient = () => {
+    const subject = `Agreement — ${customer.accountName} (${buildRateRefs(customer)[0] || customer.barcode})`;
+    const href = `mailto:${encodeURIComponent(customer.email || '')}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(agreementText)}`;
+    window.location.href = href;
+  };
+
+  const send = async (via) => {
     if (submitLockRef.current) return;
+    setIsSendMenuOpen(false);
+
+    const ok = await confirm({
+      title: 'Send the agreement?',
+      message:
+        via === 'MAIL'
+          ? 'Your mail application will open with the agreement ready to send, and the copy will be recorded against the customer.'
+          : 'This records the agreement as sent by hard copy and unlocks the document upload.',
+      confirmLabel: via === 'MAIL' ? 'Open mail & record' : 'Record as sent',
+    });
+    if (!ok) return;
+
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      await sendAgreement(customer.id, agreementText);
-      showToast('Agreement sent to customer via email', 'success');
+      // Recorded first: opening the mail client before knowing the copy was
+      // written would leave someone composing a message for a send that
+      // never happened on our side.
+      await sendAgreement(customer.id, agreementText, via);
+      showToast('Agreement recorded', 'success');
+      if (via === 'MAIL') openMailClient();
       onSent?.();
     } catch (err) {
       showToast(err?.message || 'Failed to send agreement', 'error');
@@ -49,10 +80,10 @@ const AgreementPanel = ({ customer, onSent }) => {
         <PenTool size={16} className="mr-2 text-blue-600" /> Agreement
       </h3>
       <p className="text-[11px] text-slate-500">
-        Customer accepted the offer. Send the Agreement to the customer via email below — a signed
-        hard copy will then be collected and uploaded separately under "Signed Agreement" once
-        received, which unlocks the rest of document upload.
+        The customer accepted the offer. Once the agreement is sent, a signed hard copy is
+        collected and uploaded under "Signed Agreement", which unlocks the rest of the documents.
       </p>
+
       <div
         ref={previewRef}
         className="w-full max-h-[460px] overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white p-2"
@@ -61,22 +92,63 @@ const AgreementPanel = ({ customer, onSent }) => {
           <AgreementLetter c={customer} />
         </div>
       </div>
+
       <div className="flex gap-3">
         <button
           type="button"
           onClick={() => setPrintData({ type: 'agreement', customer })}
           className="flex-1 bg-white border border-slate-300 text-slate-700 text-xs py-2.5 rounded-lg font-bold shadow-sm hover:bg-slate-50 transition flex items-center justify-center"
         >
-          <Printer size={14} className="mr-1.5" /> Print
+          <Printer size={14} className="mr-1.5" /> Print Only
         </button>
-        <button
-          type="button"
-          disabled={isSubmitting}
-          onClick={handleSend}
-          className="flex-[2] bg-blue-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-800 transition flex items-center justify-center disabled:opacity-50"
-        >
-          <Mail size={14} className="mr-1.5" /> Send Agreement via Email
-        </button>
+
+        <div className="relative flex-[2]">
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={() => setIsSendMenuOpen((o) => !o)}
+            className="w-full bg-blue-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-800 transition flex items-center justify-center disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <Loader2 size={14} className="mr-1.5 animate-spin" />
+            ) : (
+              <Send size={14} className="mr-1.5" />
+            )}
+            Send Agreement
+            <ChevronDown size={14} className="ml-1.5" />
+          </button>
+
+          {isSendMenuOpen && (
+            <div className="absolute left-0 right-0 bottom-full mb-1.5 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-20">
+              <button
+                type="button"
+                onClick={() => send('MAIL')}
+                className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 transition flex items-center gap-2 border-b border-slate-100"
+              >
+                <Mail size={13} className="text-blue-600 shrink-0" />
+                <span>
+                  Send by email
+                  <span className="block text-[10px] font-normal text-slate-400">
+                    Opens your mail app with the agreement ready
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => send('HARD_COPY')}
+                className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 transition flex items-center gap-2"
+              >
+                <Printer size={13} className="text-slate-500 shrink-0" />
+                <span>
+                  Printed &amp; sent as hard copy
+                  <span className="block text-[10px] font-normal text-slate-400">
+                    Records it as delivered on paper
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

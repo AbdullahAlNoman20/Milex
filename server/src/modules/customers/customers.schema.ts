@@ -69,7 +69,12 @@ export const offerTextSchema = z
     sentVia: z.enum(['MAIL', 'HARD_COPY']).optional(),
   })
   .strict();
-export const agreementTextSchema = z.object({ agreementText: z.string().min(1, 'The agreement text can\'t be empty.').max(5000, 'The agreement text is too long.') }).strict();
+export const agreementTextSchema = z
+  .object({
+    agreementText: z.string().min(1, 'The agreement text can\'t be empty.').max(5000, 'The agreement text is too long.'),
+    sentVia: z.enum(['MAIL', 'HARD_COPY']).optional(),
+  })
+  .strict();
 
 export const clientFeedbackSchema = z
   .object({
@@ -104,6 +109,11 @@ const emptyToUndefined = (v: unknown) => (v === '' ? undefined : v);
 export const finalProfileSchema = z
   .object({
     managingPartnerName: z.preprocess(emptyToUndefined, z.string().max(150).optional().nullable()),
+    managingPartnerDesignation: z.preprocess(emptyToUndefined, z.string().max(100).optional().nullable()),
+    accountMode: z.preprocess(
+      emptyToUndefined,
+      z.enum(['Express', 'Freight', 'Express & Freight', 'Fair']).optional().nullable()
+    ),
     binNumber: z.preprocess(emptyToUndefined, z.string().max(50).optional().nullable()),
     tinNumber: z.preprocess(emptyToUndefined, z.string().max(50).optional().nullable()),
     destinations: z.preprocess(emptyToUndefined, z.string().max(500).optional().nullable()),

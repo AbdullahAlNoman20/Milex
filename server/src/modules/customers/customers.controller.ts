@@ -85,7 +85,7 @@ export const listCorrespondenceHandler = async (req: Request, res: Response, nex
   }
 };
 export const sendAgreementHandler = wrap((req) =>
-  customersService.sendAgreement(asString(req.params.id), req.body.agreementText, req.user!.id)
+  customersService.sendAgreement(asString(req.params.id), req.body.agreementText, req.user!.id, req.body.sentVia)
 );
 export const clientFeedbackHandler = wrap((req) =>
   customersService.submitClientFeedback(asString(req.params.id), req.body, req.user!.id, req.user!.role)

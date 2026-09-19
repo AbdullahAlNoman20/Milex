@@ -214,7 +214,10 @@ model Customer {
   // Final Account Profile Data (filled by KAM/SC once Agreement is signed)
   finalProfileCompleted Boolean @default(false)
   accountConfigMode     String  @default("PROVISIONAL")
-  managingPartnerName   String?
+  managingPartnerName        String?
+  // Printed beside the name on the agreement's signature block, so the
+  // person signing is identified by role as well as by name.
+  managingPartnerDesignation String?
   binNumber             String?
   tinNumber             String?
   destinations          String?

@@ -46,8 +46,22 @@ const GROUP_FILTERS: Record<string, any> = {
     accountProfileType: 'PROVISIONAL',
     status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT },
   },
+  // Everything before the customer has actually said yes. The account only
+  // stops being a prospect at the moment they accept the offer — up to then
+  // it is a quote being worked on, however far along it looks.
   pending: {
-    status: { in: [CUSTOMER_STATUS.PENDING_RATE_PREPARATION, CUSTOMER_STATUS.PENDING_RATE_APPROVAL] },
+    status: {
+      in: [
+        CUSTOMER_STATUS.PENDING_RATE_PREPARATION,
+        CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+        CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
+        CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+        CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
+        CUSTOMER_STATUS.DRAFTING_OFFER_LETTER,
+        CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
+        CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
+      ],
+    },
   },
   pipeline: { status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT } },
 };
@@ -174,7 +188,8 @@ export const listCustomers = async (
         creditLimitTk: true, creditPeriodDays: true, creditPeriodExtendedByLM: true,
         proposedRate: true, approvedRate: true, lmNote: true, recNote: true, rejectReason: true,
         rateRef: true, offerSent: true, offerAccepted: true, offerRejected: true, agreementSent: true,
-        finalProfileCompleted: true, accountConfigMode: true, managingPartnerName: true,
+        finalProfileCompleted: true, accountConfigMode: true,
+        managingPartnerName: true, managingPartnerDesignation: true,
         binNumber: true, tinNumber: true, preferredCarrier: true, natureOfBusiness: true,
         gainType: true, financeMode: true, area: true, zone: true,
         revision: true, status: true, accountProfileType: true,
@@ -688,7 +703,12 @@ export const finalizeOffer = async (
   return updated;
 };
 
-export const sendAgreement = async (customerId: string, agreementText: string, scId: string) => {
+export const sendAgreement = async (
+  customerId: string,
+  agreementText: string,
+  scId: string,
+  sentVia?: string
+) => {
   const clean = sanitizeAndEscape({ agreementText });
   const updated = await prisma.$transaction(async (tx) => {
     // Same explicit guard as finalizeOffer: the agreement may only be sent
@@ -732,6 +752,7 @@ export const sendAgreement = async (customerId: string, agreementText: string, s
         rateRef: customer.rateRef,
         rateAtSend: customer.approvedRate || customer.proposedRate,
         sentById: scId,
+        sentVia: sentVia || null,
       },
     });
     await tx.customerHistoryEntry.updateMany({
@@ -1329,6 +1350,10 @@ export const EDITABLE_FIELDS: Record<string, EditFieldDef> = {
   creditLimitTk: { label: 'Credit Limit (TK)', type: 'number' },
   creditPeriodDays: { label: 'Credit Period (Days)', type: 'number' },
   managingPartnerName: { label: 'Managing Partner', type: 'text' },
+  managingPartnerDesignation: {
+    label: 'Managing Partner Designation', type: 'select',
+    options: ['MD', 'MP', 'Director', 'Proprietor'].map((v) => ({ value: v, label: v })),
+  },
   binNumber: { label: 'BIN Number', type: 'text' },
   tinNumber: { label: 'TIN Number', type: 'text' },
   destinations: { label: 'Destinations', type: 'textarea' },
