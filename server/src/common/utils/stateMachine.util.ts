@@ -91,6 +91,10 @@ interface TransitionParams {
   notifyExcludeActor?: boolean;
   // Only true for the steps that hand work to the Sales Coordinator.
   notifySalesCoordinators?: boolean;
+  // Set for a step whose audience is not the usual workflow group — an
+  // escalation to the Head of Department, for instance, concerns only them
+  // until they answer. The caller sends whatever notification it needs.
+  skipWorkflowNotification?: boolean;
 }
 
 export const transitionCustomerStatus = async ({
@@ -103,6 +107,7 @@ export const transitionCustomerStatus = async ({
   ip,
   notifyExcludeActor = true,
   notifySalesCoordinators = false,
+  skipWorkflowNotification = false,
 }: TransitionParams) => {
   const updated = await prisma.$transaction(async (tx) => {
     const customer = await tx.customer.findUnique({ where: { id: customerId } });
@@ -160,12 +165,14 @@ export const transitionCustomerStatus = async ({
     ip,
   }).catch(() => {});
 
-  notifyCustomerWorkflowUsers(
-    updated.updated.handledById,
-    { label: `${updated.updated.accountName} — ${toSentenceCase(historyAction)}`, link: `/app/customers/${updated.updated.barcode}` },
-    notifyExcludeActor ? actorId : undefined,
-    { includeSalesCoordinators: notifySalesCoordinators },
-  ).catch(() => {});
+  if (!skipWorkflowNotification) {
+    notifyCustomerWorkflowUsers(
+      updated.updated.handledById,
+      { label: `${updated.updated.accountName} — ${toSentenceCase(historyAction)}`, link: `/app/customers/${updated.updated.barcode}` },
+      notifyExcludeActor ? actorId : undefined,
+      { includeSalesCoordinators: notifySalesCoordinators },
+    ).catch(() => {});
+  }
 
   return updated.updated;
 };

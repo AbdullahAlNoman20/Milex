@@ -47,7 +47,7 @@ const HodRatePanel = ({ customer, onUpdated }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-indigo-400 p-6 space-y-4">
       <h3 className="font-bold text-slate-900 text-base flex items-center">
-        <Crown size={18} className="mr-2 text-indigo-600" /> Best Rate Requested
+         Best Rate Requested
       </h3>
 
       {customer.lmNote && (

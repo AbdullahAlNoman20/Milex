@@ -412,6 +412,7 @@ export const approveRate = async (customerId: string, data: any, actorId: string
     },
     historyAction: `RATE SET BY ${source === 'HEAD_OF_DEPARTMENT' ? 'HEAD OF DEPARTMENT' : 'LINE MANAGER'}`,
     historySubText: 'Awaiting the KAM to accept it or ask for a better one',
+    skipWorkflowNotification: true,
   });
 
   createNotificationsForUsers([updated.handledById], {
@@ -435,6 +436,10 @@ export const escalateRateToHod = async (customerId: string, reason: string, lmId
     extraUpdates: { lmNote: clean.reason },
     historyAction: 'BEST RATE REQUESTED FROM HEAD OF DEPARTMENT',
     historySubText: clean.reason,
+    // Only the Head of Department is told, below. The KAM hears nothing
+    // until an answer exists — being notified of a question they cannot
+    // influence just produces noise and premature conversations.
+    skipWorkflowNotification: true,
   });
 
   await prisma.rateRequest.create({
@@ -492,6 +497,9 @@ export const grantHodRate = async (
     },
     historyAction: 'BEST RATE SET BY HEAD OF DEPARTMENT',
     historySubText: 'Awaiting the KAM to accept it or ask for a better one',
+    // The notification below names the rate and who set it, which is what
+    // people actually need — the generic one would only repeat the heading.
+    skipWorkflowNotification: true,
   });
 
   // The open escalation is closed out with the answer it received.
@@ -766,7 +774,14 @@ export const submitClientFeedback = async (
     const updated = await prisma.$transaction(async (tx) => {
       const current = await tx.customer.findUnique({
         where: { id: customerId },
-        select: { status: true, isDeleted: true, offerSent: true, provisionalCreatedAt: true },
+        select: {
+          status: true,
+          isDeleted: true,
+          offerSent: true,
+          offerAccepted: true,
+          offerRejected: true,
+          provisionalCreatedAt: true,
+        },
       });
       if (!current || current.isDeleted) {
         throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
@@ -776,6 +791,13 @@ export const submitClientFeedback = async (
           statusCode: 409,
           code: 'INVALID_STATE',
           message: 'Customer feedback can only be recorded after an offer letter has been sent.',
+        };
+      }
+      if (current.offerAccepted || current.offerRejected) {
+        throw {
+          statusCode: 409,
+          code: 'FEEDBACK_ALREADY_RECORDED',
+          message: 'The customer\'s answer to this offer has already been recorded. Please refresh the page.',
         };
       }
       // The provisional countdown starts here, on the customer's acceptance —
@@ -832,7 +854,15 @@ export const submitClientFeedback = async (
   const updated = await prisma.$transaction(async (tx) => {
     const current = await tx.customer.findUnique({
       where: { id: customerId },
-      select: { status: true, isDeleted: true, offerSent: true, revision: true, accountProfileType: true },
+      select: {
+        status: true,
+        isDeleted: true,
+        offerSent: true,
+        offerAccepted: true,
+        offerRejected: true,
+        revision: true,
+        accountProfileType: true,
+      },
     });
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
@@ -842,6 +872,16 @@ export const submitClientFeedback = async (
         statusCode: 409,
         code: 'INVALID_STATE',
         message: 'Customer feedback can only be recorded after an offer letter has been sent.',
+      };
+    }
+    // Feedback is a one-time answer per offer. Recording a second one would
+    // silently overwrite the first and push the account down a path nobody
+    // chose, so it is refused rather than applied.
+    if (current.offerAccepted || current.offerRejected) {
+      throw {
+        statusCode: 409,
+        code: 'FEEDBACK_ALREADY_RECORDED',
+        message: 'The customer\'s answer to this offer has already been recorded. Please refresh the page.',
       };
     }
 
@@ -855,9 +895,12 @@ export const submitClientFeedback = async (
         revision: current.revision + 1,
         // Straight back to the Line Manager, who runs the same decision
         // again — set a rate, or take it up to the Head of Department.
-        // An account that was already provisional keeps that standing and
-        // its countdown; only the rate is back in question.
-        ...(current.accountProfileType === 'PROVISIONAL'
+        //
+        // An account that is already provisional keeps that standing and the
+        // countdown already running against it: the customer is a customer,
+        // only the rate is back in question. Everything earlier in the flow
+        // returns to the Line Manager's desk properly.
+        ...(current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE
           ? {}
           : { status: CUSTOMER_STATUS.PENDING_RATE_APPROVAL as any }),
       },

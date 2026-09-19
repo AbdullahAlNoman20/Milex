@@ -91,7 +91,7 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
     }
     const ok = await confirm({
       title: 'Ask the Head of Department for a best rate?',
-      message: 'Only the Head of Department is notified. Nothing reaches the KAM or the customer until they answer.',
+      message: '',
       confirmLabel: 'Send request',
     });
     if (!ok) return;
@@ -219,12 +219,10 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
       ) : (
         <div className="space-y-4">
           <p className="text-xs text-slate-500 leading-relaxed">
-            The Head of Department will be asked to set the rate. Only they are notified — the KAM
-            hears nothing until an answer comes back.
+            Request the Head of Department to provide the best applicable rate.
           </p>
           <textarea
             className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-indigo-500 min-h-[90px]"
-            placeholder="What do you need, and why? e.g. Competitor quoted 28 USD/Kg on the same lane."
             value={escalationReason}
             maxLength={1000}
             onChange={(e) => setEscalationReason(e.target.value)}
