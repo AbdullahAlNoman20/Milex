@@ -78,7 +78,23 @@ const RTable = ({ rows }) => (
 );
 
 const RSectionTitle = ({ children }) => (
-  <p className="font-bold text-[12px] text-slate-900 mt-5 mb-2">{children}</p>
+  <p className="font-bold text-[12px] text-slate-900 mt-3 mb-1.5">{children}</p>
+);
+
+// 2-column key/value table: [label1, value1, label2, value2]
+const RTable2 = ({ rows }) => (
+  <table className="w-full border-collapse text-[11px]" style={{ tableLayout: 'fixed' }}>
+    <tbody>
+      {rows.map(([l1, v1, l2, v2], i) => (
+        <tr key={i}>
+          <td className="border border-slate-800 px-2 py-1 font-semibold" style={{ width: '22%' }}>{l1}</td>
+          <td className="border border-slate-800 px-2 py-1" style={{ width: '28%' }}>{v1 || ''}</td>
+          <td className="border border-slate-800 px-2 py-1 font-semibold" style={{ width: '22%' }}>{l2}</td>
+          <td className="border border-slate-800 px-2 py-1" style={{ width: '28%' }}>{v2 || ''}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
 );
 
 const PBox = ({ label, value, labelWidth = '150px', center = false }) => (
@@ -568,18 +584,13 @@ const PrintTemplate = ({ data, onClose }) => {
           @page { size: A4; margin: ${data.type === 'offer' ? '23mm 13mm 10mm 25mm' : data.type === 'agreement' ? '47mm 20.3mm 25.4mm 20.3mm' : '10mm'}; }
           ${data.type === 'agreement' ? `@page { @top-right { content: "Page " counter(page) " of " counter(pages); font: 12pt 'Times New Roman', Times, serif; text-align: right; vertical-align: bottom; } }` : ''}
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+          .rec-form { line-height: 1.35; }
+          .rec-form td, .rec-form th { padding-top: 3px; padding-bottom: 3px; }
         }
       `}</style>
 
      <div className={`bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:w-full print:max-w-none print:min-h-0 ${data.type === 'offer' || data.type === 'agreement' ? 'print:p-0' : 'print:p-5'}`}>
-        {data.type !== 'profile' && data.type !== 'offer' && data.type !== 'agreement' && (
-          <div className="flex justify-between items-end border-b-2 border-slate-800 pb-4 mb-8">
-            <h1 className="text-4xl font-black text-emerald-800 italic tracking-tighter">MILEX</h1>
-            <p className="text-right text-xs  mt-2 font-mono bg-slate-100 px-2 py-1 inline-block border font-bold text-slate-800">
-              ID: {c.barcode}
-            </p>
-          </div>
-        )}
+
 
         {data.type === 'offer' && <OfferLetter c={c} />}
 
@@ -593,16 +604,15 @@ const PrintTemplate = ({ data, onClose }) => {
           const rateRefDisplay = buildRateRefs(c).join('  /  ');
 
           return (
-            <div className="text-slate-900 text-[11px]">
-              <p className="text-right text-[11px] mb-6">{formatPrintTimestamp(c.createdAt)}</p>
-              <h1 className="text-center font-bold text-lg mb-6">CUSTOMER RECOMMENDATION FORM</h1>
-
-              <div className="flex justify-end mb-1">
-                <RFormBarcode value={c.barcode} />
-              </div>
-              <div className="flex justify-end items-center gap-1 mb-4 text-[11px]">
-                <span className="font-semibold">Customer ID:</span>
-                <span className="font-mono">{c.barcode}</span>
+            <div className="text-slate-900 text-[11px] rec-form">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="shrink-0">
+                  <RFormBarcode value={c.barcode} />
+                </div>
+                <h1 className="flex-1 text-center font-bold text-[15px]">CUSTOMER RECOMMENDATION FORM</h1>
+                <p className="shrink-0 text-right text-[10px] leading-tight" style={{ width: '140px' }}>
+                  {formatPrintTimestamp(c.createdAt)}
+                </p>
               </div>
 
               <RTable rows={[['Name of the Key Account Manager', c.recommendedBy?.name || c.handledBy?.name || '']]} />
@@ -659,16 +669,12 @@ const PrintTemplate = ({ data, onClose }) => {
               </table>
 
               <RSectionTitle>Customer Commercial Information</RSectionTitle>
-              <RTable
+              <RTable2
                 rows={[
-                  ['Business Type', c.businessType],
-                  ['Service Required', c.serviceRequired === 'BOTH' ? 'IB & OB' : c.serviceRequired === 'IB' ? 'Inbound (IB)' : c.serviceRequired === 'OB' ? 'Outbound (OB)' : ''],
-                  ['Account Mode', c.accountMode],
-                  ['Account Type', c.accountType === 'CREDIT CUSTOMER' ? 'Credit' : 'Cash'],
-                  ['Credit Limit (TK)', c.creditLimitTk],
-                  ['Credit Period (Days)', c.creditPeriodDays],
-                  ['Area Name', c.area],
-                  ['Zone Name', c.zone],
+                  ['Business Type', c.businessType, 'Service Required', c.serviceRequired === 'BOTH' ? 'IB & OB' : c.serviceRequired === 'IB' ? 'Inbound (IB)' : c.serviceRequired === 'OB' ? 'Outbound (OB)' : ''],
+                  ['Account Mode', c.accountMode, 'Account Type', c.accountType === 'CREDIT CUSTOMER' ? 'Credit' : 'Cash'],
+                  ['Credit Limit (TK)', c.creditLimitTk, 'Credit Period (Days)', c.creditPeriodDays],
+                  ['Area Name', c.area, 'Zone Name', c.zone],
                 ]}
               />
 
@@ -702,12 +708,6 @@ const PrintTemplate = ({ data, onClose }) => {
                 </>
               )}
 
-              {c.recNote && (
-                <>
-                  <RSectionTitle>Recommendation Note</RSectionTitle>
-                  <p className="border border-slate-800 px-2 py-2 text-[11px] font-bold">{c.recNote}</p>
-                </>
-              )}
 
               <RSectionTitle>Approval</RSectionTitle>
               <table className="w-full border-collapse text-[11px] mb-3">
@@ -735,14 +735,14 @@ const PrintTemplate = ({ data, onClose }) => {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="border border-slate-800 px-2 py-1 min-h-[28px]">{c.recommendedBy?.name || ''}</td>
-                    <td className="border border-slate-800 px-2 py-1">{c.recommendedBy?.name || ''}</td>
-                    <td className="border border-slate-800 px-2 py-1"></td>
+                    <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
+                    <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
+                    <td className="border border-slate-800 px-2 py-1 h-16 align-top"></td>
                   </tr>
                 </tbody>
               </table>
 
-              <p className="font-bold text-[11px] mt-6 mb-2">Approval Process:</p>
+              <p className="font-bold text-[11px] mt-4 mb-1.5">Approval Process:</p>
               <table className="w-full border-collapse text-[11px]">
                 <thead>
                   <tr>
@@ -759,7 +759,7 @@ const PrintTemplate = ({ data, onClose }) => {
               </table>
 
               {c.accountProfileType === 'PROVISIONAL' && (
-                <p className="text-center text-red-600 font-bold mt-6">PROVISIONAL ACCOUNT</p>
+                <p className="text-center text-red-600 font-bold mt-3">PROVISIONAL ACCOUNT</p>
               )}
             </div>
           );

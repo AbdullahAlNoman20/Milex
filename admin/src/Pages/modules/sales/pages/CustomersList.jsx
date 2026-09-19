@@ -14,6 +14,8 @@ import { formatRevision } from '../../../../Components/utils/format';
 const TABS = [
   { key: 'customer', label: 'Active Customer' },
   { key: 'provisional', label: 'Provisional Customer' },
+  // Everything still being quoted. An account becomes provisional the moment
+  // the customer accepts, not before.
   { key: 'pending', label: 'Pending' },
 ];
 

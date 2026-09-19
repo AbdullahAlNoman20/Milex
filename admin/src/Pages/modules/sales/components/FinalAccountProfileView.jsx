@@ -9,7 +9,14 @@ const FinalAccountProfileView = ({ customer }) => {
   if (!customer?.finalProfileCompleted) return null;
 
   const rows = [
-    ['Managing Partner', customer.managingPartnerName, 'BIN Number', customer.binNumber],
+    [
+      'Managing Partner',
+      [customer.managingPartnerName, customer.managingPartnerDesignation]
+        .filter(Boolean)
+        .join(' — '),
+      'BIN Number',
+      customer.binNumber,
+    ],
     ['TIN Number', customer.tinNumber, 'Destinations', customer.destinations],
     ['Preferred Carrier', customer.preferredCarrier, 'Nature of Business', customer.natureOfBusiness],
     ['Area', customer.area, 'Zone', customer.zone],

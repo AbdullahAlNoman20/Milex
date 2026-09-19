@@ -131,7 +131,7 @@ const KamRateDecisionPanel = ({ customer, onUpdated }) => {
         <div className="space-y-3">
           <textarea
             className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-indigo-500 min-h-[90px]"
-            placeholder="Why won't this rate work? e.g. Customer is holding a 28 USD/Kg quote from a competitor."
+            placeholder=""
             value={reason}
             maxLength={1000}
             onChange={(e) => setReason(e.target.value)}

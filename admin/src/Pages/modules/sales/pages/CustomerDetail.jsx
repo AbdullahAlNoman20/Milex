@@ -831,10 +831,14 @@ const CustomerDetail = () => {
       </div>
 
       {!canUploadDocs && (
-        <DocumentsList customer={customer} documents={customer.documents} />
+        <DocumentsList
+          customer={customer}
+          documents={customer.documents}
+          reloadToken={refreshTick}
+        />
       )}
 
-      <CorrespondenceList customerId={customer.id} reloadToken={refreshTick} />
+
 
       {isEditModalOpen && (
         <CustomerEditRequestModal

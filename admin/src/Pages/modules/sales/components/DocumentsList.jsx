@@ -1,7 +1,7 @@
 // admin/src/Pages/modules/sales/components/DocumentsList.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileText, Loader2, Eye, Mail } from "lucide-react";
-import { getDocumentSignedUrl } from "../services/customerService";
+import { getDocumentSignedUrl, listCorrespondence } from "../services/customerService";
 import { useToast } from "../../../../Components/hooks/useToast";
 import { useSales } from "../hooks/useSales";
 
@@ -19,59 +19,86 @@ const CATEGORY_LABELS = {
   OTHERS: "Others Document",
 };
 
-// customer.offerText / customer.agreementText live as plain text columns on
-// Customer, not as rows in OnboardingDocument — so without this they'd never
-// show up in the documents list even though they were already "sent". These
-// are rendered as virtual, non-uploaded entries that open the print/preview
-// view instead of a signed-file download.
-const buildVirtualEntries = (customer) => {
-  const entries = [];
-  if (customer?.accountName) {
-    entries.push({
-      id: "virtual-recommendation",
-      isVirtual: true,
-      printType: "recommendation",
-      documentType: "RECOMMENDATION_FORM",
-      label: "Customer Recommendation Form",
-      originalName: "Recommendation Form",
-    });
-  }
-  if (customer?.offerText) {
-    entries.push({
-      id: "virtual-offer",
-      isVirtual: true,
-      printType: "offer",
-      documentType: "OFFER_LETTER",
-      label: "Offer Letter (Sent to Customer)",
-      originalName: "Offer Letter",
-    });
-  }
-  if (customer?.agreementText) {
-    entries.push({
-      id: "virtual-agreement",
-      isVirtual: true,
-      printType: "agreement",
-      documentType: "AGREEMENT",
-      label: "Agreement (Sent to Customer)",
-      originalName: "Agreement",
-    });
-  }
-  return entries;
+const SENT_VIA_LABEL = {
+  MAIL: "Sent by email",
+  HARD_COPY: "Sent as hard copy",
 };
 
-const DocumentsList = ({ customer, documents = [] }) => {
+// The recommendation form has no stored copy — it is generated from the
+// record itself, so it is always available and always current.
+const buildRecommendationEntry = (customer) =>
+  customer?.accountName
+    ? [
+        {
+          id: "virtual-recommendation",
+          isVirtual: true,
+          printType: "recommendation",
+          documentType: "RECOMMENDATION_FORM",
+          label: "Customer Recommendation Form",
+          originalName: "Generated from this record",
+        },
+      ]
+    : [];
+
+// Every offer letter and agreement that was actually sent, each as its own
+// numbered copy. These belong with the documents because that is what they
+// are to the person looking — paperwork this customer has been given — even
+// though they are generated rather than uploaded.
+const buildSentEntries = (copies, customer) =>
+  copies.map((copy) => {
+    const isOffer = copy.kind === "OFFER_LETTER";
+    return {
+      id: copy.id,
+      isVirtual: true,
+      printType: isOffer ? "offer" : "agreement",
+      documentType: copy.kind,
+      label: `${isOffer ? "Offer Letter" : "Agreement"} — Copy ${copy.copyNumber}`,
+      originalName: [
+        new Date(copy.createdAt).toLocaleDateString(),
+        copy.sentVia ? SENT_VIA_LABEL[copy.sentVia] : null,
+        copy.rateAtSend ? `Rate: ${copy.rateAtSend}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      // Printing an older copy must show that copy's wording, not whatever
+      // the record happens to hold now.
+      printCustomer: isOffer
+        ? { ...customer, offerText: copy.body }
+        : { ...customer, agreementText: copy.body },
+    };
+  });
+
+const DocumentsList = ({ customer, documents = [], reloadToken = 0 }) => {
   const { showToast } = useToast();
   const { setPrintData } = useSales();
   const [openingId, setOpeningId] = useState(null);
+  const [copies, setCopies] = useState([]);
 
-  const virtualEntries = buildVirtualEntries(customer);
-  const allEntries = [...virtualEntries, ...documents];
+  useEffect(() => {
+    let cancelled = false;
+    listCorrespondence(customer.id)
+      .then((data) => {
+        if (!cancelled) setCopies(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCopies([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customer.id, reloadToken]);
+
+  const allEntries = [
+    ...buildRecommendationEntry(customer),
+    ...buildSentEntries(copies, customer),
+    ...documents,
+  ];
 
   if (!allEntries.length) return null;
 
   const handleOpen = async (doc) => {
     if (doc.isVirtual) {
-      setPrintData({ type: doc.printType, customer });
+      setPrintData({ type: doc.printType, customer: doc.printCustomer || customer });
       return;
     }
     if (doc.scanStatus === "INFECTED") {
