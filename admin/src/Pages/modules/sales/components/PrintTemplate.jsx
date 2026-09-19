@@ -134,6 +134,66 @@ const PSectionTitle = ({ children }) => (
   <p className="text-center font-bold text-[11px] underline text-slate-900 my-1.5">{children}</p>
 );
 
+// NOTE: DELETE the old PBox, POptionRow, PSectionTitle helpers above (unused now).
+const PF_TD = 'border border-slate-800 px-2 py-1 break-words';
+
+const PfBlock = ({ title, children }) => (
+  <div className="mt-2.5 print-avoid-break">
+    <div
+      className="border border-slate-800 bg-slate-200 text-center font-bold uppercase tracking-wide py-1 text-[11px]"
+      style={{ borderBottomWidth: 0 }}
+    >
+      {title}
+    </div>
+    {children}
+  </div>
+);
+
+const PfTable = ({ children, overlap = false }) => (
+  <table className="w-full border-collapse" style={{ tableLayout: 'fixed', marginTop: overlap ? '-1px' : 0 }}>
+    <colgroup>
+      <col style={{ width: '19%' }} />
+      <col style={{ width: '31%' }} />
+      <col style={{ width: '19%' }} />
+      <col style={{ width: '31%' }} />
+    </colgroup>
+    <tbody>{children}</tbody>
+  </table>
+);
+
+const PfRow = ({ l1, v1, l2, v2, h }) => (
+  <tr style={h ? { height: h } : undefined}>
+    <td className={`${PF_TD} font-semibold`}>{l1}</td>
+    <td className={PF_TD}>{v1}</td>
+    <td className={`${PF_TD} font-semibold`}>{l2}</td>
+    <td className={PF_TD}>{v2}</td>
+  </tr>
+);
+
+const PfFull = ({ label, value, h }) => (
+  <tr style={h ? { height: h } : undefined}>
+    <td className={`${PF_TD} font-semibold`}>{label}</td>
+    <td className={PF_TD} colSpan={3}>{value}</td>
+  </tr>
+);
+
+// Checkbox-style options — no background fills, so they print correctly.
+const PfChecks = ({ options, isSelected }) => (
+  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+    {options.map((o) => (
+      <span key={o.value} className="inline-flex items-center gap-1">
+        <span
+          className="inline-flex items-center justify-center border border-slate-800 font-bold leading-none"
+          style={{ width: '11px', height: '11px', fontSize: '9px' }}
+        >
+          {isSelected(o.value) ? 'X' : ''}
+        </span>
+        {o.label}
+      </span>
+    ))}
+  </div>
+);
+
 const formatOfferDate = (value) =>
   new Date(value || Date.now())
     .toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
@@ -377,7 +437,17 @@ export const AgreementLetter = ({ c }) => {
     : '';
   const daysText = days ? `${days} (${threeDigitsToWords(days)})` : '';
   const signName = c.managingPartnerName || '';
-  const signDesignation = c.managingPartnerDesignation || ''; // change field name if different
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const signContact =
+    (c.contacts || []).find((ct) => norm(ct.name) && norm(ct.name) === norm(signName)) ||
+    getContactByType(c.contacts, 'SENIOR_MANAGEMENT');
+  // add your final-profile designation field name here if it isn't one of these
+  const signDesignation =
+    c.managingPartnerDesignation ||
+    c.managingPartnerDesig ||
+    c.managingPartnerTitle ||
+    signContact.designation ||
+    'Managing Partner';
 
   const AR = <b>ANROOT LOGEX LTD.</b>;
   const CO = <b>{co}</b>;
@@ -772,267 +842,135 @@ const PrintTemplate = ({ data, onClose }) => {
           const amountWords = numberToWordsBDT(c.creditLimitTk);
 
           return (
-            <div className="text-slate-900">
-              <p className="text-center font-bold text-base underline mb-3">Account Profile</p>
-
-              <table className="ml-auto border border-slate-800 text-[10px] mb-3 print-avoid-break">
-                <tbody>
-                  <tr>
-                    <td className="border border-slate-800 px-2 py-0.5 font-semibold whitespace-nowrap">Closing Date:</td>
-                    <td className="border border-slate-800 px-2 py-0.5 w-32"></td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-800 px-2 py-0.5 font-semibold whitespace-nowrap">Effective Date:</td>
-                    <td className="border border-slate-800 px-2 py-0.5"></td>
-                  </tr>
-                  <tr>
-                    <td className="border border-slate-800 px-2 py-0.5 font-semibold whitespace-nowrap">Account No:</td>
-                    <td className="border border-slate-800 px-2 py-0.5">{c.barcode}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <div className="space-y-1.5 print-avoid-break">
-                <PBox label="Company Name:" value={c.accountName} labelWidth="150px" />
-                <PBox label="Name of Managing Partner:" value={c.managingPartnerName} labelWidth="180px" />
-                <PBox label="Address:" value={c.address} labelWidth="150px" />
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 230px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '55px' }}>Phone:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{c.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 160px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '35px' }}>Fax:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '50px' }}>e-mail:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.email}</span>
-                  </div>
+            <div
+              className="text-slate-900 text-[11px]"
+              style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+            >
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="shrink-0" style={{ width: '150px' }}>
+                  <RFormBarcode value={c.barcode} />
+                  <p className="font-mono text-[10px] mt-0.5">{c.barcode}</p>
                 </div>
+                <h1 className="flex-1 text-center font-bold text-[16px] underline">ACCOUNT PROFILE</h1>
+                <table className="shrink-0 border-collapse text-[10px]" style={{ width: '150px' }}>
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-800 px-2 py-0.5 font-semibold whitespace-nowrap">Closing Date</td>
+                      <td className="border border-slate-800 px-2 py-0.5"></td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-800 px-2 py-0.5 font-semibold whitespace-nowrap">Effective Date</td>
+                      <td className="border border-slate-800 px-2 py-0.5"></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
-              <PSectionTitle>Customer Information</PSectionTitle>
+              <PfBlock title="Company Information">
+                <PfTable>
+                  <PfFull label="Company Name" value={c.accountName} />
+                  <PfFull label="Name of Managing Partner" value={c.managingPartnerName} />
+                  <PfFull label="Address" value={c.address} />
+                  <PfRow l1="Phone" v1={c.phone} l2="Fax" v2="" />
+                  <PfFull label="E-mail" value={c.email} />
+                </PfTable>
+              </PfBlock>
 
-              <div className="space-y-1.5 print-avoid-break">
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '110px' }}>Contact person:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{keyContact.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '90px' }}>Designation:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{keyContact.designation}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 230px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '90px' }}>Phone (Cell):</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{keyContact.mobile}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 160px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '35px' }}>Fax:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '50px' }}>e-mail:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{keyContact.email}</span>
-                  </div>
-                </div>
+              <PfBlock title="Customer Information">
+                <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '28%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {['Contact', 'Name', 'Designation', 'Phone (Cell)', 'E-mail'].map((h) => (
+                        <th key={h} className={`${PF_TD} text-left`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[['Contact Person', keyContact], ['Accounts Person', financialContact]].map(([role, ct]) => (
+                      <tr key={role}>
+                        <td className={`${PF_TD} font-semibold`}>{role}</td>
+                        <td className={PF_TD}>{ct.name}</td>
+                        <td className={PF_TD}>{ct.designation}</td>
+                        <td className={PF_TD}>{ct.mobile}</td>
+                        <td className={PF_TD}>{ct.email}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <PfTable overlap>
+                  <PfRow l1="BIN Number" v1={c.binNumber} l2="TIN Number" v2={c.tinNumber} />
+                </PfTable>
+              </PfBlock>
 
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '110px' }}>Accounts Person:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{financialContact.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '90px' }}>Designation:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{financialContact.designation}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 230px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '90px' }}>Phone (Cell):</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{financialContact.mobile}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 160px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '35px' }}>Fax:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '50px' }}>e-mail:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{financialContact.email}</span>
-                  </div>
-                </div>
+              <PfBlock title="Shipping Detail">
+                <PfTable>
+                  <PfRow l1="Volume" v1={shipping.volume} l2="Weight" v2={shipping.weight} />
+                  <PfRow l1="Revenue ($)" v1={shipping.revenue} l2="Preferred Carrier" v2={c.preferredCarrier} />
+                  <PfRow l1="Destinations" v1={c.destinations} l2="Nature of Business" v2={c.natureOfBusiness} />
+                </PfTable>
+              </PfBlock>
 
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '110px' }}>BIN Number:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.binNumber}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '90px' }}>TIN Number:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.tinNumber}</span>
-                  </div>
-                </div>
-              </div>
-
-              <PSectionTitle>Shipping Detail</PSectionTitle>
-
-              <div className="space-y-1.5 print-avoid-break">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 130px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '52px' }}>Volume:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{shipping.volume}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 130px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '52px' }}>Weight:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{shipping.weight}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 160px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '65px' }}>Rev. ($):</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{shipping.revenue}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '65px' }}>P.Carrier:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.preferredCarrier}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '95px' }}>Destinations:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{c.destinations}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 260px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '110px' }}>Nature of Business:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.natureOfBusiness}</span>
-                  </div>
-                </div>
-              </div>
-
-              <PSectionTitle>Account Detail</PSectionTitle>
-
-              <div className="space-y-1.5 print-avoid-break">
-                <div className="flex items-center gap-6 flex-wrap">
-                  <POptionRow
-                    label="Service Required:"
-                    labelWidth="115px"
-                    options={[{ value: 'OB', label: 'OB' }, { value: 'IB', label: 'IB' }]}
-                    isSelected={(v) => c.serviceRequired === v || c.serviceRequired === 'BOTH'}
+              <PfBlock title="Account Detail">
+                <PfTable>
+                  <PfRow
+                    l1="Service Required"
+                    v1={
+                      <PfChecks
+                        options={[{ value: 'OB', label: 'OB' }, { value: 'IB', label: 'IB' }]}
+                        isSelected={(v) => c.serviceRequired === v || c.serviceRequired === 'BOTH'}
+                      />
+                    }
+                    l2="Type"
+                    v2={
+                      <PfChecks
+                        options={[
+                          { value: 'NEW_GAIN', label: 'N. Gain' },
+                          { value: 'REGAIN', label: 'R. Gain' },
+                          { value: 'AC_UPDATE', label: 'A/C Update' },
+                        ]}
+                        isSelected={(v) => c.gainType === v}
+                      />
+                    }
                   />
-                  <POptionRow
-                    label="Type:"
-                    labelWidth="45px"
-                    options={[
-                      { value: 'NEW_GAIN', label: 'N. Gain' },
-                      { value: 'REGAIN', label: 'R.Gain' },
-                      { value: 'AC_UPDATE', label: 'A/C Update' },
-                    ]}
-                    isSelected={(v) => c.gainType === v}
+                  <PfRow
+                    l1="Mode"
+                    v1={
+                      <PfChecks
+                        options={[{ value: 'EX', label: 'Ex' }, { value: 'FR', label: 'FR' }]}
+                        isSelected={(v) => c.financeMode === v}
+                      />
+                    }
+                    l2="Type of Account"
+                    v2={
+                      <PfChecks
+                        options={[{ value: 'CASH', label: 'Cash' }, { value: 'CREDIT CUSTOMER', label: 'Credit' }]}
+                        isSelected={(v) => c.accountType === v}
+                      />
+                    }
                   />
-                  <POptionRow
-                    label="Mode:"
-                    labelWidth="48px"
-                    options={[{ value: 'EX', label: 'Ex' }, { value: 'FR', label: 'FR' }]}
-                    isSelected={(v) => c.financeMode === v}
-                  />
-                </div>
+                  <PfRow l1="Area" v1={c.area} l2="Zone" v2={c.zone} />
+                  <PfRow l1="Rate Ref. No." v1={buildRateRefs(c).join(' / ')} l2="Date" v2={formatPrintDate(c.createdAt)} />
+                  <PfRow l1="Amount Limit (BDT)" v1={c.creditLimitTk} l2="Time Limit (Days)" v2={c.creditPeriodDays} />
+                  <PfFull label="(In Word)" value={amountWords} />
+                  <PfRow l1="Account Created By" v1={c.recommendedBy?.name} l2="Account Handled By" v2={c.handledBy?.name} />
+                  <PfFull label="Special Instructions (If Any)" value={c.specialInstructions} h="34px" />
+                  <PfRow l1="Checked By" v1="" l2="Approved By" v2="" h="34px" />
+                </PfTable>
+              </PfBlock>
 
-                <div className="flex items-center gap-6 flex-wrap">
-                  <POptionRow
-                    label="Type of Account:"
-                    labelWidth="115px"
-                    options={[{ value: 'CASH', label: 'Cash' }, { value: 'CREDIT CUSTOMER', label: 'Credit' }]}
-                    isSelected={(v) => c.accountType === v}
-                  />
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 190px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '35px' }}>Area</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.area}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '40px' }}>Zone:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.zone}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '110px' }}>Rate Ref. No.:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{buildRateRefs(c).join(' / ')}</span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 220px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '40px' }}>Date:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{formatPrintDate(c.createdAt)}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-6">
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-semibold shrink-0" style={{ width: '120px' }}>Amount Limit (BDT):</span>
-                      <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.creditLimitTk}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-semibold shrink-0" style={{ width: '120px' }}>(In Word):</span>
-                      <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{amountWords}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 200px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '75px' }}>Time Limit:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.creditPeriodDays}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '135px' }}>Account Created By:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.recommendedBy?.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '135px' }}>Account Handled by:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] text-center">{c.handledBy?.name}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-semibold shrink-0" style={{ width: '150px' }}>Special Instructions: (If Any)</span>
-                  <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]">{c.specialInstructions}</span>
-                </div>
-
-                <div className="flex items-center gap-10">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '80px' }}>Checked By:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '95px' }}>Approved By:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                </div>
-              </div>
-
-              <PSectionTitle>Distributed Departments</PSectionTitle>
-
-              <div className="space-y-1.5 print-avoid-break">
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '45px' }}>Sales:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                  <div className="flex items-center gap-2" style={{ flex: '0 0 190px' }}>
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '65px' }}>Cr. Control:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-[10px] font-semibold shrink-0" style={{ width: '65px' }}>Accounts:</span>
-                    <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2" style={{ maxWidth: '260px' }}>
-                  <span className="text-[10px] font-semibold shrink-0" style={{ width: '45px' }}>Ops:</span>
-                  <span className="flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px]"></span>
-                </div>
-              </div>
+              <PfBlock title="Distributed Departments">
+                <PfTable>
+                  <PfRow l1="Sales" v1="" l2="Cr. Control" v2="" h="32px" />
+                  <PfRow l1="Accounts" v1="" l2="Ops" v2="" h="32px" />
+                </PfTable>
+              </PfBlock>
 
               {c.accountProfileType === 'PROVISIONAL' && (
                 <p className="text-center text-red-600 font-bold text-[11px] mt-2">PROVISIONAL ACCOUNT</p>
