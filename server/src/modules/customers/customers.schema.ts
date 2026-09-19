@@ -150,6 +150,21 @@ export const reapproveRateSchema = z
 // These routes previously took an unvalidated body. `approve` arriving as
 // anything other than a boolean left the request marked "decided" with no
 // decision actually recorded, and `mode` wrote arbitrary text to the column.
+export const escalateRateSchema = z
+  .object({ reason: z.string().min(1, 'Please say why a better rate is needed.').max(1000) })
+  .strict();
+
+export const grantHodRateSchema = z
+  .object({
+    approvedRate: z.string().min(1, 'Please enter the rate you are setting.').max(300),
+    lmNote: z.string().max(1000).optional(),
+  })
+  .strict();
+
+export const kamRateRequestSchema = z
+  .object({ reason: z.string().min(1, 'Please say why a better rate is needed.').max(1000) })
+  .strict();
+
 export const accountConfigModeSchema = z
   .object({ mode: z.enum(['REGULAR', 'PROVISIONAL'], { message: 'Please choose a valid account mode.' }) })
   .strict();

@@ -23,6 +23,9 @@ import {
   reassignCustomerSchema,
   reapproveRateSchema,
   accountConfigModeSchema,
+  escalateRateSchema,
+  grantHodRateSchema,
+  kamRateRequestSchema,
   decideFieldChangeSchema,
   directFieldEditSchema,
   reviseRateSchema,
@@ -59,6 +62,10 @@ router.post(
 );
 
 router.post('/:id/approve-rate', requirePermission(PERMISSIONS.APPROVE_RATE), validateBody(approveRateSchema), controller.approveRateHandler);
+router.post('/:id/escalate-rate', requirePermission(PERMISSIONS.REQUEST_NEW_RATE), validateBody(escalateRateSchema), controller.escalateRateHandler);
+router.post('/:id/grant-hod-rate', requirePermission(PERMISSIONS.GRANT_NEW_RATE), validateBody(grantHodRateSchema), controller.grantHodRateHandler);
+router.post('/:id/send-for-offer', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION, PERMISSIONS.CREATE_RECOMMENDATION), controller.sendForOfferHandler);
+router.post('/:id/request-better-rate', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION, PERMISSIONS.CREATE_RECOMMENDATION), validateBody(kamRateRequestSchema), controller.kamRequestRateHandler);
 router.post('/:id/reject-rate', requirePermission(PERMISSIONS.REJECT_RATE), controller.rejectRateHandler);
 router.post('/:id/draft-offer', requirePermission(PERMISSIONS.DRAFT_OFFER), controller.draftOfferHandler);
 router.post('/:id/finalize-offer', requirePermission(PERMISSIONS.FINALIZE_OFFER), validateBody(offerTextSchema), controller.finalizeOfferHandler);

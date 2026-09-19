@@ -7,7 +7,6 @@
     // Kept on the classic resolver: every dependency here is consumed as
     // CommonJS, and node16 resolution rejects the ESM-only ones outright.
     // The deprecation is acknowledged explicitly rather than worked around.
-    "ignoreDeprecations": "6.0",
     "module": "commonjs",
     "moduleResolution": "node",
 

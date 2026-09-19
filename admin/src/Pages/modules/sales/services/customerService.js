@@ -45,6 +45,26 @@ export const approveRate = async (id, payload) => {
   return data.customer;
 };
 
+export const escalateRateToHod = async (id, reason) => {
+  const { data } = await request(`/customers/${id}/escalate-rate`, { method: 'POST', body: { reason } });
+  return data.customer;
+};
+
+export const grantHodRate = async (id, approvedRate, lmNote) => {
+  const { data } = await request(`/customers/${id}/grant-hod-rate`, { method: 'POST', body: { approvedRate, lmNote } });
+  return data.customer;
+};
+
+export const sendForOfferLetter = async (id) => {
+  const { data } = await request(`/customers/${id}/send-for-offer`, { method: 'POST' });
+  return data.customer;
+};
+
+export const requestBetterRate = async (id, reason) => {
+  const { data } = await request(`/customers/${id}/request-better-rate`, { method: 'POST', body: { reason } });
+  return data.customer;
+};
+
 export const rejectRate = async (id) => {
   const { data } = await request(`/customers/${id}/reject-rate`, { method: 'POST' });
   return data.customer;

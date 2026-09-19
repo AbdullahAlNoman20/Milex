@@ -118,6 +118,195 @@ const PSectionTitle = ({ children }) => (
   <p className="text-center font-bold text-[11px] underline text-slate-900 my-1.5">{children}</p>
 );
 
+const formatOfferDate = (value) =>
+  new Date(value || Date.now())
+    .toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+    .toUpperCase();
+
+const OfferRow = ({ head, label, children, indent = '3mm', labelWidth = '45mm' }) => (
+  <div style={{ paddingLeft: indent, marginBottom: '4mm', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+    {head && <div className="font-bold">{head}</div>}
+    <div className="flex">
+      <div className="font-bold shrink-0" style={{ width: labelWidth }}>{label}</div>
+      <div className="font-bold shrink-0" style={{ width: '3mm' }}>:</div>
+      <div className="flex-1 text-justify">{children}</div>
+    </div>
+  </div>
+);
+
+const OfferLetter = ({ c }) => (
+  <div className="text-black" style={{ fontFamily: "'Times New Roman', Times, serif", fontSize: '11pt', lineHeight: 1.15 }}>
+    <div className="flex justify-between">
+      <div style={{ maxWidth: '110mm' }}>
+        <p className="font-bold">{c.accountName}</p>
+        <p style={{ whiteSpace: 'pre-line' }}>{c.address}</p>
+      </div>
+      <div style={{ width: '35mm' }}>
+        <p>{c.barcode}</p>
+        {/* offer sent date; change field name if yours differs — falls back to today */}
+        <p>{formatOfferDate(c.offerSentAt || c.offerSentDate)}</p>
+      </div>
+    </div>
+
+    <div className="flex italic font-bold" style={{ marginTop: '22mm', marginBottom: '5mm' }}>
+      <span className="shrink-0" style={{ width: '27mm' }}>Subject</span>
+      <span className="shrink-0" style={{ width: '9mm' }}>:</span>
+      <span className="underline">Offer for International Air Express Service Ex-Bangladesh</span>
+    </div>
+
+    <p>Dear Sir,</p>
+    <p className="text-justify" style={{ marginBottom: '5mm' }}>
+      I hope this letter finds you well. Further to our meeting dated, with you and our sales representative at your
+      office, I am pleased to formally offer you our International Air Express Service (Door to Door) on the following
+      terms:
+    </p>
+
+    <OfferRow label="a)&nbsp;&nbsp;&nbsp;Pick-up">
+      Our regular pick-up time is between 9:00 a.m. and 11:00 p.m. from Saturday to Thursday. We also offer pick-up on
+      Fridays and Government Holidays. For pick-up arrangements, you may contact our dedicated hotline at{' '}
+      <b>+88 01321146422</b>
+    </OfferRow>
+
+    <OfferRow label={<>b)&nbsp;&nbsp;Proof–of-Delivery</>}>
+      For both your incoming and outgoing shipments, you can track the status via our Customer Service Point{' '}
+      <b>+88 01321146424</b> or through our online tracking system at{' '}
+      <b className="underline">www.milexair.com.</b>
+    </OfferRow>
+
+    <div className="font-bold" style={{ paddingLeft: '3mm', marginBottom: '1mm', breakAfter: 'avoid' }}>
+      c)&nbsp;&nbsp;&nbsp;Rates
+    </div>
+
+    <OfferRow indent="10mm" labelWidth="38mm" label={<em>i) Outgoing (prepaid)</em>}>
+      I am pleased to enclose herewith a <b>Net Payable Rate Scale</b> in US dollar exclusively applicable for your
+      Outgoing shipments. Please note that, <b><em>15% VAT will be charged for all non-export shipments.</em></b>
+    </OfferRow>
+
+    <OfferRow
+      indent="10mm"
+      labelWidth="38mm"
+      head={<em>ii) Outgoing</em>}
+      label={<em>(Cash on Delivery)</em>}
+    >
+      You can also use our service Cash on Delivery (COD) basis to your consignee. Please note that if your consignee
+      refuses to make payment for any shipment then we will raise the invoice here locally at your end.
+    </OfferRow>
+
+    <OfferRow indent="10mm" labelWidth="38mm" label={<em>iii) Incoming shipment</em>}>
+      You can also get your incoming shipment on collect basis, against this service, we will charge to you according
+      to the printed rates of origin country.
+    </OfferRow>
+
+    <OfferRow indent="7mm" labelWidth="41mm" label="d)&nbsp;&nbsp;&nbsp;Transit Time">
+      The estimated delivery time for shipments from Bangladesh to destinations worldwide is 2 to 5 days, provided
+      there are no delays in local or destination customs.
+    </OfferRow>
+
+    <OfferRow
+      indent="7mm"
+      labelWidth="41mm"
+      head="e)&nbsp;&nbsp;&nbsp;Incoming Shipment"
+      label={<span style={{ paddingLeft: '5mm' }}>Customs Clearance</span>}
+    >
+      We will ensure clearance of all your Incoming Non-Dox MilExAir shipments within 1 to 3 days if you authorize us
+      for the same. We will charge you fixed clearing charge (mentioned below) in excluding all the Government duty,
+      taxes, VAT AIT and other Govt. levies at actual basis if applicable.
+    </OfferRow>
+
+    <div style={{ marginLeft: '44mm', marginBottom: '4mm', breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+      <table className="w-full border-collapse text-center" style={{ tableLayout: 'fixed', fontSize: '10pt' }}>
+        <colgroup>
+          <col style={{ width: '29%' }} />
+          <col style={{ width: '36%' }} />
+          <col style={{ width: '35%' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th className="border border-black px-1 py-0.5">Service</th>
+            <th className="border border-black px-1 py-0.5">Up to 4.99kg or Value US$99.99</th>
+            <th className="border border-black px-1 py-0.5">Beyond 4.99 kg or Value US$99.99</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="border border-black px-1 py-0.5">MilExAir, Incoming</td>
+            <td className="border border-black px-1 py-0.5">Taka 1,200.00</td>
+            <td className="border border-black px-1 py-0.5">Taka 1,500.00</td>
+          </tr>
+          <tr>
+            <td className="border border-black px-1 py-0.5">Non- MilExAir, Incoming</td>
+            <td className="border border-black px-1 py-0.5">Taka 1,800.00</td>
+            <td className="border border-black px-1 py-0.5">Taka 2,100.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <OfferRow indent="7mm" labelWidth="41mm" label="f)&nbsp;&nbsp;&nbsp;Packaging Materials">
+      We will provide packaging materials free of charge to ensure your shipments reach their destination safely.
+      Alternatively, you may use your own packaging.
+    </OfferRow>
+
+    <OfferRow
+      indent="7mm"
+      labelWidth="41mm"
+      head="g)&nbsp;&nbsp;&nbsp;Measurement of"
+      label={<span style={{ paddingLeft: '5mm' }}>Shipment</span>}
+    >
+      For measuring shipments, we will follow the IATA rules with regard to the “GROSS” and “VOLUMETRIC” weight and
+      will charge you on the basis whichever is higher. Volumetric shipment calculation:{' '}
+      <b>Height x Width x Length (cm)/5000.</b>
+    </OfferRow>
+
+    <OfferRow
+      indent="7mm"
+      labelWidth="41mm"
+      head="h)&nbsp;&nbsp;&nbsp;Dollar and"
+      label={<span style={{ paddingLeft: '5mm' }}>Taka Ratio</span>}
+    >
+      Dollar to Taka ratio will be fixed by the International Air Express Association of Bangladesh for all its
+      members.
+    </OfferRow>
+
+    <OfferRow indent="7mm" labelWidth="41mm" label="i)&nbsp;&nbsp;&nbsp;Fuel Surcharge">
+      Monthly Index based fuel surcharge based on the index will be added on Net payable rate.
+    </OfferRow>
+
+    <OfferRow indent="7mm" labelWidth="41mm" label="j)&nbsp;&nbsp;&nbsp;Compensation">
+      Incase of any service failure (Delay in delivery, Partial &amp; full missing) we will give you compensation
+      based on the Terms, Conditions &amp; Amount mentioned on the reverse page of MilExAir Airway bill.
+    </OfferRow>
+
+    <div style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+      <p className="text-justify" style={{ marginBottom: '4mm' }}>
+        We are confident that this offer will meet your expectations. Should you require any further clarification or
+        information please feel free to contact me. We look forward to establishing a long-lasting and mutually
+        beneficial partnership between our organizations.
+      </p>
+      <p style={{ marginBottom: '4mm' }}>Thank you and best regards.</p>
+      <p>Should you have any questions or please do not hesitate to contact me.</p>
+
+      <p style={{ marginTop: '14mm' }}>Very sincerely yours,</p>
+      <p>AnRoot LogEx Limited.</p>
+
+      <p style={{ marginTop: '14mm' }}>_____________________</p>
+      <p>Rashed Ahmed Khan Chowdhury</p>
+      <p>Chief Commercial Officer</p>
+
+      <div className="grid" style={{ gridTemplateColumns: '14mm 6mm 1fr', marginTop: '10mm' }}>
+        <span>Encl.</span>
+        <span>:</span>
+        <span>
+          i) Net payable rate chart exclusively for <b>{c.accountName}</b>
+        </span>
+        <span>CC</span>
+        <span>:</span>
+        <span>Sales and marketing department.</span>
+      </div>
+    </div>
+  </div>
+);
+
 const PrintTemplate = ({ data, onClose }) => {
  useEffect(() => {
     if (!data) return undefined;
@@ -141,13 +330,13 @@ const PrintTemplate = ({ data, onClose }) => {
     <div className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
       <style>{`
         @media print {
-          @page { size: A4; margin: 10mm; }
+          @page { size: A4; margin: ${data.type === 'offer' ? '23mm 13mm 10mm 25mm' : '10mm'}; }
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
         }
       `}</style>
 
-     <div className="bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:p-5 print:w-full print:max-w-none print:min-h-0">
-        {data.type !== 'profile' && (
+     <div className={`bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:w-full print:max-w-none print:min-h-0 ${data.type === 'offer' ? 'print:p-0' : 'print:p-5'}`}>
+        {data.type !== 'profile' && data.type !== 'offer' && (
           <div className="flex justify-between items-end border-b-2 border-slate-800 pb-4 mb-8">
             <h1 className="text-4xl font-black text-emerald-800 italic tracking-tighter">MILEX</h1>
             <p className="text-right text-xs  mt-2 font-mono bg-slate-100 px-2 py-1 inline-block border font-bold text-slate-800">
@@ -156,9 +345,7 @@ const PrintTemplate = ({ data, onClose }) => {
           </div>
         )}
 
-        {data.type === 'offer' && (
-          <div className="space-y-4 text-sm whitespace-pre-wrap leading-relaxed">{c.offerText}</div>
-        )}
+        {data.type === 'offer' && <OfferLetter c={c} />}
 
         {data.type === 'agreement' && (
           <div className="space-y-4 text-sm whitespace-pre-wrap leading-relaxed">{c.agreementText}</div>

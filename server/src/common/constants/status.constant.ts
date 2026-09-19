@@ -2,6 +2,8 @@
 export const CUSTOMER_STATUS = Object.freeze({
   PENDING_RATE_PREPARATION: 'PENDING_RATE_PREPARATION',
   PENDING_RATE_APPROVAL: 'PENDING_RATE_APPROVAL',
+  PENDING_HOD_RATE_APPROVAL: 'PENDING_HOD_RATE_APPROVAL',
+  PENDING_KAM_RATE_REVIEW: 'PENDING_KAM_RATE_REVIEW',
   RATE_APPROVED_PENDING_OFFER: 'RATE_APPROVED_PENDING_OFFER',
   DRAFTING_OFFER_LETTER: 'DRAFTING_OFFER_LETTER',
   OFFER_SENT_AWAITING_FEEDBACK: 'OFFER_SENT_AWAITING_FEEDBACK',
@@ -25,19 +27,46 @@ export type CustomerStatusKey = keyof typeof CUSTOMER_STATUS;
 // service ever does a raw `status = x` write.
 export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {
   [CUSTOMER_STATUS.PENDING_RATE_PREPARATION]: [CUSTOMER_STATUS.PENDING_RATE_APPROVAL],
+
+  // The Line Manager's desk. They either set the rate themselves, or escalate
+  // to the Head of Department — those are the only two ways forward.
   [CUSTOMER_STATUS.PENDING_RATE_APPROVAL]: [
-    CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
+    CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
     CUSTOMER_STATUS.PENDING_RATE_PREPARATION,
   ],
-  [CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER]: [],
+
+  // The Head of Department's desk. Granting a rate hands it to the KAM;
+  // declining hands it back to the Line Manager who asked.
+  [CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL]: [
+    CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+  ],
+
+  // The KAM's desk. They take the rate to the Sales Coordinator, or send it
+  // back to their Line Manager for a better one. This is the loop the
+  // business actually runs on, and it can go round as many times as needed.
+  [CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW]: [
+    CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
+    CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+  ],
+
+  // The Sales Coordinator's desk.
+  [CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER]: [
+    CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
+  ],
   [CUSTOMER_STATUS.DRAFTING_OFFER_LETTER]: [CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK],
+
+  // The customer's answer. Accepting is the moment the account becomes
+  // provisional and the document countdown starts; rejecting sends the rate
+  // back to the Line Manager and the whole loop runs again.
   [CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK]: [
     CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
+    CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
     CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
   ],
-  // PENDING_RATE_APPROVAL kept for the legacy pre-provisional flow;
-  // PROVISIONAL_ACTIVE added for the new reject → LM re-approves → SC
-  // resends loop that happens while the account is already provisional.
+
+  // Legacy records only — nothing new lands here.
   [CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE]: [
     CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
     CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
@@ -50,6 +79,10 @@ export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {
     CUSTOMER_STATUS.ACTIVE_ACCOUNT,
   ],
   [CUSTOMER_STATUS.PROVISIONAL_ACTIVE]: [
+    // A live account can still be re-quoted: the customer asks, and the rate
+    // goes back round the same loop without disturbing their provisional
+    // standing or the countdown already running.
+    CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
     CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
     // Extension requests are only allowed once the provisional period has
     // actually expired — see PROVISIONAL_EXPIRED's own transition list

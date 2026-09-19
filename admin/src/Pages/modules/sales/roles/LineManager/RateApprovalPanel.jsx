@@ -1,26 +1,32 @@
 // admin/src/Pages/modules/sales/roles/LineManager/RateApprovalPanel.jsx
 import { useState, useRef } from 'react';
-import { CheckCircle, FileOutput, Loader2 } from 'lucide-react';
+import { CheckCircle, FileOutput, Loader2, ArrowUpCircle } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { getDocumentSignedUrl } from '../../services/customerService';
+import { useConfirm } from '../../../../../Components/hooks/useConfirm';
+import { getDocumentSignedUrl, escalateRateToHod } from '../../services/customerService';
 import { STATUS, CREDIT_RULES } from '../../constants/salesStatus';
 import { isRequired, isValidCreditPeriod } from '../../../../../Components/utils/validators';
 import { sanitizeText } from '../../../../../Components/utils/sanitize';
 
-const RateApprovalPanel = ({ customer }) => {
+// Two ways forward, and only two: set the rate here, or hand the decision to
+// the Head of Department. They are tabs rather than two buttons on one form
+// because they need different information and only one of them ever applies.
+const RateApprovalPanel = ({ customer, onUpdated }) => {
   const { updateStatus } = useSales();
   const { showToast } = useToast();
-  const [approvedRate, setApprovedRate] = useState(customer.proposedRate || '');
+  const confirm = useConfirm();
+  const [tab, setTab] = useState('approve');
+  const [approvedRate, setApprovedRate] = useState(customer.approvedRate || customer.proposedRate || '');
   const [lmNote, setLmNote] = useState('');
-  const [creditPeriod, setCreditPeriod] = useState(customer.creditPeriodDays || String(CREDIT_RULES.DEFAULT_PERIOD_DAYS));
+  const [escalationReason, setEscalationReason] = useState('');
+  const [creditPeriod, setCreditPeriod] = useState(
+    customer.creditPeriodDays || String(CREDIT_RULES.DEFAULT_PERIOD_DAYS)
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpeningRateDoc, setIsOpeningRateDoc] = useState(false);
   const submitLockRef = useRef(false);
 
-  // The rate sheet the KAM attached to the recommendation. This button used
-  // to do nothing at all — it now opens that document, and says so plainly
-  // when the KAM didn't attach one.
   const rateDocument = (customer.documents || []).find(
     (d) => d.documentType === 'RECOMMENDATION_ATTACHMENT'
   );
@@ -45,16 +51,23 @@ const RateApprovalPanel = ({ customer }) => {
 
   const handleApprove = async () => {
     if (submitLockRef.current) return;
-    if (!isRequired(approvedRate)) return showToast('Approved rate is required', 'warning');
+    if (!isRequired(approvedRate)) return showToast('Enter the rate you are setting', 'warning');
     if (!isValidCreditPeriod(creditPeriod)) {
       return showToast(`Credit period must be between 1 and ${CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS} days`, 'warning');
     }
+    const ok = await confirm({
+      title: 'Set this rate?',
+      message: `${customer.accountName} will be quoted ${approvedRate.trim()}. It goes to the KAM, who decides whether to take it to the customer or ask for a better one.`,
+      confirmLabel: 'Set rate',
+    });
+    if (!ok) return;
+
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
       await updateStatus(
         customer.id,
-        STATUS.APPROVED_PENDING_OFFER,
+        STATUS.PENDING_KAM_REVIEW,
         {
           approvedRate: sanitizeText(approvedRate, { maxLength: 300 }),
           lmNote: sanitizeText(lmNote, { maxLength: 500 }),
@@ -62,74 +75,175 @@ const RateApprovalPanel = ({ customer }) => {
           creditPeriodExtendedByLM: Number(creditPeriod) > CREDIT_RULES.DEFAULT_PERIOD_DAYS,
         },
         'RATE APPROVED BY LM',
-        'Waiting for SC Offer letter'
+        'Awaiting the KAM to review the rate'
       );
+      onUpdated?.();
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
+
+  const handleEscalate = async () => {
+    if (submitLockRef.current) return;
+    if (!isRequired(escalationReason)) {
+      return showToast('Explain what you need from the Head of Department', 'warning');
+    }
+    const ok = await confirm({
+      title: 'Ask the Head of Department for a best rate?',
+      message: 'Only the Head of Department is notified. Nothing reaches the KAM or the customer until they answer.',
+      confirmLabel: 'Send request',
+    });
+    if (!ok) return;
+
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await escalateRateToHod(customer.id, escalationReason.trim());
+      showToast('Sent to the Head of Department', 'success');
+      setEscalationReason('');
+      onUpdated?.();
+    } catch (err) {
+      showToast(err?.message || 'Could not send the request', 'error');
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-emerald-600 p-6 space-y-4">
-      <h3 className="font-bold text-slate-900 text-base">Rate Approval</h3>
-      <p className="text-[11px] text-slate-500">
-        Review the KAM's proposed rate below. Edit it directly if a different rate is needed, then approve.
-      </p>
+      <h3 className="font-bold text-slate-900 text-base">Rate Decision</h3>
 
       {customer.rateRef && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">RATE REFERENCE</p>
-          <p className="font-black text-xl text-slate-800 mb-2">{customer.rateRef}</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+            KAM'S PROPOSED RATE
+          </p>
+          <p className="font-bold text-sm text-slate-800 mb-2 break-words">
+            {customer.proposedRate || '—'}
+          </p>
           <button
             type="button"
             onClick={handleOpenRateDocument}
             disabled={isOpeningRateDoc}
             className="text-xs text-blue-600 font-bold flex items-center justify-center w-full hover:underline disabled:opacity-50"
           >
-            {isOpeningRateDoc ? <Loader2 size={14} className="mr-1 animate-spin" /> : <FileOutput size={14} className="mr-1" />}
+            {isOpeningRateDoc ? (
+              <Loader2 size={14} className="mr-1 animate-spin" />
+            ) : (
+              <FileOutput size={14} className="mr-1" />
+            )}
             {rateDocument ? 'Open Attached Rate Document' : 'No Rate Document Attached'}
           </button>
         </div>
       )}
 
-      <textarea
-        className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-emerald-500 min-h-[70px]"
-        placeholder="Approved rate details (edit to propose a different rate)"
-        value={approvedRate}
-        maxLength={300}
-        onChange={(e) => setApprovedRate(e.target.value)}
-      />
-
-      <div>
-        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-          Credit Period (Days) — Default {CREDIT_RULES.DEFAULT_PERIOD_DAYS}, Max {CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
-        </label>
-        <input
-          type="number"
-          min="1"
-          max={CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
-          className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
-          value={creditPeriod}
-          onChange={(e) => setCreditPeriod(e.target.value)}
-        />
+      <div className="flex gap-1 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setTab('approve')}
+          className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
+            tab === 'approve'
+              ? 'border-emerald-600 text-emerald-700'
+              : 'border-transparent text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          Approve Rate
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('request')}
+          className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
+            tab === 'request'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          Request Best Rate from HOD
+        </button>
       </div>
 
-      <textarea
-        className="w-full text-xs border border-slate-300 p-3 rounded-xl outline-none focus:border-emerald-500 min-h-[70px]"
-        placeholder="Notes..."
-        value={lmNote}
-        maxLength={500}
-        onChange={(e) => setLmNote(e.target.value)}
-      />
+      {tab === 'approve' ? (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+              Rate You Are Setting
+            </label>
+            <textarea
+              className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-emerald-500 min-h-[70px]"
+              placeholder="e.g. 32 USD/Kg + 10 USD Custom"
+              value={approvedRate}
+              maxLength={300}
+              onChange={(e) => setApprovedRate(e.target.value)}
+            />
+          </div>
 
-      <button
-        type="button"
-        disabled={isSubmitting}
-        onClick={handleApprove}
-        className="w-full bg-emerald-500 text-white font-bold py-3 rounded-xl flex justify-center items-center text-sm shadow hover:bg-emerald-600 transition disabled:opacity-50"
-      >
-        <CheckCircle size={16} className="mr-1.5" /> Approve & Forward to Sales Coordinator
-      </button>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+              Credit Period (Days) — Default {CREDIT_RULES.DEFAULT_PERIOD_DAYS}, Max{' '}
+              {CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
+            </label>
+            <input
+              type="number"
+              min="1"
+              max={CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
+              className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500"
+              value={creditPeriod}
+              onChange={(e) => setCreditPeriod(e.target.value)}
+            />
+          </div>
+
+          <textarea
+            className="w-full text-xs border border-slate-300 p-3 rounded-xl outline-none focus:border-emerald-500 min-h-[60px]"
+            placeholder="Notes for the KAM (optional)"
+            value={lmNote}
+            maxLength={500}
+            onChange={(e) => setLmNote(e.target.value)}
+          />
+
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleApprove}
+            className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl flex justify-center items-center text-sm shadow hover:bg-emerald-700 transition disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <Loader2 size={16} className="mr-1.5 animate-spin" />
+            ) : (
+              <CheckCircle size={16} className="mr-1.5" />
+            )}
+            Approve Rate &amp; Send to KAM
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            The Head of Department will be asked to set the rate. Only they are notified — the KAM
+            hears nothing until an answer comes back.
+          </p>
+          <textarea
+            className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-indigo-500 min-h-[90px]"
+            placeholder="What do you need, and why? e.g. Competitor quoted 28 USD/Kg on the same lane."
+            value={escalationReason}
+            maxLength={1000}
+            onChange={(e) => setEscalationReason(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={handleEscalate}
+            className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl flex justify-center items-center text-sm shadow hover:bg-indigo-700 transition disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <Loader2 size={16} className="mr-1.5 animate-spin" />
+            ) : (
+              <ArrowUpCircle size={16} className="mr-1.5" />
+            )}
+            Send Request to Head of Department
+          </button>
+        </div>
+      )}
     </div>
   );
 };
