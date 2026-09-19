@@ -165,8 +165,9 @@ import PasswordField from "../../Components/Shared/PasswordField";
 const MAX_ATTEMPTS_MSG_LENGTH = 200;
 
 // DEV ONLY: stripped from production builds (import.meta.env.DEV === false)
+const SHOW_DEV_LOGIN = true;
 const DEV_PASSWORD = "Test@Pass123!";
-const DEV_ACCOUNTS = import.meta.env.DEV
+const DEV_ACCOUNTS = SHOW_DEV_LOGIN
   ? [
       { label: "Super Admin", email: "admin@milex.local" },
       { label: "KAM", email: "kam@milex.local" },
