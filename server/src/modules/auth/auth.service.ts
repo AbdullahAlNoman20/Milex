@@ -14,6 +14,7 @@ import { generateMfaSecret, buildQrCodeDataUrl, verifyMfaToken } from '../../com
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
 import { sendNotification } from '../../jobs/notification.job';
+import { CUSTOMER_LOGIN_DOMAIN } from '../customers/customerAccount.constants';
 
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_MINUTES = 15;
@@ -33,14 +34,22 @@ export const login = async (
   mfaToken: string | undefined,
   ctx: LoginContext
 ) => {
+  const identifier = email.trim();
+  // A customer types the account id from their own paperwork, which is
+  // stored as the local part of their generated address. Anything with an @
+  // is treated as the email it plainly is.
+  const lookupEmail = identifier.includes('@')
+    ? identifier.toLowerCase()
+    : `${identifier.toLowerCase()}@${CUSTOMER_LOGIN_DOMAIN}`;
+
   const user = await prisma.user.findUnique({
-    where: { email: email.toLowerCase() },
+    where: { email: lookupEmail },
     include: { role: { include: { permissions: { include: { permission: true } } } } },
   });
 
   const logAttempt = (success: boolean) =>
     prisma.loginLog.create({
-      data: { userId: user?.id, email: email.toLowerCase(), success, ip: ctx.ip, userAgent: ctx.userAgent },
+      data: { userId: user?.id, email: lookupEmail, success, ip: ctx.ip, userAgent: ctx.userAgent },
     });
 
   if (!user || !user.isActive) {
@@ -117,6 +126,7 @@ export const login = async (
       email: user.email,
       role: user.role.name,
       mustChangePassword: user.mustChangePassword,
+      customerId: user.customerId,
     },
   };
 };
@@ -289,5 +299,6 @@ export const getMe = async (userId: string) => {
     permissions: user.role.permissions.map((rp) => rp.permission.key),
     mfaEnabled: user.mfaEnabled,
     mustChangePassword: user.mustChangePassword,
+    customerId: user.customerId,
   };
 };

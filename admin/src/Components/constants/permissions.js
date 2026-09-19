@@ -35,6 +35,9 @@ export const PERMISSIONS = Object.freeze({
   // apart and hide (or wrongly show) an action in the UI.
   DELETE_CUSTOMER: 'DELETE_CUSTOMER',
   REASSIGN_CUSTOMER: 'REASSIGN_CUSTOMER',
+  REQUEST_NEW_RATE: 'REQUEST_NEW_RATE',
+  GRANT_NEW_RATE: 'GRANT_NEW_RATE',
+  VIEW_ALL_TEAMS: 'VIEW_ALL_TEAMS',
 });
 
 const P = PERMISSIONS;
@@ -49,7 +52,8 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.VIEW_CUSTOMER_PROFILE,
     P.SUBMIT_WEEKLY_PLAN,
     P.SUBMIT_DAILY_REPORT,
-    P.UPLOAD_ONBOARDING_DOCUMENT,
+    // Uploading is the Sales Coordinator's responsibility — see the matching
+    // note in the server seed.
     P.REQUEST_TIME_EXTENSION,
     P.SUBMIT_FINAL_ONBOARDING,
   ],
@@ -62,8 +66,11 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.VIEW_CUSTOMER_PROFILE,
     P.VIEW_ALL_KAM_DASHBOARDS,
     P.UPLOAD_ONBOARDING_DOCUMENT,
-    P.REQUEST_TIME_EXTENSION,
+    // REQUEST_TIME_EXTENSION intentionally absent — only the KAM may request
+    // the 5-day provisional extension. This now matches the server's seed,
+    // so the UI no longer offers a button the API refuses.
     P.SUBMIT_FINAL_ONBOARDING,
+    P.REQUEST_INFO_UPDATE,
   ],
   [ROLES.LINE_MANAGER]: [
     P.APPROVE_RATE,
@@ -77,7 +84,35 @@ export const ROLE_PERMISSIONS = Object.freeze({
     P.EXTEND_PROVISIONAL_PERIOD,
     P.FINALIZE_ONBOARDING,
     P.VIEW_ACTIVITY_LOG,
+    P.REQUEST_NEW_RATE,
+    P.CREATE_RECOMMENDATION,
+    P.REVISE_RECOMMENDATION,
+    P.REQUEST_INFO_UPDATE,
+    P.REASSIGN_CUSTOMER,
   ],
+  [ROLES.HEAD_OF_DEPARTMENT]: [
+    P.APPROVE_RATE,
+    P.REJECT_RATE,
+    P.APPROVE_INFO_UPDATE,
+    P.REVIEW_WEEKLY_PLAN,
+    P.VIEW_FOLLOWUP_REMINDERS,
+    P.VIEW_CUSTOMER_PROFILE,
+    P.VIEW_ALL_KAM_DASHBOARDS,
+    P.VIEW_ALL_TEAMS,
+    P.APPROVE_PROVISIONAL_ONBOARDING,
+    P.EXTEND_PROVISIONAL_PERIOD,
+    P.FINALIZE_ONBOARDING,
+    P.VIEW_ACTIVITY_LOG,
+    P.REQUEST_NEW_RATE,
+    P.GRANT_NEW_RATE,
+    P.CREATE_RECOMMENDATION,
+    P.REVISE_RECOMMENDATION,
+    P.REQUEST_INFO_UPDATE,
+    P.REASSIGN_CUSTOMER,
+    P.EXPORT_DATA,
+  ],
+  // Intentionally empty — the account exists for identity and login only.
+  [ROLES.CUSTOMER]: [],
   [ROLES.SUPER_ADMIN]: Object.values(PERMISSIONS),
 });
 

@@ -25,6 +25,13 @@ const NAV_ITEMS = [
     permissions: null,
   },
   {
+    to: '/app/assignments',
+    label: 'Customer Assignments',
+    icon: Users,
+    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN],
+    permissions: null,
+  },
+  {
     to: '/app/daily-reports',
     label: 'Daily Visiting Report',
     icon: ClipboardList,
@@ -35,14 +42,14 @@ const NAV_ITEMS = [
     to: '/app/follow-ups',
     label: 'Follow-up Reminders',
     icon: BellRing,
-    roles: [ROLES.LINE_MANAGER],
+    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT],
     permissions: null,
   },
   {
     to: '/app/team-reports',
     label: 'Team Reports',
     icon: Eye,
-    roles: [ROLES.LINE_MANAGER, ROLES.SUPER_ADMIN],
+    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN],
     permissions: null,
   },
   {
@@ -63,7 +70,7 @@ const NAV_ITEMS = [
     to: '/app/team-activity',
     label: 'Team Activity',
     icon: Users2,
-    roles: [ROLES.LINE_MANAGER, ROLES.SUPER_ADMIN],
+    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN],
     permissions: null,
   },
   {

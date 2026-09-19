@@ -1,10 +1,32 @@
 // admin/src/Components/utils/format.js
 export const formatRevision = (revision) => (revision > 0 ? `R-${revision}` : 'New');
 
-export const formatRateRef = (customer) => {
-  if (!customer?.rateRef) return null;
-  return `REF-${customer.rateRef}${customer.revision > 0 ? `-R${customer.revision}` : ''}`;
+const RATE_SOURCE_LABELS = {
+  LINE_MANAGER: 'Line Manager',
+  HEAD_OF_DEPARTMENT: 'Head of Department',
 };
+
+export const rateSourceLabel = (source) => RATE_SOURCE_LABELS[source] || 'Line Manager';
+
+// The reference is anchored to the customer's own id and never changes for
+// the life of the account — a hundred revisions later it is still the same
+// code with a different suffix, which is what makes it usable as a filing
+// reference on paper. Inbound service carries an IB marker so the two
+// directions can be told apart at a glance; outbound is the plain form.
+export const buildRateRefs = (customer) => {
+  if (!customer) return [];
+  const base = customer.rateRef || customer.barcode;
+  if (!base) return [];
+  const suffix = customer.revision > 0 ? `-R${customer.revision}` : '';
+  const service = customer.serviceRequired;
+
+  if (service === 'IB') return [`REF-${base}IB${suffix}`];
+  // Both directions are quoted, so both references exist side by side.
+  if (service === 'BOTH') return [`REF-${base}IB${suffix}`, `REF-${base}${suffix}`];
+  return [`REF-${base}${suffix}`];
+};
+
+export const formatRateRef = (customer) => buildRateRefs(customer)[0] || null;
 
 export const humanizeAction = (value) => {
   if (typeof value !== 'string' || !value) return '';

@@ -13,7 +13,8 @@ const ROLE_PERMISSION_MAP: Record<RoleName, string[]> = {
     PERMISSIONS.VIEW_CUSTOMER_PROFILE,
     PERMISSIONS.SUBMIT_WEEKLY_PLAN,
     PERMISSIONS.SUBMIT_DAILY_REPORT,
-    PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT,
+    // Document collection sits entirely with the Sales Coordinator now — the
+    // KAM works the relationship, the Coordinator files the paperwork.
     PERMISSIONS.REQUEST_TIME_EXTENSION,
     PERMISSIONS.SUBMIT_FINAL_ONBOARDING,
     PERMISSIONS.REQUEST_INFO_UPDATE,
@@ -44,7 +45,43 @@ const ROLE_PERMISSION_MAP: Record<RoleName, string[]> = {
     PERMISSIONS.EXTEND_PROVISIONAL_PERIOD,
     PERMISSIONS.FINALIZE_ONBOARDING,
     PERMISSIONS.VIEW_ACTIVITY_LOG,
+    // A Line Manager may raise a rate request and create a recommendation
+    // themselves, but may not answer their own request for a better rate —
+    // that decision belongs to the Head of Department.
+    PERMISSIONS.REQUEST_NEW_RATE,
+    PERMISSIONS.CREATE_RECOMMENDATION,
+    PERMISSIONS.REVISE_RECOMMENDATION,
+    PERMISSIONS.REQUEST_INFO_UPDATE,
+    PERMISSIONS.REASSIGN_CUSTOMER,
   ],
+  // Everything a Line Manager can do, across every team rather than one, plus
+  // the authority to set a new best rate. Deliberately without MANAGE_USERS
+  // or FULL_SYSTEM_CONTROL — this is a business role, not an administrator.
+  HEAD_OF_DEPARTMENT: [
+    PERMISSIONS.APPROVE_RATE,
+    PERMISSIONS.REJECT_RATE,
+    PERMISSIONS.APPROVE_INFO_UPDATE,
+    PERMISSIONS.REVIEW_WEEKLY_PLAN,
+    PERMISSIONS.VIEW_FOLLOWUP_REMINDERS,
+    PERMISSIONS.VIEW_CUSTOMER_PROFILE,
+    PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS,
+    PERMISSIONS.VIEW_ALL_TEAMS,
+    PERMISSIONS.APPROVE_PROVISIONAL_ONBOARDING,
+    PERMISSIONS.EXTEND_PROVISIONAL_PERIOD,
+    PERMISSIONS.FINALIZE_ONBOARDING,
+    PERMISSIONS.VIEW_ACTIVITY_LOG,
+    PERMISSIONS.REQUEST_NEW_RATE,
+    PERMISSIONS.GRANT_NEW_RATE,
+    PERMISSIONS.CREATE_RECOMMENDATION,
+    PERMISSIONS.REVISE_RECOMMENDATION,
+    PERMISSIONS.REQUEST_INFO_UPDATE,
+    PERMISSIONS.REASSIGN_CUSTOMER,
+    PERMISSIONS.EXPORT_DATA,
+  ],
+  // Holds no permissions at all yet. The account exists so the person can
+  // sign in and so their identity is already in place; the customer-facing
+  // features are a later release.
+  CUSTOMER: [],
   SUPER_ADMIN: Object.values(PERMISSIONS),
 };
 
@@ -83,6 +120,7 @@ async function main() {
     { name: 'Test KAM', email: 'kam@milex.local', role: 'KAM' },
     { name: 'Test Sales Coordinator', email: 'sc@milex.local', role: 'SALES_COORDINATOR' },
     { name: 'Test Line Manager', email: 'lm@milex.local', role: 'LINE_MANAGER' },
+    { name: 'Test Head of Department', email: 'hod@milex.local', role: 'HEAD_OF_DEPARTMENT' },
   ];
 
   for (const u of testUsers) {

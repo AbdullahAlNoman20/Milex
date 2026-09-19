@@ -2,6 +2,7 @@
 import { Router, json } from 'express';
 import * as controller from './backup.controller';
 import { requireAuth } from '../../common/middlewares/auth.middleware';
+import { requireStaff } from '../../common/middlewares/staffOnly.middleware';
 import { verifyCsrf } from '../../common/middlewares/csrf.middleware';
 import { requirePermission } from '../../common/middlewares/permission.middleware';
 import { exportRateLimiter } from '../../common/middlewares/rateLimit.middleware';
@@ -14,6 +15,7 @@ const router = Router();
 // body parser runs, so an unauthenticated caller can never make the server
 // buffer hundreds of megabytes.
 router.use(requireAuth);
+router.use(requireStaff);
 router.use(requirePermission(PERMISSIONS.FULL_SYSTEM_CONTROL));
 
 router.get('/stats', verifyCsrf, controller.statsHandler);

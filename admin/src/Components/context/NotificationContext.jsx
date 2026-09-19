@@ -1,15 +1,8 @@
 // admin/src/Components/context/NotificationContext.jsx — FULL REPLACE
-import React, {
-  createContext,
-  useMemo,
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { listNotifications } from "../services/notificationService";
 import { getSocket } from "../services/socketService";
-
-export const NotificationContext = createContext(null);
+import { NotificationContext } from "./NotificationContextObject";
 
 const REFRESH_INTERVAL_MS = 60000;
 const BELL_LIMIT = 8;
@@ -43,6 +36,9 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    // The fetch itself is async — state only lands after the network call
+    // resolves — but the lint can't see through the function boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
     const id = setInterval(refresh, REFRESH_INTERVAL_MS);
 

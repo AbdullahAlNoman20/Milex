@@ -26,7 +26,9 @@ export const assertLineManagerOwnsCustomer = async (customerId: string, actorId:
   if (!customer || customer.isDeleted) {
     throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
   }
-  if (actorRole === 'SUPER_ADMIN') return;
+  // Both sit above the individual Line Managers: every employee reports up to
+  // the Head of Department, so neither is scoped to one team's records.
+  if (actorRole === 'SUPER_ADMIN' || actorRole === 'HEAD_OF_DEPARTMENT') return;
 
   const ownerLineManagerId = customer.handledBy?.lineManagerId ?? null;
   if (ownerLineManagerId === null) return;
@@ -65,7 +67,7 @@ export const assertLineManagerOwnsKam = async (kamId: string, lmId: string) => {
     getActorRole(lmId),
   ]);
   if (!kam) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that team member.' };
-  if (actorRole === 'SUPER_ADMIN') return;
+  if (actorRole === 'SUPER_ADMIN' || actorRole === 'HEAD_OF_DEPARTMENT') return;
   if (kam.lineManagerId === null) return;
   if (kam.lineManagerId !== lmId) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This team member doesn\'t report to you, so you can\'t view their activity.' };

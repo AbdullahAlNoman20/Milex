@@ -1,6 +1,5 @@
 // src/Components/Shared/SelectWithOther.jsx
 import { useState, useEffect, useCallback } from 'react';
-import { sanitizeText } from '../utils/sanitize';
 
 const OTHER_VALUE = '__OTHER__';
 const MAX_OTHER_LENGTH = 120;

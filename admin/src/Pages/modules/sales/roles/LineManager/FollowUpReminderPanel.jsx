@@ -1,23 +1,48 @@
-// src/Pages/modules/sales/roles/LineManager/FollowUpReminderPanel.jsx
-import { useState } from 'react';
+// admin/src/Pages/modules/sales/roles/LineManager/FollowUpReminderPanel.jsx
+import { useState, useEffect, useCallback } from 'react';
 import { BellRing } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { deriveFollowUps } from '../../services/followUpService';
+import { fetchFollowUps } from '../../services/customerService';
 import { isValidDateString } from '../../../../../Components/utils/validators';
 import { humanizeStatus } from '../../../../../Components/utils/format';
+import Loader from '../../../../../Components/Shared/Loader';
 import Pagination from '../../../../../Components/Shared/Pagination';
 
+const PAGE_SIZE = 10;
+
 const FollowUpReminderPanel = () => {
-  const { customers, updateCustomerMeta } = useSales();
+  const { updateCustomerMeta, reloadToken } = useSales();
   const { showToast } = useToast();
+  const [items, setItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [draftDate, setDraftDate] = useState('');
   const [draftNote, setDraftNote] = useState('');
-
-  const items = deriveFollowUps(customers);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
+
+  // The server already scopes this to the accounts this Line Manager is
+  // responsible for and sorts overdue ones first, so the browser no longer
+  // needs the entire customer table just to work out who needs chasing.
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await fetchFollowUps();
+      setItems(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setLoadError(err?.message || 'Failed to load follow-up reminders.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load, reloadToken]);
+
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const pageClamped = Math.min(page, totalPages);
   const pagedItems = items.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
@@ -28,15 +53,23 @@ const FollowUpReminderPanel = () => {
     setDraftNote(item.followUpNote || '');
   };
 
-  const saveEdit = (customerId) => {
+  const saveEdit = async (customerId) => {
     if (draftDate && !isValidDateString(draftDate)) return showToast('Invalid follow-up date', 'warning');
-    updateCustomerMeta(customerId, {
-      followUpDate: draftDate ? new Date(draftDate).toISOString() : null,
-      followUpNote: draftNote.slice(0, 500),
-    });
-    setEditing(null);
-    showToast('Follow-up updated', 'success');
+    try {
+      await updateCustomerMeta(customerId, {
+        followUpDate: draftDate ? new Date(draftDate).toISOString() : null,
+        followUpNote: draftNote.slice(0, 500),
+      });
+      setEditing(null);
+      showToast('Follow-up updated', 'success');
+      load();
+    } catch {
+      /* the toast is raised by updateCustomerMeta */
+    }
   };
+
+  if (isLoading) return <Loader fullScreen label="Loading follow-ups..." />;
+  if (loadError) return <p className="text-sm text-red-600 font-semibold">{loadError}</p>;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -140,7 +173,13 @@ const FollowUpReminderPanel = () => {
           ))}
         </div>
       )}
-      <Pagination page={pageClamped} totalPages={totalPages} totalItems={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
+      <Pagination
+        page={pageClamped}
+        totalPages={totalPages}
+        totalItems={items.length}
+        pageSize={PAGE_SIZE}
+        onChange={setPage}
+      />
     </div>
   );
 };

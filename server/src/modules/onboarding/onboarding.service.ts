@@ -7,9 +7,10 @@ import { runFileScan } from '../../jobs/file-scan.job';
 import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { logAudit } from "../../common/utils/auditLog.util";
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
-import { DOCUMENT_TYPE_LABELS } from "../customers/customers.service";
+import { DOCUMENT_TYPE_LABELS, SELF_APPROVING_ROLES } from "../customers/customers.service";
 import { assertKamOwnsCustomerIfKam } from "../../common/utils/scopeGuard.util";
 import { assertLineManagerOwnsCustomer } from "../../common/utils/scopeGuard.util";
+import { ensureCustomerAccount } from "../customers/customerAccount.service";
 
 const DEFAULT_EXTENSION_DAYS = 5;
 
@@ -169,9 +170,12 @@ export const decideTimeExtension = async (
 
   const newExtensionTotal = customer.provisionalExtensionDays + grantedDays;
   const base = customer.provisionalCreatedAt ?? new Date();
-  const newExpiry = new Date(
-    base.getTime() + (21 + newExtensionTotal) * 86400000,
-  );
+  const computed = base.getTime() + (21 + newExtensionTotal) * 86400000;
+  // An account that expired weeks ago would otherwise get an expiry date
+  // still in the past, i.e. an "approved" extension that grants nothing.
+  // The granted days are counted from now in that case.
+  const floor = Date.now() + grantedDays * 86400000;
+  const newExpiry = new Date(Math.max(computed, floor));
 
   return transitionCustomerStatus({
     customerId: customer.id,
@@ -186,13 +190,8 @@ export const decideTimeExtension = async (
   });
 };
 
-const REQUIRED_FINAL_DOC_TYPES = [
-  "TRADE_LICENSE",
-  "CUSTOMER_BIN",
-  "CUSTOMER_TIN",
-  "SIGNED_OFFER_LETTER",
-  "OFFER_RATE_RECEIPT",
-];
+// Trade licence only — see the matching note in customers.service.ts.
+const REQUIRED_FINAL_DOC_TYPES = ["TRADE_LICENSE"];
 
 export const submitFinalOnboardingRequest = async (
   customerId: string,
@@ -226,6 +225,21 @@ export const submitFinalOnboardingRequest = async (
     };
   }
 
+  // Created by someone whose own approval this step represents — submitting
+  // it is the approval, so the account goes live straight away.
+  if (SELF_APPROVING_ROLES.includes(customer.createdByRole || '')) {
+    const activated = await transitionCustomerStatus({
+      customerId,
+      toStatus: CUSTOMER_STATUS.ACTIVE_ACCOUNT,
+      actorId: kamId,
+      extraUpdates: { accountProfileType: 'REGULAR' },
+      historyAction: 'FINAL ONBOARDING COMPLETED — ACCOUNT ACTIVATED',
+      historySubText: 'Review skipped: the case owner submitted it themselves',
+    });
+    ensureCustomerAccount(customerId).catch(() => {});
+    return activated;
+  }
+
   return transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
@@ -242,6 +256,20 @@ export const decideFinalOnboarding = async (
   lmId: string
 ) => {
   await assertLineManagerOwnsCustomer(customerId, lmId);
+  // Explicit gate: this decision only exists for an account actually
+  // waiting on final review. Without it, a stale/duplicated request from
+  // another status surfaced as a raw "invalid transition" error.
+  const target = await prisma.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    select: { status: true },
+  });
+  if (target.status !== CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING) {
+    throw {
+      statusCode: 409,
+      code: 'INVALID_STATE',
+      message: 'This account is not waiting for final onboarding review. Please refresh the page.',
+    };
+  }
   if (approve) {
     const updated = await transitionCustomerStatus({
       customerId,
@@ -250,6 +278,9 @@ export const decideFinalOnboarding = async (
       extraUpdates: { accountProfileType: 'REGULAR' },
       historyAction: 'FINAL ONBOARDING APPROVED — ACCOUNT ACTIVATED',
     });
+    // The customer's own login comes into existence the moment their account
+    // is real, so their identity is never retro-fitted later.
+    ensureCustomerAccount(customerId).catch(() => {});
     sendCustomerAccountEmail({
       accountName: updated.accountName,
       barcode: updated.barcode,

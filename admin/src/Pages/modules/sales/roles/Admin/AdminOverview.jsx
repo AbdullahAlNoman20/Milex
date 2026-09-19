@@ -21,7 +21,6 @@ import {
   AlertTriangle,
   FileSpreadsheet,
 } from 'lucide-react';
-import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { downloadCsv } from '../../../../../Components/utils/csv';
 import {
@@ -33,33 +32,46 @@ import {
 } from '../../services/userAdminService';
 import { getBackupStats, downloadBackup, restoreBackup } from '../../services/backupService';
 import BulkImportKamModal from './BulkImportKamModal';
+import PasswordField from '../../../../../Components/Shared/PasswordField';
+import { PASSWORD_RULES } from '../../../../../Components/Shared/passwordRules';
+import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 
 // Used only for displaying an existing account's role.
 const ROLE_OPTIONS = [
   { value: 'KAM', label: 'KAM' },
   { value: 'SALES_COORDINATOR', label: 'Sales Coordinator' },
   { value: 'LINE_MANAGER', label: 'Line Manager' },
+  { value: 'HEAD_OF_DEPARTMENT', label: 'Head of Department' },
   { value: 'SUPER_ADMIN', label: 'Super Admin' },
+  { value: 'CUSTOMER', label: 'Customer' },
 ];
 
 // Roles that may actually be assigned. Super Admin is absent on purpose:
 // the system's Super Admin is provisioned once at setup and no further one
 // is ever created or promoted from this console. The server enforces the
 // same rule, so removing it here is presentation, not the safeguard.
-const ASSIGNABLE_ROLE_OPTIONS = ROLE_OPTIONS.filter((r) => r.value !== 'SUPER_ADMIN');
+// A customer login is created by the system when their account goes active,
+// so it is shown on existing rows but never offered as something to assign.
+const ASSIGNABLE_ROLE_OPTIONS = ROLE_OPTIONS.filter(
+  (r) => r.value !== 'SUPER_ADMIN' && r.value !== 'CUSTOMER'
+);
 
 const ROLE_BADGE_STYLE = {
   SUPER_ADMIN: 'bg-violet-100 text-violet-700 ring-violet-200',
+  HEAD_OF_DEPARTMENT: 'bg-indigo-100 text-indigo-700 ring-indigo-200',
   LINE_MANAGER: 'bg-blue-100 text-blue-700 ring-blue-200',
   SALES_COORDINATOR: 'bg-amber-100 text-amber-700 ring-amber-200',
   KAM: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+  CUSTOMER: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 
 const ROLE_DONUT_COLOR = {
   SUPER_ADMIN: '#7C3AED',
+  HEAD_OF_DEPARTMENT: '#4F46E5',
   LINE_MANAGER: '#2563EB',
   SALES_COORDINATOR: '#F59E0B',
   KAM: '#059669',
+  CUSTOMER: '#94A3B8',
 };
 
 const roleLabel = (value) => ROLE_OPTIONS.find((r) => r.value === value)?.label || value;
@@ -71,11 +83,35 @@ const PAGE_SIZE = 10;
 // Cryptographically random rather than Math.random(): a predictable
 // temporary password is guessable by anyone who knows roughly when the
 // account was created.
-const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+// One character is drawn from each required class FIRST, then the rest at
+// random, then the whole thing is shuffled. The previous version drew every
+// character from one pooled alphabet, so it occasionally produced a password
+// with (say) no digit at all — which the server then rejected as too weak.
+const PASSWORD_SETS = Object.freeze({
+  upper: 'ABCDEFGHJKLMNPQRSTUVWXYZ',
+  lower: 'abcdefghijkmnpqrstuvwxyz',
+  digit: '23456789',
+  special: '!@#$%^&*?-_',
+});
+const PASSWORD_ALPHABET = Object.values(PASSWORD_SETS).join('');
+const PASSWORD_LENGTH = 16;
+
+const randomInt = (max) => {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] % max;
+};
+
 const generatePassword = () => {
-  const bytes = new Uint32Array(14);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length]).join('');
+  const chars = Object.values(PASSWORD_SETS).map((set) => set[randomInt(set.length)]);
+  while (chars.length < PASSWORD_LENGTH) {
+    chars.push(PASSWORD_ALPHABET[randomInt(PASSWORD_ALPHABET.length)]);
+  }
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
 };
 
 const formatBytes = (bytes) => {
@@ -204,8 +240,8 @@ const Avatar = ({ name }) => {
 };
 
 const AdminOverview = () => {
-  useSales();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [users, setUsers] = useState([]);
   const [lineManagers, setLineManagers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -236,7 +272,7 @@ const AdminOverview = () => {
   const loadAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [userRes, lms] = await Promise.all([listAllUsers(1, 500), listLineManagers()]);
+      const [userRes, lms] = await Promise.all([listAllUsers(1, 5000), listLineManagers()]);
       setUsers(userRes.items);
       setLineManagers(lms);
     } catch (err) {
@@ -328,6 +364,12 @@ const AdminOverview = () => {
   };
 
   const handleRoleChange = async (user, role) => {
+    const ok = await confirm({
+      title: 'Change this person\'s role?',
+      message: `${user.name} will immediately gain the permissions of ${roleLabel(role)} and lose their current ones.`,
+      confirmLabel: 'Change role',
+    });
+    if (!ok) return;
     try {
       await updateUserAdmin(user.id, { role });
       showToast('Role updated', 'success');
@@ -348,7 +390,15 @@ const AdminOverview = () => {
   };
 
   const handleToggleActive = async (user) => {
-    if (!window.confirm(`${user.isActive ? 'Deactivate' : 'Reactivate'} ${user.name}?`)) return;
+    const ok = await confirm({
+      title: user.isActive ? 'Deactivate this account?' : 'Reactivate this account?',
+      message: user.isActive
+        ? `${user.name} will be signed out and won't be able to log in until reactivated. Their records stay exactly as they are.`
+        : `${user.name} will be able to log in again straight away.`,
+      confirmLabel: user.isActive ? 'Deactivate' : 'Reactivate',
+      tone: user.isActive ? 'danger' : 'default',
+    });
+    if (!ok) return;
     try {
       await updateUserAdmin(user.id, { isActive: !user.isActive });
       showToast(user.isActive ? 'User deactivated' : 'User reactivated', 'success');
@@ -618,12 +668,15 @@ const AdminOverview = () => {
                                 ROLE_BADGE_STYLE[u.role] || 'bg-slate-100 text-slate-600 ring-slate-200'
                               }`}
                               value={u.role}
-                              disabled={u.role === 'SUPER_ADMIN'}
+                              disabled={u.role === 'SUPER_ADMIN' || u.role === 'CUSTOMER'}
                               onChange={(e) => handleRoleChange(u, e.target.value)}
                             >
                               {/* An existing Super Admin's own role is shown but
                                   locked; no other account can be promoted to it. */}
-                              {(u.role === 'SUPER_ADMIN' ? ROLE_OPTIONS : ASSIGNABLE_ROLE_OPTIONS).map((r) => (
+                              {(u.role === 'SUPER_ADMIN' || u.role === 'CUSTOMER'
+                                ? ROLE_OPTIONS
+                                : ASSIGNABLE_ROLE_OPTIONS
+                              ).map((r) => (
                                 <option key={r.value} value={r.value}>{r.label}</option>
                               ))}
                             </select>
@@ -839,24 +892,29 @@ const AdminOverview = () => {
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Temporary Password</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    placeholder="Temporary password"
-                    value={form.password}
-                    maxLength={200}
-                    onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                  />
+                <div className="flex gap-2 items-start">
+                  <div className="flex-1 min-w-0">
+                    <PasswordField
+                      placeholder="Temporary password"
+                      value={form.password}
+                      onChange={(v) => setForm((p) => ({ ...p, password: v }))}
+                      className="bg-white"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setForm((p) => ({ ...p, password: generatePassword() }))}
-                    className="px-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition shrink-0"
+                    className="px-3 py-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition shrink-0"
                   >
                     Generate
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
+                <ul className="mt-1.5 text-[10px] text-slate-400 space-y-0.5">
+                  {PASSWORD_RULES.map((r) => (
+                    <li key={r.key}>• {r.label}</li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-slate-400 mt-1.5">
                   They'll be asked to replace this with their own password the first time they sign in.
                 </p>
               </div>
@@ -954,19 +1012,20 @@ const AdminOverview = () => {
                 <X size={14} />
               </button>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="flex-1 border border-slate-200 p-2.5 rounded-lg text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                placeholder="New password"
-                value={newPassword}
-                maxLength={200}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
+            <div className="flex gap-2 items-start">
+              <div className="flex-1 min-w-0">
+                <PasswordField
+                  placeholder="New password"
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  showChecklist
+                  className="bg-white"
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => setNewPassword(generatePassword())}
-                className="px-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition shrink-0"
+                className="px-3 py-3 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition shrink-0"
               >
                 Generate
               </button>

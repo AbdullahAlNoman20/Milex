@@ -83,13 +83,19 @@ const NotificationsPage = () => {
 
   const handleMarkAll = async () => {
     if (markAllLockRef.current) return;
-    const unreadIds = items.filter((i) => !i.isRead).map((i) => i.id);
-    if (unreadIds.length === 0) return;
+    const allUnreadIds = items.filter((i) => !i.isRead).map((i) => i.id);
+    // Temporary socket-push ids are not real rows — sending them would make
+    // the server reject the whole batch.
+    const unreadIds = allUnreadIds.filter((id) => !(typeof id === 'string' && id.startsWith('live_')));
+    if (allUnreadIds.length === 0) return;
     markAllLockRef.current = true;
     try {
       setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
-      markReadLocally(unreadIds);
-      await markAllNotificationsRead(unreadIds).catch(() => refreshBell());
+      markReadLocally(allUnreadIds);
+      if (unreadIds.length > 0) {
+        await markAllNotificationsRead(unreadIds).catch(() => refreshBell());
+      }
+      if (unreadIds.length !== allUnreadIds.length) refreshBell();
     } finally {
       markAllLockRef.current = false;
     }

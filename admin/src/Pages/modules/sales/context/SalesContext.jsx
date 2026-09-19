@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useToast } from '../../../../Components/hooks/useToast';
 import * as customerService from '../services/customerService';
 import { SalesContext } from './SalesContextObject';
@@ -11,7 +11,7 @@ const ACTION_TO_SERVICE_CALL = {
   'RATE APPROVED BY LM': (id, updates) => customerService.approveRate(id, updates),
   'RATE REJECTED BY LM': (id) => customerService.rejectRate(id),
   'DRAFTING OFFER LETTER': (id) => customerService.draftOffer(id),
-  'OFFER LETTER SENT': (id, updates) => customerService.finalizeOffer(id, updates.offerText),
+  'OFFER LETTER SENT': (id, updates) => customerService.finalizeOffer(id, updates.offerText, updates.sentVia),
   'OFFER ACCEPTED BY CUSTOMER': (id) => customerService.submitClientFeedback(id, true),
   'OFFER REJECTED BY CUSTOMER': (id, updates) =>
     customerService.submitClientFeedback(id, false, updates.rejectReason),
@@ -25,38 +25,36 @@ const ACTION_TO_SERVICE_CALL = {
     customerService.requestInfoUpdate(id, updates.pendingInfoUpdate?.field, updates.pendingInfoUpdate?.newValue),
   'INFO UPDATE APPROVED BY LM': (id) => customerService.decideInfoUpdate(id, true),
   'INFO UPDATE REJECTED BY LM': (id) => customerService.decideInfoUpdate(id, false),
-  'NEW RATE APPROVED BY LM': (id, updates) => customerService.reapproveRateAfterRejection(id, updates.approvedRate, updates.lmNote),
+  'NEW RATE APPROVED BY LM': (id, updates) =>
+    customerService.reapproveRateAfterRejection(id, updates.approvedRate, updates.lmNote),
 };
 
+// This provider no longer holds the customer list. Every screen asks the
+// server for the one page it is showing, so the amount of data in memory is
+// the same whether the company has fifty customers or fifty thousand — and
+// nothing is ever hidden, because paging, the tab groups and search all run
+// against the full table in the database.
+//
+// `reloadToken` is how a mutation tells whichever list is on screen to
+// refetch: it changes, the list's effect re-runs, and the fresh page comes
+// straight from the database.
 export const SalesProvider = ({ children }) => {
   const { showToast } = useToast();
-  const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [printData, setPrintData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
-  const reload = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setLoadError(null);
-      const data = await customerService.fetchCustomers();
-      setCustomers(Array.isArray(data) ? data : []);
-    } catch {
-      setLoadError('Failed to load customer records.');
-    } finally {
-      setIsLoading(false);
-    }
+  const reload = useCallback(() => setReloadToken((t) => t + 1), []);
+
+  // Bumping the token is what tells whichever list is on screen to refetch.
+  // The detail page watches it too, so a panel that already calls its own
+  // refresh after an action would otherwise fetch the same record twice.
+  const applyUpdated = useCallback((updated) => {
+    if (!updated) return;
+    setSelectedCustomer((prev) => (prev && prev.id === updated.id ? updated : prev));
+    setReloadToken((t) => t + 1);
   }, []);
 
-useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    reload();
-  }, [reload]);
-
-  // Every role panel calls updateStatus(id, newStatus, updates, actionText, subText)
-  // exactly as before — this now forwards to the real backend endpoint that
-  // matches the actionText, then refetches so all roles see the live result.
   const updateStatus = useCallback(
     async (id, _newStatus, updates = {}, actionText, _subText = '') => {
       void _subText;
@@ -68,21 +66,20 @@ useEffect(() => {
       }
       try {
         const updated = await call(id, updates);
-        setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
-        setSelectedCustomer((prev) => (prev && prev.id === id ? updated : prev));
+        applyUpdated(updated);
         showToast(`Success: ${actionText}`);
       } catch (err) {
         showToast(err?.message || `Failed: ${actionText}`, 'error');
       }
     },
-    [showToast]
+    [showToast, applyUpdated]
   );
 
   const addCustomer = useCallback(
     async (customerDraft) => {
       try {
         const record = await customerService.createRecommendation(customerDraft);
-        setCustomers((prev) => [...prev, record]);
+        setReloadToken((t) => t + 1);
         showToast('Recommendation Form Submitted Successfully!');
         return record;
       } catch (err) {
@@ -93,47 +90,39 @@ useEffect(() => {
     [showToast]
   );
 
-  const findByBarcode = useCallback(
-    async (barcode) => {
-      if (typeof barcode !== 'string' || !barcode.trim()) return null;
-      try {
-        return await customerService.fetchCustomerByBarcode(barcode.trim());
-      } catch {
-        return null;
-      }
-    },
-    []
-  );
+  const findByBarcode = useCallback(async (barcode) => {
+    if (typeof barcode !== 'string' || !barcode.trim()) return null;
+    return customerService.fetchCustomerByBarcode(barcode.trim());
+  }, []);
 
   const updateCustomerMeta = useCallback(
     async (id, updates = {}) => {
       try {
         const updated = await customerService.updateFollowUp(id, updates.followUpDate, updates.followUpNote);
-        setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
-        setSelectedCustomer((prev) => (prev && prev.id === id ? updated : prev));
+        applyUpdated(updated);
+        return updated;
       } catch (err) {
         showToast(err?.message || 'Failed to update follow-up', 'error');
+        throw err;
       }
     },
-    [showToast]
+    [showToast, applyUpdated]
   );
 
   const value = useMemo(
     () => ({
-      customers,
-      isLoading,
-      loadError,
       selectedCustomer,
       setSelectedCustomer,
       printData,
       setPrintData,
+      reloadToken,
+      reload,
       updateStatus,
       updateCustomerMeta,
       addCustomer,
       findByBarcode,
-      reload,
     }),
-    [customers, isLoading, loadError, selectedCustomer, printData, updateStatus, updateCustomerMeta, addCustomer, findByBarcode, reload]
+    [selectedCustomer, printData, reloadToken, reload, updateStatus, updateCustomerMeta, addCustomer, findByBarcode]
   );
 
   return <SalesContext.Provider value={value}>{children}</SalesContext.Provider>;

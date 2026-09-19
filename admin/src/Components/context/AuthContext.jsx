@@ -1,45 +1,14 @@
 // src/Components/context/AuthContext.jsx
-import React, {
-  createContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-} from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { ALL_ROLES } from "../constants/roles";
 import { apiLogin, apiFetchMe, apiLogout } from "../services/api";
 import { disconnectSocket } from "../services/socketService";
-
-export const AuthContext = createContext(null);
+import { AuthContext } from "./AuthContextObject";
 
 const SESSION_KEY = "milex_auth_session";
 const SESSION_VERSION = 2;
 
-const isValidSessionShape = (obj) =>
-  obj &&
-  typeof obj === "object" &&
-  obj.version === SESSION_VERSION &&
-  obj.user &&
-  typeof obj.user.id !== "undefined" &&
-  typeof obj.user.email === "string" &&
-  typeof obj.user.role === "string" &&
-  ALL_ROLES.includes(obj.user.role);
 
-const readSession = () => {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!isValidSessionShape(parsed)) {
-      sessionStorage.removeItem(SESSION_KEY);
-      return null;
-    }
-    return parsed.user;
-  } catch {
-    sessionStorage.removeItem(SESSION_KEY);
-    return null;
-  }
-};
 
 const writeSession = (user) => {
   try {
@@ -97,7 +66,9 @@ export const AuthProvider = ({ children }) => {
       }
       setCurrentUser(user);
       writeSession(user);
-      return { ok: true };
+      // The role is handed back so the caller can route without waiting for
+      // the context's own state update to land.
+      return { ok: true, user };
     } catch (err) {
       return { ok: false, error: err?.message || "Login failed" };
     }

@@ -31,7 +31,11 @@ const BarcodeSearchBar = () => {
   // Debounced, cancellable, server-side search — matches on account name,
   // customer barcode, and rate reference (comes back from the same query
   // since the backend already does an OR match across all three columns).
-  const runSearch = useCallback((term, autoNavigateIfExact = false) => {
+  // The exact-match handler is passed in per call instead of being kept in a
+  // ref. The ref existed only to keep this callback's dependency list empty,
+  // but mutating a ref from an effect is exactly what the hooks lint forbids —
+  // and a plain argument does the same job with no shared mutable state.
+  const runSearch = useCallback((term, onExactMatch = null) => {
     clearTimeout(debounceRef.current);
     if (!term.trim()) {
       setResults([]);
@@ -48,11 +52,12 @@ const BarcodeSearchBar = () => {
         // A barcode scanner sends the full code and an Enter keystroke almost
         // instantly — if that exact barcode matches one customer, skip the
         // dropdown entirely and jump straight to their profile.
-        if (autoNavigateIfExact) {
+        if (onExactMatch) {
+          const needle = term.trim().toLowerCase();
           const exact = items.find(
-            (c) => c.barcode.toLowerCase() === term.trim().toLowerCase(),
+            (c) => typeof c.barcode === 'string' && c.barcode.toLowerCase() === needle,
           );
-          if (exact) openCustomerRef.current(exact);
+          if (exact) onExactMatch(exact);
         }
       } catch {
         if (requestId === requestIdRef.current) setResults([]);
@@ -66,7 +71,7 @@ const BarcodeSearchBar = () => {
     const val = e.target.value.slice(0, MAX_SEARCH_LENGTH);
     setQuery(val);
     setIsOpen(true);
-    runSearch(val, false);
+    runSearch(val, null);
   };
 
   const openCustomer = useCallback(
@@ -80,20 +85,12 @@ const BarcodeSearchBar = () => {
     [navigate, setSelectedCustomer],
   );
 
-  // Keeps a stable reference to the latest openCustomer for the debounced
-  // callback above (which is created once and shouldn't be re-created on
-  // every render just because openCustomer's identity changes).
-  const openCustomerRef = useRef(openCustomer);
-  useEffect(() => {
-    openCustomerRef.current = openCustomer;
-  }, [openCustomer]);
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!query.trim()) return;
     // Enter key (typed manually, or sent automatically by a barcode
     // scanner) — search immediately and auto-navigate on an exact match.
-    runSearch(query, true);
+    runSearch(query, openCustomer);
   };
 
   const clearSearch = () => {

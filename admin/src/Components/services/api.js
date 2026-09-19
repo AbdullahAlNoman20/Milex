@@ -81,7 +81,7 @@ export const request = async (path, { method = 'GET', body, headers = {}, _retri
 // "Unexpected token '<' ... is not valid JSON". This routes them through
 // the same plain-language error handling as every other request, and adds
 // the timeout they were missing entirely.
-export const uploadRequest = async (path, formData) => {
+export const uploadRequest = async (path, formData, { _retried = false } = {}) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
   const csrfToken = getCsrfToken();
@@ -113,6 +113,18 @@ export const uploadRequest = async (path, formData) => {
     }
 
     if (!res.ok || !data?.success) {
+      // The access cookie lives 15 minutes, so the first upload after a quiet
+      // stretch used to fail with "session expired" even though the 7-day
+      // refresh cookie was perfectly valid. Renew once, then retry silently —
+      // exactly what request() already did for every other call.
+      if (res.status === 401 && !_retried) {
+        try {
+          await request('/auth/refresh', { method: 'POST', _retried: true });
+          return uploadRequest(path, formData, { _retried: true });
+        } catch {
+          /* refresh failed — fall through to the normal error below */
+        }
+      }
       if (data?.error?.message) throw new Error(data.error.message);
       if (res.status === 413) throw new Error('This file is too large to upload. Please choose a file under 10MB.');
       if (res.status === 401) throw new Error('Your session has expired. Please log in again and retry the upload.');

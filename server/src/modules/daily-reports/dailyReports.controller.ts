@@ -29,7 +29,8 @@ export const listForKamHandler = async (req: Request, res: Response, next: NextF
     if (req.user!.role === 'LINE_MANAGER') {
       await assertLineManagerOwnsKam(kamId, req.user!.id);
     }
-    const reports = await dailyReportsService.listReportsForKam(kamId);
+    const limit = Number(req.query.limit) || undefined;
+    const reports = await dailyReportsService.listReportsForKam(kamId, limit);
     return sendSuccess(res, { reports });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
@@ -39,7 +40,8 @@ export const listForKamHandler = async (req: Request, res: Response, next: NextF
 
 export const listMineHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const reports = await dailyReportsService.listReportsForKam(req.user!.id);
+    const limit = Number(req.query.limit) || undefined;
+    const reports = await dailyReportsService.listReportsForKam(req.user!.id, limit);
     return sendSuccess(res, { reports });
   } catch (err) {
     next(err);

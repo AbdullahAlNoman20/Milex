@@ -21,6 +21,9 @@ export const savePlan = async (plan) => {
     method: 'POST',
     body: {
       weekStartDate: plan.weekStartDate,
+      // Tells the server how current this view is, so a visit added from the
+      // Daily Report while this page sat open is not wiped out by saving it.
+      loadedAt: plan.loadedAt || undefined,
       // `id` is sent so the server can update rows in place instead of
       // deleting and recreating them. Recreating changed every visit's id,
       // which silently broke ReportVisit.sourceVisitId and made Daily

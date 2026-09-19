@@ -6,13 +6,15 @@ export const getReportByDate = async (date) => {
   return data.report;
 };
 
-export const listReportsForKam = async (kamId) => {
-  const { data } = await request(`/daily-reports/kam/${encodeURIComponent(kamId)}`);
+export const listReportsForKam = async (kamId, limit) => {
+  const query = limit ? `?limit=${encodeURIComponent(limit)}` : '';
+  const { data } = await request(`/daily-reports/kam/${encodeURIComponent(kamId)}${query}`);
   return data.reports;
 };
 
-export const listMyReports = async () => {
-  const { data } = await request('/daily-reports/mine');
+export const listMyReports = async (limit) => {
+  const query = limit ? `?limit=${encodeURIComponent(limit)}` : '';
+  const { data } = await request(`/daily-reports/mine${query}`);
   return data.reports;
 };
 

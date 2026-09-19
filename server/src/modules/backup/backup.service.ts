@@ -36,7 +36,7 @@ export const getStorageStats = async () => {
     /* directory not created yet */
   }
 
-  const [customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications] = await Promise.all([
+  const [customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications, rateRequests, correspondence] = await Promise.all([
     prisma.customer.count(),
     prisma.user.count(),
     prisma.onboardingDocument.count(),
@@ -44,11 +44,13 @@ export const getStorageStats = async () => {
     prisma.dailyReport.count(),
     prisma.auditLog.count(),
     prisma.notification.count(),
+    prisma.rateRequest.count(),
+    prisma.customerCorrespondence.count(),
   ]);
 
   return {
     files: { count: fileCount, totalBytes },
-    records: { customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications },
+    records: { customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications, rateRequests, correspondence },
     generatedAt: new Date().toISOString(),
   };
 };
@@ -62,6 +64,7 @@ export const createBackup = async (includeFiles: boolean, actorId: string) => {
     roles, permissions, rolePermissions, users, customers, contacts, shippingDetails,
     serviceProviders, onboardingDocuments, timeExtensionRequests, fieldChangeRequests,
     customerHistory, weeklyPlans, visits, dailyReports, reportVisits, notifications, auditLogs, loginLogs,
+    rateRequests, correspondence,
   ] = await Promise.all([
     prisma.role.findMany(),
     prisma.permission.findMany(),
@@ -80,8 +83,13 @@ export const createBackup = async (includeFiles: boolean, actorId: string) => {
     prisma.dailyReport.findMany(),
     prisma.reportVisit.findMany(),
     prisma.notification.findMany(),
-    prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 50000 }),
-    prisma.loginLog.findMany({ orderBy: { createdAt: 'desc' }, take: 50000 }),
+    // Complete, not truncated: the point of this file is that the system can
+    // be rebuilt from it exactly as it was. AuditLog is never purged, so it
+    // is the permanent record and must survive a restore intact.
+    prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.loginLog.findMany({ orderBy: { createdAt: 'desc' } }),
+    prisma.rateRequest.findMany(),
+    prisma.customerCorrespondence.findMany(),
   ]);
 
   const files: BackupFile[] = [];
@@ -120,6 +128,7 @@ export const createBackup = async (includeFiles: boolean, actorId: string) => {
       roles, permissions, rolePermissions, users, customers, contacts, shippingDetails,
       serviceProviders, onboardingDocuments, timeExtensionRequests, fieldChangeRequests,
       customerHistory, weeklyPlans, visits, dailyReports, reportVisits, notifications, auditLogs, loginLogs,
+      rateRequests, correspondence,
     },
     files,
   };
@@ -154,6 +163,8 @@ export const restoreBackup = async (payload: any, confirm: string, actorId: stri
       await tx.visit.deleteMany({});
       await tx.weeklyPlan.deleteMany({});
       await tx.customerHistoryEntry.deleteMany({});
+      await tx.customerCorrespondence.deleteMany({});
+      await tx.rateRequest.deleteMany({});
       await tx.fieldChangeRequest.deleteMany({});
       await tx.timeExtensionRequest.deleteMany({});
       await tx.onboardingDocument.deleteMany({});
@@ -195,6 +206,8 @@ export const restoreBackup = async (payload: any, confirm: string, actorId: stri
       await tx.timeExtensionRequest.createMany({ data: d.timeExtensionRequests || [], skipDuplicates: true });
       await tx.fieldChangeRequest.createMany({ data: d.fieldChangeRequests || [], skipDuplicates: true });
       await tx.customerHistoryEntry.createMany({ data: d.customerHistory || [], skipDuplicates: true });
+      await tx.rateRequest.createMany({ data: d.rateRequests || [], skipDuplicates: true });
+      await tx.customerCorrespondence.createMany({ data: d.correspondence || [], skipDuplicates: true });
       await tx.weeklyPlan.createMany({ data: d.weeklyPlans || [], skipDuplicates: true });
       await tx.visit.createMany({ data: d.visits || [], skipDuplicates: true });
       await tx.dailyReport.createMany({ data: d.dailyReports || [], skipDuplicates: true });

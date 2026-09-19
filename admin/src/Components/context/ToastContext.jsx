@@ -1,7 +1,6 @@
 // src/Components/context/ToastContext.jsx
-import React, { createContext, useState, useCallback, useRef, useMemo } from 'react';
-
-export const ToastContext = createContext(null);
+import { useState, useCallback, useRef, useMemo } from 'react';
+import { ToastContext } from './ToastContextObject';
 
 const MAX_TOAST_LENGTH = 300;
 const DEFAULT_DURATION_MS = 3000;
@@ -18,7 +17,7 @@ export const ToastProvider = ({ children }) => {
   const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
- 
+
   const showToast = useCallback(
     (message, type = 'success', duration = DEFAULT_DURATION_MS) => {
       const safeMessage = sanitizeMessage(message);

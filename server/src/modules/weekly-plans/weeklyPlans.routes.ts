@@ -1,24 +1,64 @@
 // src/modules/weekly-plans/weeklyPlans.routes.ts
-import { Router } from 'express';
-import * as controller from './weeklyPlans.controller';
+import { Router } from "express";
+import * as controller from "./weeklyPlans.controller";
 import { requireAuth } from '../../common/middlewares/auth.middleware';
-import { requirePermission } from '../../common/middlewares/permission.middleware';
-import { validateBody } from '../../common/middlewares/validate.middleware';
-import { verifyCsrf } from '../../common/middlewares/csrf.middleware';
-import { PERMISSIONS } from '../../common/constants/permissions.constant';
-import { upsertPlanSchema, reviewPlanSchema } from './weeklyPlans.schema';
+import { requireStaff } from '../../common/middlewares/staffOnly.middleware';
+import { requirePermission } from "../../common/middlewares/permission.middleware";
+import { validateBody } from "../../common/middlewares/validate.middleware";
+import { verifyCsrf } from "../../common/middlewares/csrf.middleware";
+import { PERMISSIONS } from "../../common/constants/permissions.constant";
+import {
+  upsertPlanSchema,
+  reviewPlanSchema,
+  submitPlanSchema,
+} from "./weeklyPlans.schema";
 
 const router = Router();
 
 router.use(requireAuth);
+router.use(requireStaff);
 router.use(verifyCsrf);
 
-router.get('/mine', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), controller.listMinePlansHandler);
-router.get('/review', requirePermission(PERMISSIONS.REVIEW_WEEKLY_PLAN), controller.listForReviewHandler);
-router.get('/kam/:kamId', requirePermission(PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listForKamHandler);
-router.post('/draft', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), validateBody(upsertPlanSchema), controller.saveDraftHandler);
-router.post('/submit', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), controller.submitPlanHandler);
-router.post('/:id/review', requirePermission(PERMISSIONS.REVIEW_WEEKLY_PLAN), validateBody(reviewPlanSchema), controller.reviewPlanHandler);
-router.delete('/:id', requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN), controller.deletePlanHandler);
+router.get(
+  "/mine",
+  requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN),
+  controller.listMinePlansHandler,
+);
+router.get(
+  "/review",
+  requirePermission(PERMISSIONS.REVIEW_WEEKLY_PLAN),
+  controller.listForReviewHandler,
+);
+router.get(
+  "/kam/:kamId",
+  requirePermission(
+    PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS,
+    PERMISSIONS.FULL_SYSTEM_CONTROL,
+  ),
+  controller.listForKamHandler,
+);
+router.post(
+  "/draft",
+  requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN),
+  validateBody(upsertPlanSchema),
+  controller.saveDraftHandler,
+);
+router.post(
+  "/submit",
+  requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN),
+  validateBody(submitPlanSchema),
+  controller.submitPlanHandler,
+);
+router.post(
+  "/:id/review",
+  requirePermission(PERMISSIONS.REVIEW_WEEKLY_PLAN),
+  validateBody(reviewPlanSchema),
+  controller.reviewPlanHandler,
+);
+router.delete(
+  "/:id",
+  requirePermission(PERMISSIONS.SUBMIT_WEEKLY_PLAN),
+  controller.deletePlanHandler,
+);
 
 export default router;

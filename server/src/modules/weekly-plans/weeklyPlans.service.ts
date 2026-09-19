@@ -95,7 +95,7 @@ export const upsertDraft = async (kamId: string, data: any) => {
 
       const current = await tx.visit.findMany({
         where: { OR: [{ existingPlanId: plan.id }, { prospectPlanId: plan.id }] },
-        select: { id: true },
+        select: { id: true, createdAt: true },
       });
       const currentIds = new Set(current.map((r) => r.id));
 
@@ -105,10 +105,29 @@ export const upsertDraft = async (kamId: string, data: any) => {
           .filter((id: unknown): id is string => typeof id === 'string' && UUID_RE.test(id) && currentIds.has(id))
       );
 
-      const removedIds = [...currentIds].filter((id) => !keepIds.has(id));
+      // A visit missing from the incoming list is not necessarily one the
+      // person deleted — it may have been added since their page was loaded,
+      // from the Daily Report or from another tab, in which case removing it
+      // would silently destroy work they never saw. Rows created after the
+      // page was fetched are therefore kept, and only rows the person could
+      // actually have seen are treated as deliberate removals.
+      // Without a freshness marker there is no way to tell a deliberate
+      // removal from a row that arrived after the page was loaded, so the
+      // safe reading is that nothing was deliberately removed. A visit the
+      // person really did delete can always be deleted again; one destroyed
+      // by a stale save cannot be recovered.
+      const knownSince: Date | null = data.loadedAt ? new Date(data.loadedAt) : null;
+      const removable: string[] = knownSince
+        ? current.filter((r) => r.createdAt.getTime() <= knownSince.getTime()).map((r) => r.id)
+        : [];
+
+      const removedIds = removable.filter((id) => !keepIds.has(id));
       if (removedIds.length > 0) {
         await tx.visit.deleteMany({ where: { id: { in: removedIds } } });
       }
+
+      const toUpdate: { id: string; fields: any }[] = [];
+      const toCreate: any[] = [];
 
       for (const { v, section } of incoming) {
         const fields = {
@@ -120,13 +139,19 @@ export const upsertDraft = async (kamId: string, data: any) => {
           existingPlanId: section === 'existing' ? plan.id : null,
           prospectPlanId: section === 'prospect' ? plan.id : null,
         };
-        if (typeof v.id === 'string' && keepIds.has(v.id)) {
-          // eslint-disable-next-line no-await-in-loop
-          await tx.visit.update({ where: { id: v.id }, data: fields });
-        } else {
-          // eslint-disable-next-line no-await-in-loop
-          await tx.visit.create({ data: fields });
-        }
+        if (typeof v.id === 'string' && keepIds.has(v.id)) toUpdate.push({ id: v.id, fields });
+        else toCreate.push(fields);
+      }
+
+      // New rows go in one statement; updates are issued together instead of
+      // strictly one-after-another. A busy week used to fire dozens of
+      // sequential round trips inside the transaction and could hit the
+      // 20-second timeout with the plan half-written.
+      if (toCreate.length > 0) {
+        await tx.visit.createMany({ data: toCreate });
+      }
+      if (toUpdate.length > 0) {
+        await Promise.all(toUpdate.map((u) => tx.visit.update({ where: { id: u.id }, data: u.fields })));
       }
 
       return tx.weeklyPlan.findUniqueOrThrow({

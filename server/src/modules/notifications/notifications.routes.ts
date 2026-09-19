@@ -1,7 +1,8 @@
 // server/src/modules/notifications/notifications.routes.ts
 import { Router } from "express";
 import * as controller from "./notifications.controller";
-import { requireAuth } from "../../common/middlewares/auth.middleware";
+import { requireAuth } from '../../common/middlewares/auth.middleware';
+import { requireStaff } from '../../common/middlewares/staffOnly.middleware';
 import { verifyCsrf } from "../../common/middlewares/csrf.middleware";
 import { validateBody } from "../../common/middlewares/validate.middleware";
 import { markAllReadSchema } from "./notifications.schema";
@@ -9,6 +10,7 @@ import { markAllReadSchema } from "./notifications.schema";
 const router = Router();
 
 router.use(requireAuth);
+router.use(requireStaff);
 router.use(verifyCsrf);
 router.get("/", controller.listNotificationsHandler);
 router.post("/:id/read", controller.markReadHandler);

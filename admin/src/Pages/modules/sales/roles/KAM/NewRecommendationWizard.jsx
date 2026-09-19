@@ -17,16 +17,15 @@ import {
   SERVICE_REQUIRED_OPTIONS,
   SHIPMENT_TYPE_OPTIONS,
   RATE_FOR_OPTIONS,
+  DESIGNATION_OPTIONS,
   buildEmptyShippingRow,
 } from "../../constants/formOptions";
+import PhoneInput from "../../../../../Components/Shared/PhoneInput";
+import { isValidBdPhone } from "../../../../../Components/Shared/phoneFormat";
 import { CREDIT_RULES } from "../../constants/salesStatus";
-import {
-  sanitizePhoneInput,
-  sanitizeEmailInput,
-} from "../../../../../Components/utils/sanitize";
+import { sanitizeEmailInput } from "../../../../../Components/utils/sanitize";
 import {
   isValidEmail,
-  isValidMobile,
   isRequired,
   validateShippingRow,
 } from "../../../../../Components/utils/validators";
@@ -282,8 +281,10 @@ const NewRecommendationWizard = () => {
       showToast("Account name and address are required", "warning");
       return false;
     }
-    if (!isValidMobile(form.phone)) {
-      showToast("Valid phone number is required", "warning");
+    // Company phone is optional per the current form — the Senior Management
+    // contact below is the number that has to be reachable.
+    if (form.phone && !isValidBdPhone(form.phone)) {
+      showToast("Enter a valid 10-digit Bangladeshi phone number, or leave it blank", "warning");
       return false;
     }
     if (!isValidEmail(form.email)) {
@@ -307,10 +308,13 @@ const NewRecommendationWizard = () => {
         showToast("Senior Management designation is required", "warning"),
         false
       );
-    // Senior Management mobile is intentionally OPTIONAL per spec
+    if (!isValidBdPhone(contacts.senior.mobile)) {
+      showToast("Senior Management phone number is required", "warning");
+      return false;
+    }
 
-    if (!isRequired(contacts.key.name) || !isValidMobile(contacts.key.mobile)) {
-      showToast("Key Contact name and mobile are mandatory", "warning");
+    if (!isRequired(contacts.key.name) || !isValidBdPhone(contacts.key.mobile)) {
+      showToast("Key Contact name and a valid phone number are mandatory", "warning");
       return false;
     }
     if (!isValidEmail(contacts.key.email)) {
@@ -323,7 +327,7 @@ const NewRecommendationWizard = () => {
     if (
       !sameAsKey &&
       (!isRequired(contacts.financial.name) ||
-        !isValidMobile(contacts.financial.mobile))
+        !isValidBdPhone(contacts.financial.mobile))
     ) {
       showToast(
         'Financial contact is mandatory (or check "Same as Key Contact")',
@@ -482,15 +486,10 @@ const NewRecommendationWizard = () => {
                   />
                 </FormField>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField label="Phone" required>
-                    <input
-                      className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                  <FormField label="Phone" optional>
+                    <PhoneInput
                       value={form.phone}
-                      maxLength={16}
-                      placeholder="+8801XXXXXXXXX"
-                      onChange={(e) =>
-                        setField("phone", sanitizePhoneInput(e.target.value))
-                      }
+                      onChange={(v) => setField("phone", v)}
                     />
                   </FormField>
                   <FormField label="Email" required>
@@ -521,8 +520,8 @@ const NewRecommendationWizard = () => {
                     >
                       <option value="">Select...</option>
                       {SERVICE_REQUIRED_OPTIONS.map((o) => (
-                        <option key={o} value={o}>
-                          {o}
+                        <option key={o.value} value={o.value}>
+                          {o.label}
                         </option>
                       ))}
                     </select>
@@ -565,31 +564,17 @@ const NewRecommendationWizard = () => {
                       />
                     </FormField>
                     <FormField label="Designation" required>
-                      <input
-                        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                      <SelectWithOther
+                        options={DESIGNATION_OPTIONS}
                         value={contacts.senior.designation}
-                        maxLength={100}
-                        onChange={(e) =>
-                          setContactField(
-                            "senior",
-                            "designation",
-                            e.target.value,
-                          )
-                        }
+                        onChange={(v) => setContactField("senior", "designation", v)}
+                        placeholder="Select designation..."
                       />
                     </FormField>
-                    <FormField label="Phone" optional>
-                      <input
-                        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                    <FormField label="Phone" required>
+                      <PhoneInput
                         value={contacts.senior.mobile}
-                        maxLength={16}
-                        onChange={(e) =>
-                          setContactField(
-                            "senior",
-                            "mobile",
-                            sanitizePhoneInput(e.target.value),
-                          )
-                        }
+                        onChange={(v) => setContactField("senior", "mobile", v)}
                       />
                     </FormField>
                     <FormField label="Email" optional>
@@ -626,27 +611,17 @@ const NewRecommendationWizard = () => {
                       />
                     </FormField>
                     <FormField label="Designation" optional>
-                      <input
-                        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                      <SelectWithOther
+                        options={DESIGNATION_OPTIONS}
                         value={contacts.key.designation}
-                        maxLength={100}
-                        onChange={(e) =>
-                          setContactField("key", "designation", e.target.value)
-                        }
+                        onChange={(v) => setContactField("key", "designation", v)}
+                        placeholder="Select designation..."
                       />
                     </FormField>
                     <FormField label="Phone" required>
-                      <input
-                        className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                      <PhoneInput
                         value={contacts.key.mobile}
-                        maxLength={16}
-                        onChange={(e) =>
-                          setContactField(
-                            "key",
-                            "mobile",
-                            sanitizePhoneInput(e.target.value),
-                          )
-                        }
+                        onChange={(v) => setContactField("key", "mobile", v)}
                       />
                     </FormField>
                     <FormField label="Email" required>
@@ -693,17 +668,9 @@ const NewRecommendationWizard = () => {
                         />
                       </FormField>
                       <FormField label="Phone" required>
-                        <input
-                          className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
+                        <PhoneInput
                           value={contacts.financial.mobile}
-                          maxLength={16}
-                          onChange={(e) =>
-                            setContactField(
-                              "financial",
-                              "mobile",
-                              sanitizePhoneInput(e.target.value),
-                            )
-                          }
+                          onChange={(v) => setContactField("financial", "mobile", v)}
                         />
                       </FormField>
                       <FormField label="Email" optional>

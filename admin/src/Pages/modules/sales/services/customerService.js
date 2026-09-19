@@ -1,40 +1,33 @@
 // src/Pages/modules/sales/services/customerService.js
 import { request, uploadRequest, API_BASE_URL } from '../../../../Components/services/api';
 
-const PAGE_SIZE = 500;
-const MAX_PAGES = 200; // hard ceiling: 100,000 records
+// Exactly one page of records crosses the network per view. Every customer in
+// the database is still reachable — through paging, through the tab groups,
+// and through server-side search across name, barcode and rate reference —
+// but the browser never holds more than a screenful at a time. That is what
+// keeps a phone responsive whether the table has fifty rows or fifty
+// thousand, which downloading the whole set never could.
+export const fetchCustomerPage = async ({
+  page = 1,
+  pageSize = 10,
+  group,
+  search,
+  status,
+  withCounts = false,
+} = {}) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (group) params.set('group', group);
+  if (search && search.trim()) params.set('search', search.trim().slice(0, 100));
+  if (status) params.set('status', status);
+  if (withCounts) params.set('withCounts', 'true');
 
-// Fetches EVERY customer, not just the first page. The old version asked
-// for a single page of 300 and the server capped it there, so record 301
-// onward simply vanished from every list, count and dashboard figure.
-// Page 1 is fetched first to learn the total, then any remaining pages are
-// fetched in parallel batches so the wall-clock time stays flat as the
-// database grows.
-export const fetchCustomers = async (params = {}) => {
-  const buildQuery = (page) =>
-    new URLSearchParams({ ...params, page: String(page), pageSize: String(PAGE_SIZE) }).toString();
-
-  const { data: first } = await request(`/customers?${buildQuery(1)}`);
-  const items = Array.isArray(first.items) ? [...first.items] : [];
-  const totalPages = Math.min(first.totalPages || 1, MAX_PAGES);
-  if (totalPages <= 1) return items;
-
-  const remaining = [];
-  for (let p = 2; p <= totalPages; p += 1) remaining.push(p);
-
-  const BATCH = 4;
-  for (let i = 0; i < remaining.length; i += BATCH) {
-
-    const results = await Promise.all(
-      remaining.slice(i, i + BATCH).map((p) =>
-        request(`/customers?${buildQuery(p)}`)
-          .then((r) => r.data.items || [])
-          .catch(() => [])
-      )
-    );
-    results.forEach((chunk) => items.push(...chunk));
-  }
-  return items;
+  const { data } = await request(`/customers?${params.toString()}`);
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    total: data.total || 0,
+    totalPages: Math.max(1, data.totalPages || 1),
+    counts: data.counts || null,
+  };
 };
 
 export const fetchCustomerByBarcode = async (barcode) => {
@@ -62,9 +55,17 @@ export const draftOffer = async (id) => {
   return data.customer;
 };
 
-export const finalizeOffer = async (id, offerText) => {
-  const { data } = await request(`/customers/${id}/finalize-offer`, { method: 'POST', body: { offerText } });
+export const finalizeOffer = async (id, offerText, sentVia) => {
+  const { data } = await request(`/customers/${id}/finalize-offer`, {
+    method: 'POST',
+    body: sentVia ? { offerText, sentVia } : { offerText },
+  });
   return data.customer;
+};
+
+export const listCorrespondence = async (id) => {
+  const { data } = await request(`/customers/${id}/correspondence`);
+  return data.items;
 };
 
 export const sendAgreement = async (id, agreementText) => {

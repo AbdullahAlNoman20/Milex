@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router-dom";
 import Root from "./Root";
 import Home from "./Pages/Home/Home";
 import Login from "./Pages/Login/Login";
+import NoAccess from "./Pages/NoAccess/NoAccess";
 import ScrollToTop from "./Components/ScrollToTop";
 import ProtectedRoute from "./Components/Shared/ProtectedRoute";
 import SalesLayout from "./Pages/modules/sales/layout/SalesLayout";
@@ -14,6 +15,7 @@ const Router = createBrowserRouter([
     children: [{ path: "/", element: <Home /> }],
   },
   { path: "/login", element: <Login /> },
+  { path: "/no-access", element: <NoAccess /> },
   {
     path: "/app",
     element: <ProtectedRoute><SalesLayout /></ProtectedRoute>,
