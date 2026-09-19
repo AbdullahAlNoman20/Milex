@@ -62,6 +62,10 @@ const wrap = (fn: (req: Request) => Promise<unknown>) => async (req: Request, re
 };
 
 export const approveRateHandler = wrap((req) => customersService.approveRate(asString(req.params.id), req.body, req.user!.id, req.user!.role));
+export const escalateRateHandler = wrap((req) => customersService.escalateRateToHod(asString(req.params.id), req.body.reason, req.user!.id));
+export const grantHodRateHandler = wrap((req) => customersService.grantHodRate(asString(req.params.id), req.body, req.user!.id, req.user!.role));
+export const sendForOfferHandler = wrap((req) => customersService.sendRateToSalesCoordinator(asString(req.params.id), req.user!.id, req.user!.role));
+export const kamRequestRateHandler = wrap((req) => customersService.kamRequestBetterRate(asString(req.params.id), req.body.reason, req.user!.id, req.user!.role));
 export const rejectRateHandler = wrap((req) => customersService.rejectRate(asString(req.params.id), req.user!.id));
 export const draftOfferHandler = wrap((req) => customersService.draftOffer(asString(req.params.id), req.user!.id));
 export const finalizeOfferHandler = wrap((req) =>

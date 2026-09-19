@@ -15,7 +15,7 @@ import { useSales } from "../hooks/useSales";
 import { useAuth } from "../../../../Components/hooks/useAuth";
 import { ROLES } from "../../../../Components/constants/roles";
 import { STATUS, getWorkflowStageLabel } from "../constants/salesStatus";
-import { buildRateRefs } from "../../../../Components/utils/format";
+import { buildRateRefs, rateSourceLabel } from "../../../../Components/utils/format";
 import StatusBadge from "../components/StatusBadge";
 import BarcodeBadge from "../../../../Components/Shared/BarcodeBadge";
 import ScannableBarcode from "../../../../Components/Shared/ScannableBarcode";
@@ -25,6 +25,8 @@ import Loader from "../../../../Components/Shared/Loader";
 import Countdown from "../../../../Components/Shared/Countdown";
 
 import RateApprovalPanel from "../roles/LineManager/RateApprovalPanel";
+import HodRatePanel from "../roles/HOD/HodRatePanel";
+import KamRateDecisionPanel from "../roles/KAM/KamRateDecisionPanel";
 import ReviseRateApprovalPanel from "../roles/LineManager/ReviseRateApprovalPanel";
 import CustomerInfoApprovalPanel from "../roles/LineManager/CustomerInfoApprovalPanel";
 import OfferLetterPanel from "../roles/SalesCoordinator/OfferLetterPanel";
@@ -174,6 +176,8 @@ const CustomerDetail = () => {
   const isEditingProfile = canUploadDocs && role === ROLES.SALES_COORDINATOR;
 
   const renderActionPanel = () => {
+    // A live account has no pending step of its own; the rate panel below
+    // is the one thing still available on it.
     if (customer.status === STATUS.ACTIVE) return null;
 
     // The Head of Department carries every approval the Line Manager does,
@@ -185,13 +189,58 @@ const CustomerDetail = () => {
     if (customer.status === STATUS.INFO_UPDATE_PENDING && isApprover) {
       return <CustomerInfoApprovalPanel customer={customer} />;
     }
+
+    // The Line Manager's desk: set the rate here, or hand the decision up to
+    // the Head of Department.
     if (
-      [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(
-        customer.status,
-      ) &&
-      isApprover
+      [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(customer.status)
     ) {
-      return <RateApprovalPanel customer={customer} />;
+      if (isApprover)
+        return (
+          <RateApprovalPanel customer={customer} onUpdated={refreshCustomer} />
+        );
+      return <Waiting>Waiting for the Line Manager to decide on the rate</Waiting>;
+    }
+
+    // Escalated. Nobody but the Head of Department can move it on.
+    if (customer.status === STATUS.PENDING_HOD_RATE) {
+      if (role === ROLES.HEAD_OF_DEPARTMENT || isSuperAdmin) {
+        return <HodRatePanel customer={customer} onUpdated={refreshCustomer} />;
+      }
+      return (
+        <Waiting>Waiting for the Head of Department to set the best rate</Waiting>
+      );
+    }
+
+    // A rate exists but nothing has reached the customer yet — the KAM
+    // decides whether it goes out or goes back.
+    if (customer.status === STATUS.PENDING_KAM_REVIEW) {
+      if (role === ROLES.KAM || isSuperAdmin) {
+        return (
+          <KamRateDecisionPanel customer={customer} onUpdated={refreshCustomer} />
+        );
+      }
+      return <Waiting>Waiting for the KAM to review the rate</Waiting>;
+    }
+
+    // The Sales Coordinator's desk.
+    if (customer.status === STATUS.APPROVED_PENDING_OFFER) {
+      if (role === ROLES.SALES_COORDINATOR || isSuperAdmin) {
+        return <OfferLetterPanel customer={customer} />;
+      }
+      return (
+        <Waiting>Waiting for the Sales Coordinator to send the offer letter</Waiting>
+      );
+    }
+
+    // The customer's answer, collected by the KAM.
+    if (customer.status === STATUS.OFFER_REVIEW) {
+      if (role === ROLES.KAM || isSuperAdmin) {
+        return (
+          <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />
+        );
+      }
+      return <Waiting>Awaiting the customer's feedback via the KAM</Waiting>;
     }
 
     // Even after the 21-day window auto-expires, the same offer/agreement/
@@ -575,6 +624,18 @@ const CustomerDetail = () => {
               <p className="text-sm font-semibold text-slate-800 break-words">
                 {customer.approvedRate || "—"}
               </p>
+              {/* After two or three rounds the figure alone means little —
+                  whose authority set it is the part people act on. */}
+              {customer.approvedRate && (
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Given by: <strong>{rateSourceLabel(customer.rateSource)}</strong>
+                </p>
+              )}
+              {customer.lmNote && (
+                <p className="text-[11px] text-slate-600 mt-1.5 break-words">
+                  Note: {customer.lmNote}
+                </p>
+              )}
             </div>
           </div>
 
@@ -735,11 +796,17 @@ const CustomerDetail = () => {
               onDecided={refreshCustomer}
             />
           )}
-          <RateRequestPanel
-            customer={customer}
-            onUpdated={refreshCustomer}
-            reloadToken={refreshTick}
-          />
+          {/* Only on a live account. Everywhere earlier in the flow the rate
+              decision already has its own panel above, and showing a second
+              way to ask for one alongside it just invites two open requests
+              for the same thing. */}
+          {isActiveAccount && (
+            <RateRequestPanel
+              customer={customer}
+              onUpdated={refreshCustomer}
+              reloadToken={refreshTick}
+            />
+          )}
           {canAssignKam && (
             <AdminCustomerActions
               customer={customer}
@@ -801,26 +868,62 @@ const CustomerDetail = () => {
               </button>
             </div>
             <div className="p-5 overflow-y-auto">
+              <div className="mb-4 rounded-xl border-2 border-emerald-300 bg-emerald-50/50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 mb-1">
+                  Current Rate
+                </p>
+                <p className="text-sm font-bold text-slate-800 break-words">
+                  {customer.approvedRate || customer.proposedRate || "—"}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Given by: <strong>{rateSourceLabel(customer.rateSource)}</strong>
+                </p>
+              </div>
+
+              {/* Newest replacement first, so the sequence reads the way it
+                  happened — the rate that was just superseded sits at the top. */}
               <table className="w-full text-xs border-collapse bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <thead>
                   <tr className="bg-slate-200 text-slate-700">
-                    <th className="px-4 py-2.5 text-left font-bold">
-                      Rate Reference
-                    </th>
                     <th className="px-4 py-2.5 text-left font-bold">Rate</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Given By</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Replaced</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {customer.rateHistory.map((h, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="px-4 py-2.5 font-mono text-slate-600">
-                        {h.rateRef || "—"}
-                      </td>
-                      <td className="px-4 py-2.5 font-semibold text-slate-700">
-                        {h.rate || "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {[...customer.rateHistory]
+                    .sort((a, b) => {
+                      const at = a.changedAt ? new Date(a.changedAt).getTime() : 0;
+                      const bt = b.changedAt ? new Date(b.changedAt).getTime() : 0;
+                      return bt - at;
+                    })
+                    .map((h, i) => (
+                      <tr key={i} className="border-t border-slate-100 align-top">
+                        <td className="px-4 py-2.5 text-slate-700 break-words">
+                          <span className="font-semibold line-through decoration-slate-300">
+                            {h.rate || "—"}
+                          </span>
+                          {h.rateRef && (
+                            <span className="block font-mono text-[10px] text-slate-400 mt-0.5">
+                              REF-{h.rateRef}
+                            </span>
+                          )}
+                          {h.reason && (
+                            <span className="block text-[10px] text-red-600 mt-1 break-words">
+                              {h.reason}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
+                          {rateSourceLabel(h.source)}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">
+                          {h.changedAt
+                            ? new Date(h.changedAt).toLocaleDateString()
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>

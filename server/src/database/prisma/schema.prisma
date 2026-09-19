@@ -33,6 +33,13 @@ enum RateSource {
 enum CustomerStatus {
   PENDING_RATE_PREPARATION
   PENDING_RATE_APPROVAL
+  // The Line Manager has escalated: only the Head of Department can move it
+  // on, and until they do nobody else is asked to act.
+  PENDING_HOD_RATE_APPROVAL
+  // A rate is on the table and the Key Account Manager decides what to do
+  // with it — take it to the Sales Coordinator, or send it back for a better
+  // one. Nothing reaches the customer until they choose.
+  PENDING_KAM_RATE_REVIEW
   RATE_APPROVED_PENDING_OFFER
   DRAFTING_OFFER_LETTER
   OFFER_SENT_AWAITING_FEEDBACK

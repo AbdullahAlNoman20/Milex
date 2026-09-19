@@ -58,9 +58,10 @@ const roleQueueFilter = (role: string): any | null => {
   switch (role) {
     case 'SALES_COORDINATOR':
       return {
-        status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
-        offerRejected: false,
-        OR: [{ offerSent: false }, { offerAccepted: true, agreementSent: false }],
+        OR: [
+          { status: CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER },
+          { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerRejected: false, offerAccepted: true, agreementSent: false },
+        ],
       };
     case 'LINE_MANAGER':
       return {
@@ -79,11 +80,18 @@ const roleQueueFilter = (role: string): any | null => {
           },
         ],
       };
+    // Only escalations reach the Head of Department's queue. Everything else
+    // in the department is visible to them, but visible is not the same as
+    // waiting on them.
+    case 'HEAD_OF_DEPARTMENT':
+      return { status: CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL };
     case 'KAM':
       return {
-        status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
-        offerSent: true,
-        offerAccepted: false,
+        OR: [
+          { status: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW },
+          { status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK },
+          { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerSent: true, offerAccepted: false },
+        ],
       };
     default:
       return null;
@@ -249,6 +257,8 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
   const barcode = await generateUniqueBarcode();
   const selfApproves = SELF_APPROVING_ROLES.includes(creatorRole);
   const rateSource = creatorRole === 'LINE_MANAGER' ? 'LINE_MANAGER' : 'HEAD_OF_DEPARTMENT';
+  // Whoever set the rate at creation still does not push it at the customer:
+  // the KAM who owns the relationship gets the same say they would have had.
 
   const customer = await prisma.customer.create({
     data: {
@@ -263,8 +273,7 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
             approvedRate: clean.proposedRate,
             rateSource: rateSource as any,
             rateSetById: kamId,
-            status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any,
-            accountProfileType: 'PROVISIONAL' as any,
+            status: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW as any,
           }
         : {}),
       accountName: clean.accountName,
@@ -306,17 +315,12 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
   // Scoped to this KAM's own Line Manager; only falls back to every LM when
   // the KAM has not been assigned one yet.
   if (selfApproves) {
-    // Nothing is waiting on a Line Manager, so the Sales Coordinators are the
-    // ones who need to know — the offer letter is the very next step.
-    prisma.user
-      .findMany({ where: { role: { name: 'SALES_COORDINATOR' }, isActive: true }, select: { id: true } })
-      .then((scs) =>
-        createNotificationsForUsers(scs.map((s) => s.id), {
-          label: `${customer.accountName} — Rate already set, please send the offer letter`,
-          link: `/app/customers/${barcode}`,
-        })
-      )
-      .catch(() => {});
+    // The rate is already set, so the Line Manager step is skipped entirely
+    // and it sits with the KAM who handles the account.
+    createNotificationsForUsers([customer.handledById], {
+      label: `${customer.accountName} — Rate already set, please review and send for an offer letter`,
+      link: `/app/customers/${barcode}`,
+    }).catch(() => {});
   } else {
     const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
     const lineManagers = kam?.lineManagerId
@@ -341,48 +345,224 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
   return customer;
 };
 
-export const approveRate = async (customerId: string, data: any, lmId: string, actorRole = 'LINE_MANAGER') => {
-  await assertLineManagerOwnsCustomer(customerId, lmId);
+// Notifies only the Head of Department. Used when a Line Manager escalates:
+// nobody else is being asked for anything at that point, so telling the KAM
+// would be telling them about a decision they cannot influence.
+const notifyHeadsOfDepartment = async (label: string, link: string) => {
+  try {
+    const hods = await prisma.user.findMany({
+      where: { role: { name: 'HEAD_OF_DEPARTMENT' }, isActive: true },
+      select: { id: true },
+    });
+    if (hods.length === 0) return;
+    await createNotificationsForUsers(hods.map((h) => h.id), { label, link });
+  } catch (err) {
+    console.warn('[notifications] notifyHeadsOfDepartment failed (non-fatal):', (err as Error)?.message);
+  }
+};
+
+const rateSourceFor = (role: string) =>
+  role === 'HEAD_OF_DEPARTMENT' || role === 'SUPER_ADMIN' ? 'HEAD_OF_DEPARTMENT' : 'LINE_MANAGER';
+
+// Keeps the superseded rate, with the reference and the authority behind it,
+// so the sequence stays readable however many rounds it takes.
+const buildRateHistoryEntry = (customer: any, reason?: string) => ({
+  rate: customer.approvedRate || customer.proposedRate || '',
+  rateRef: customer.rateRef || '',
+  source: customer.rateSource || null,
+  changedAt: new Date().toISOString(),
+  reason: reason || '',
+});
+
+// The Line Manager (or the Head of Department answering an escalation) sets
+// the rate. It does NOT go to the customer yet — the KAM sees it first and
+// decides whether to run with it, which is the step that was missing.
+export const approveRate = async (customerId: string, data: any, actorId: string, actorRole = 'LINE_MANAGER') => {
+  await assertLineManagerOwnsCustomer(customerId, actorId);
   if (data.creditPeriodDays !== undefined && data.creditPeriodDays !== null && data.creditPeriodDays !== '') {
     assertValidCreditPeriodValue(data.creditPeriodDays);
   }
   const existing = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+  const clean = sanitizeAndEscape({ rate: data.approvedRate, note: data.lmNote || '' });
   // The reference is the customer's own id, fixed for the life of the
   // account — only the revision suffix moves as the rate changes.
   const rateRef = existing.rateRef || existing.barcode;
-  const source = actorRole === 'HEAD_OF_DEPARTMENT' || actorRole === 'SUPER_ADMIN'
-    ? 'HEAD_OF_DEPARTMENT'
-    : 'LINE_MANAGER';
+  const source = rateSourceFor(actorRole);
+  const isRevision = !!existing.approvedRate;
 
-  return transitionCustomerStatus({
+  const updated = await transitionCustomerStatus({
     customerId,
-    toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
-    actorId: lmId,
+    toStatus: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    actorId,
     extraUpdates: {
-      approvedRate: data.approvedRate,
+      approvedRate: clean.rate,
       rateSource: source,
-      rateSetById: lmId,
-      lmNote: data.lmNote,
-      creditPeriodDays: data.creditPeriodDays,
+      rateSetById: actorId,
+      lmNote: clean.note || null,
+      creditPeriodDays: data.creditPeriodDays || existing.creditPeriodDays,
       creditPeriodExtendedByLM: !!data.creditPeriodExtendedByLM,
-      accountProfileType: 'PROVISIONAL',
-      // The 21-day document window deliberately does NOT start here. It runs
-      // from the moment the customer accepts the offer, because until then
-      // there is no agreement for any document to support — starting it at
-      // rate approval burned days of the window on the sales conversation.
-      provisionalExtensionDays: 0,
       rateRef,
+      ...(isRevision
+        ? { revision: existing.revision + 1, rateHistory: { push: buildRateHistoryEntry(existing) } }
+        : {}),
       offerSent: false,
       offerAccepted: false,
       offerRejected: false,
-      agreementSent: false,
+      rejectReason: null,
     },
-    historyAction: 'RATE APPROVED — PROVISIONAL CUSTOMER CREATED',
-    historySubText: 'Awaiting Sales Coordinator to send the offer letter',
-    // The Sales Coordinator must now send the offer letter, so this is one
-    // of the few steps where they genuinely need to be told.
+    historyAction: `RATE SET BY ${source === 'HEAD_OF_DEPARTMENT' ? 'HEAD OF DEPARTMENT' : 'LINE MANAGER'}`,
+    historySubText: 'Awaiting the KAM to accept it or ask for a better one',
+  });
+
+  createNotificationsForUsers([updated.handledById], {
+    label: `${updated.accountName} — Rate set by ${source === 'HEAD_OF_DEPARTMENT' ? 'Head of Department' : 'Line Manager'}: ${clean.rate}`,
+    link: `/app/customers/${updated.barcode}`,
+  }).catch(() => {});
+
+  return updated;
+};
+
+// The Line Manager passes the decision up. Only the Head of Department hears
+// about it, and only now — not when the recommendation first arrived.
+export const escalateRateToHod = async (customerId: string, reason: string, lmId: string) => {
+  await assertLineManagerOwnsCustomer(customerId, lmId);
+  const clean = sanitizeAndEscape({ reason });
+
+  const updated = await transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
+    actorId: lmId,
+    extraUpdates: { lmNote: clean.reason },
+    historyAction: 'BEST RATE REQUESTED FROM HEAD OF DEPARTMENT',
+    historySubText: clean.reason,
+  });
+
+  await prisma.rateRequest.create({
+    data: {
+      customerId,
+      requestedById: lmId,
+      requestedByRole: 'LINE_MANAGER',
+      reason: clean.reason,
+    },
+  });
+
+  notifyHeadsOfDepartment(
+    `${updated.accountName} — A best rate has been requested by the Line Manager`,
+    `/app/customers/${updated.barcode}`
+  ).catch(() => {});
+
+  return updated;
+};
+
+// The Head of Department answers. One field, one decision: the rate.
+export const grantHodRate = async (
+  customerId: string,
+  data: { approvedRate: string; lmNote?: string },
+  hodId: string,
+  actorRole = 'HEAD_OF_DEPARTMENT'
+) => {
+  if (!['HEAD_OF_DEPARTMENT', 'SUPER_ADMIN'].includes(actorRole)) {
+    throw {
+      statusCode: 403,
+      code: 'FORBIDDEN',
+      message: 'Only the Head of Department can set the best rate on an escalated request.',
+    };
+  }
+  const existing = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+  const clean = sanitizeAndEscape({ rate: data.approvedRate, note: data.lmNote || '' });
+  const isRevision = !!existing.approvedRate;
+
+  const updated = await transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    actorId: hodId,
+    extraUpdates: {
+      approvedRate: clean.rate,
+      rateSource: 'HEAD_OF_DEPARTMENT',
+      rateSetById: hodId,
+      lmNote: clean.note || null,
+      rateRef: existing.rateRef || existing.barcode,
+      ...(isRevision
+        ? { revision: existing.revision + 1, rateHistory: { push: buildRateHistoryEntry(existing) } }
+        : {}),
+      offerSent: false,
+      offerAccepted: false,
+      offerRejected: false,
+      rejectReason: null,
+    },
+    historyAction: 'BEST RATE SET BY HEAD OF DEPARTMENT',
+    historySubText: 'Awaiting the KAM to accept it or ask for a better one',
+  });
+
+  // The open escalation is closed out with the answer it received.
+  await prisma.rateRequest.updateMany({
+    where: { customerId, approved: null },
+    data: {
+      approved: true,
+      grantedRate: clean.rate,
+      grantedNote: clean.note || null,
+      grantedById: hodId,
+      grantedByRole: 'HEAD_OF_DEPARTMENT',
+      grantedAt: new Date(),
+    },
+  });
+
+  // Now everyone hears about it — this is the first point at which the
+  // answer exists.
+  notifyCustomerWorkflowUsers(
+    updated.handledById,
+    {
+      label: `${updated.accountName} — Best rate set by Head of Department: ${clean.rate}`,
+      link: `/app/customers/${updated.barcode}`,
+    },
+    hodId
+  ).catch(() => {});
+
+  return updated;
+};
+
+// The KAM takes the rate forward. Nothing has reached the customer until now.
+export const sendRateToSalesCoordinator = async (customerId: string, actorId: string, actorRole: string) => {
+  await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
+  return transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
+    actorId,
+    historyAction: 'RATE ACCEPTED BY KAM — SENT FOR OFFER LETTER',
+    historySubText: 'Awaiting the Sales Coordinator to send the offer letter',
     notifySalesCoordinators: true,
   });
+};
+
+// The KAM sends it back. It always goes to their own Line Manager first, who
+// decides whether to answer it or take it up to the Head of Department.
+export const kamRequestBetterRate = async (
+  customerId: string,
+  reason: string,
+  actorId: string,
+  actorRole: string
+) => {
+  await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
+  const clean = sanitizeAndEscape({ reason });
+
+  const updated = await transitionCustomerStatus({
+    customerId,
+    toStatus: CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+    actorId,
+    historyAction: 'BETTER RATE REQUESTED BY KAM',
+    historySubText: clean.reason,
+  });
+
+  await prisma.rateRequest.create({
+    data: {
+      customerId,
+      requestedById: actorId,
+      requestedByRole: actorRole as any,
+      reason: clean.reason,
+    },
+  });
+
+  return updated;
 };
 
 export const rejectRate = async (customerId: string, lmId: string) => {
@@ -431,7 +611,12 @@ export const finalizeOffer = async (
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
     }
-    if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE) {
+    const canSendOffer =
+      current.status === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER ||
+      current.status === CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK ||
+      // A live provisional account being re-quoted stays provisional.
+      current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE;
+    if (!canSendOffer) {
       throw {
         statusCode: 409,
         code: 'INVALID_STATE',
@@ -447,7 +632,13 @@ export const finalizeOffer = async (
     }
     const customer = await tx.customer.update({
       where: { id: customerId },
-      data: { offerText: clean.offerText, offerSent: true, offerAccepted: false, offerRejected: false },
+      data: {
+        offerText: clean.offerText,
+        offerSent: true,
+        offerAccepted: false,
+        offerRejected: false,
+        status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK as any,
+      },
       include: CUSTOMER_WITH_HANDLER,
     });
 
@@ -580,7 +771,7 @@ export const submitClientFeedback = async (
       if (!current || current.isDeleted) {
         throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
       }
-      if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE || !current.offerSent) {
+      if (!current.offerSent) {
         throw {
           statusCode: 409,
           code: 'INVALID_STATE',
@@ -597,6 +788,10 @@ export const submitClientFeedback = async (
         where: { id: customerId },
         data: {
           offerAccepted: true,
+          // Accepting is what makes the account provisional. Until this
+          // moment it was a quote, not a customer.
+          status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any,
+          accountProfileType: 'PROVISIONAL' as any,
           ...(startsNow
             ? {
                 provisionalCreatedAt: now,
@@ -637,12 +832,12 @@ export const submitClientFeedback = async (
   const updated = await prisma.$transaction(async (tx) => {
     const current = await tx.customer.findUnique({
       where: { id: customerId },
-      select: { status: true, isDeleted: true, offerSent: true, revision: true },
+      select: { status: true, isDeleted: true, offerSent: true, revision: true, accountProfileType: true },
     });
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
     }
-    if (current.status !== CUSTOMER_STATUS.PROVISIONAL_ACTIVE || !current.offerSent) {
+    if (!current.offerSent) {
       throw {
         statusCode: 409,
         code: 'INVALID_STATE',
@@ -658,6 +853,13 @@ export const submitClientFeedback = async (
         offerRejected: true,
         rejectReason: clean.r,
         revision: current.revision + 1,
+        // Straight back to the Line Manager, who runs the same decision
+        // again — set a rate, or take it up to the Head of Department.
+        // An account that was already provisional keeps that standing and
+        // its countdown; only the rate is back in question.
+        ...(current.accountProfileType === 'PROVISIONAL'
+          ? {}
+          : { status: CUSTOMER_STATUS.PENDING_RATE_APPROVAL as any }),
       },
       include: CUSTOMER_WITH_HANDLER,
     });
@@ -667,7 +869,7 @@ export const submitClientFeedback = async (
       data: {
         customerId,
         action: 'OFFER REJECTED BY CUSTOMER',
-        subText: clean.r ? `${clean.r} — awaiting a new rate from the Line Manager` : 'Awaiting a new rate from the Line Manager',
+        subText: clean.r ? `${clean.r} — back to the Line Manager for a new rate` : 'Back to the Line Manager for a new rate',
         status: 'active',
       },
     });
