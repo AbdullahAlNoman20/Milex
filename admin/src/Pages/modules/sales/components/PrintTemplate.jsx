@@ -343,7 +343,7 @@ const AgSigRow = ({ label, value }) => (
   </div>
 );
 
-const AgreementLetter = ({ c }) => {
+export const AgreementLetter = ({ c }) => {
   const co = c.accountName || '';
   const code = c.barcode || '';
   const variant = getContractVariant(c);
