@@ -200,6 +200,9 @@ export const listCustomers = async (
         recommendedById: true, handledById: true,
         createdAt: true, updatedAt: true,
         handledBy: { select: { name: true } },
+        // The assignments view names who raised the account, not just who
+        // holds it now.
+        recommendedBy: { select: { name: true } },
       },
     }),
     prisma.customer.count({ where }),
@@ -243,7 +246,10 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       history: { orderBy: { createdAt: 'desc' } },
       documents: { orderBy: { createdAt: 'desc' } },
       extensionRequests: true,
-      handledBy: { select: { name: true, lineManagerId: true } },
+      handledBy: { select: { id: true, name: true, lineManagerId: true } },
+      // Who raised the recommendation in the first place. It survives every
+      // later handover, which is exactly why it is worth showing.
+      recommendedBy: { select: { id: true, name: true } },
     },
   });
   if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
@@ -328,6 +334,17 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
     },
     include: { contacts: true, shippingDetails: true },
   });
+
+  // The opening entry in the chain: the account starts with whoever created
+  // it, so a later handover has something to be a handover *from*.
+  recordAssignment({
+    customerId: customer.id,
+    assignedToId: kamId,
+    previousId: null,
+    assignedById: kamId,
+    assignedByRole: creatorRole,
+    reason: 'CREATED',
+  }).catch(() => {});
 
   logAudit({ entity: 'Customer', entityId: customer.id, action: 'RECOMMENDATION_CREATED', actorId: kamId, afterState: { barcode } }).catch(() => {});
 
@@ -1946,11 +1963,83 @@ export const softDeleteCustomer = async (customerId: string, actorId: string) =>
   });
 };
 
+// Every handover is written down as it happens, including the very first one
+// at creation. The Customer row only ever carries whoever holds it now, so
+// without this the previous holder — and the fact a handover happened at all
+// — disappears the moment it does.
+const recordAssignment = async (params: {
+  customerId: string;
+  assignedToId: string;
+  previousId?: string | null;
+  assignedById: string;
+  assignedByRole?: string;
+  reason: 'CREATED' | 'REASSIGNED';
+  note?: string;
+}) => {
+  try {
+    await prisma.customerAssignment.create({
+      data: {
+        customerId: params.customerId,
+        assignedToId: params.assignedToId,
+        previousId: params.previousId ?? null,
+        assignedById: params.assignedById,
+        assignedByRole: (params.assignedByRole as any) ?? null,
+        reason: params.reason,
+        note: params.note ?? null,
+      },
+    });
+  } catch (err) {
+    // The handover itself has already committed; losing the note of it is
+    // regrettable but must not undo the change the person just made.
+    console.warn('[assignment] Could not record the handover (non-fatal):', (err as Error)?.message);
+  }
+};
+
+export const listAssignmentHistory = async (
+  customerId: string,
+  requester: { id: string; role: string }
+) => {
+  await assertKamOwnsCustomerIfKam(customerId, requester.id, requester.role);
+  if (requester.role === 'LINE_MANAGER') {
+    await assertLineManagerOwnsCustomer(customerId, requester.id);
+  }
+
+  const rows = await prisma.customerAssignment.findMany({
+    where: { customerId },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (rows.length === 0) return [];
+
+  // One lookup for every name the list needs, rather than a join per row.
+  const ids = [
+    ...new Set(
+      rows.flatMap((r) => [r.assignedToId, r.previousId, r.assignedById]).filter(Boolean) as string[]
+    ),
+  ];
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, email: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u]));
+
+  return rows.map((r) => ({
+    id: r.id,
+    reason: r.reason,
+    note: r.note,
+    createdAt: r.createdAt,
+    assignedByRole: r.assignedByRole,
+    assignedTo: byId.get(r.assignedToId) || null,
+    previous: r.previousId ? byId.get(r.previousId) || null : null,
+    assignedBy: byId.get(r.assignedById) || null,
+  }));
+};
+
 export const reassignCustomer = async (
   customerId: string,
   newKamId: string,
   actorId: string,
-  actorRole = 'LINE_MANAGER'
+  actorRole = 'LINE_MANAGER',
+  note?: string
 ) => {
   // A Line Manager may only move customers inside their own team; the Head of
   // Department and Super Admin are unscoped, which the guard handles.
@@ -1983,6 +2072,16 @@ export const reassignCustomer = async (
     data: { handledById: newKamId },
     include: CUSTOMER_WITH_HANDLER,
   });
+  recordAssignment({
+    customerId,
+    assignedToId: newKamId,
+    previousId: previousKamId,
+    assignedById: actorId,
+    assignedByRole: actorRole,
+    reason: 'REASSIGNED',
+    note: note ? sanitizeAndEscape({ n: note }).n : undefined,
+  }).catch(() => {});
+
   logAudit({
     entity: 'Customer',
     entityId: customerId,

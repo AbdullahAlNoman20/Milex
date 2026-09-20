@@ -48,18 +48,18 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
     }
   };
 
+  // The expiry drives a renewal reminder, so a trade licence filed without
+  // one would silently never be chased. Rather than letting someone pick a
+  // file and then refusing it, the upload stays closed until the date is in
+  // — the missing piece is asked for before the effort is spent.
+  const isBlockedOnExpiry = category.requiresExpiry && !expiry;
+
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_FILE_SIZE_BYTES) {
       e.target.value = '';
       return showToast('File exceeds 10MB limit', 'warning');
-    }
-    // The expiry drives a renewal reminder, so a trade licence without one
-    // would silently never be chased.
-    if (category.requiresExpiry && !expiry) {
-      e.target.value = '';
-      return showToast('Enter the expiry date before uploading the Trade License', 'warning');
     }
     onUpload(category.key, file, number, expiry);
     e.target.value = '';
@@ -72,34 +72,8 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
         <p className="text-[10px] text-slate-400 mt-0.5">{doc ? 'Uploaded' : 'Pending upload'}</p>
       </div>
 
-      <label
-        htmlFor={inputId}
-        className="block border-2 border-dashed border-emerald-200 rounded-lg py-4 text-center cursor-pointer hover:bg-emerald-50/50 transition text-xs font-semibold text-emerald-700"
-      >
-        {isUploading ? (
-          <span className="flex items-center justify-center">
-            <Loader2 size={14} className="mr-2 animate-spin" /> Uploading...
-          </span>
-        ) : (
-          <span className="flex items-center justify-center">
-            <UploadCloud size={14} className="mr-2" /> {doc ? 'Replace File' : 'Upload File'}
-          </span>
-        )}
-        <input id={inputId} type="file" className="hidden" disabled={isUploading} onChange={handleFile} />
-      </label>
-
-      {doc && (
-        <button
-          type="button"
-          onClick={handleView}
-          disabled={isOpening}
-          className="w-full flex items-center justify-between gap-1.5 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 transition disabled:opacity-50"
-        >
-          <span className="truncate">{doc.originalName}</span>
-          {isOpening ? <Loader2 size={12} className="animate-spin shrink-0" /> : <Eye size={12} className="shrink-0 text-emerald-600" />}
-        </button>
-      )}
-
+      {/* The dated categories ask for the date first, because the file is
+          useless to the renewal reminder without it. */}
       {category.hasMeta && (
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -120,7 +94,7 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
             <input
               type="date"
               className={`w-full border p-1.5 rounded text-xs outline-none focus:border-emerald-500 ${
-                category.requiresExpiry && !expiry ? 'border-red-300' : 'border-slate-200'
+                isBlockedOnExpiry ? 'border-amber-400 bg-amber-50' : 'border-slate-200'
               }`}
               value={expiry}
               onChange={(e) => setExpiry(e.target.value)}
@@ -128,6 +102,49 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
           </div>
         </div>
       )}
+
+      <label
+        htmlFor={isBlockedOnExpiry ? undefined : inputId}
+        className={`block border-2 border-dashed rounded-lg py-4 text-center transition text-xs font-semibold ${
+          isBlockedOnExpiry
+            ? 'border-slate-200 text-slate-400 cursor-not-allowed bg-slate-50'
+            : 'border-emerald-200 text-emerald-700 cursor-pointer hover:bg-emerald-50/50'
+        }`}
+      >
+        {isUploading ? (
+          <span className="flex items-center justify-center">
+            <Loader2 size={14} className="mr-2 animate-spin" /> Uploading...
+          </span>
+        ) : isBlockedOnExpiry ? (
+          <span className="flex items-center justify-center">
+            <UploadCloud size={14} className="mr-2" /> Set the expiry date first
+          </span>
+        ) : (
+          <span className="flex items-center justify-center">
+            <UploadCloud size={14} className="mr-2" /> {doc ? 'Replace File' : 'Upload File'}
+          </span>
+        )}
+        <input
+          id={inputId}
+          type="file"
+          className="hidden"
+          disabled={isUploading || isBlockedOnExpiry}
+          onChange={handleFile}
+        />
+      </label>
+
+      {doc && (
+        <button
+          type="button"
+          onClick={handleView}
+          disabled={isOpening}
+          className="w-full flex items-center justify-between gap-1.5 text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 hover:bg-slate-100 transition disabled:opacity-50"
+        >
+          <span className="truncate">{doc.originalName}</span>
+          {isOpening ? <Loader2 size={12} className="animate-spin shrink-0" /> : <Eye size={12} className="shrink-0 text-emerald-600" />}
+        </button>
+      )}
+
     </div>
   );
 };

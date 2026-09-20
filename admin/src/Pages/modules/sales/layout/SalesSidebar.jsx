@@ -161,9 +161,9 @@ const SalesSidebar = () => {
           isExpanded ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:w-[68px] lg:translate-x-0'
         } overflow-hidden`}
       >
-        <div className="h-20 flex items-center justify-between px-3 lg:px-3 border-b border-slate-100 shrink-0">
+        <div className="h-16 flex items-center justify-between px-3 lg:px-3 border-b border-slate-100 shrink-0">
           <div className={`flex items-center overflow-hidden transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 w-0 lg:w-0'}`}>
-            <img src="/log.jpeg" alt="MILEX" className="h-12 w-auto object-contain" />
+            <img src="/log.jpeg" alt="MILEX" className="h-10 w-auto object-contain" />
           </div>
           <button
             type="button"

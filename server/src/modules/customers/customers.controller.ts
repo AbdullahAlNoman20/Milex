@@ -214,6 +214,19 @@ export const reapproveRateHandler = wrap((req) =>
   customersService.reapproveRateAfterRejection(asString(req.params.id), req.body.approvedRate, req.body.lmNote, req.user!.id, req.user!.role)
 );
 
+export const listAssignmentHistoryHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await customersService.listAssignmentHistory(asString(req.params.id), {
+      id: req.user!.id,
+      role: req.user!.role,
+    });
+    return sendSuccess(res, { items });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
 export const listEditHistoryHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const items = await customersService.listCustomerEditHistory(asString(req.params.id), { id: req.user!.id, role: req.user!.role });
