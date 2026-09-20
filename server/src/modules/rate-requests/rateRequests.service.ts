@@ -23,47 +23,6 @@ export const rateSourceLabel = (source?: string | null) =>
 const toRateSource = (role: string) =>
   role === 'HEAD_OF_DEPARTMENT' || role === 'SUPER_ADMIN' ? 'HEAD_OF_DEPARTMENT' : 'LINE_MANAGER';
 
-// One step in a live customer's re-quote. Written to its own column so the
-// onboarding trail — which finished months or years ago — stays exactly as
-// it was left.
-export const appendRateProcessStep = async (
-  tx: any,
-  customerId: string,
-  actorId: string,
-  action: string,
-  subText = ''
-) => {
-  const actor = actorId
-    ? await tx.user.findUnique({ where: { id: actorId }, select: { name: true } })
-    : null;
-  const current = await tx.customer.findUniqueOrThrow({
-    where: { id: customerId },
-    select: { rateProcessHistory: true },
-  });
-
-  // Whatever was in progress is finished; this is now the live step.
-  const completed = (current.rateProcessHistory || []).map((s: any) => ({
-    ...s,
-    status: 'completed',
-  }));
-
-  await tx.customer.update({
-    where: { id: customerId },
-    data: {
-      rateProcessActive: true,
-      rateProcessHistory: [
-        ...completed,
-        {
-          action: actor ? `${action} (${actor.name})` : action,
-          subText,
-          status: 'active',
-          createdAt: new Date().toISOString(),
-        },
-      ],
-    },
-  });
-};
-
 export const listRateRequests = async (
   customerId: string,
   requester: { id: string; role: string }
