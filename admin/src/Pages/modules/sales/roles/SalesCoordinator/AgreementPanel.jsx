@@ -6,9 +6,8 @@ import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { useSales } from '../../hooks/useSales';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
-import { buildRateRefs } from '../../../../../Components/utils/format';
+
 import { AgreementLetter } from '../../components/PrintTemplate';
-import { composeMailWithLetter } from '../../components/letterPdf';
 
 const AgreementPanel = ({ customer, onSent }) => {
   const { showToast } = useToast();
@@ -35,55 +34,26 @@ const AgreementPanel = ({ customer, onSent }) => {
     return () => ro.disconnect();
   }, []);
 
-  // Same approach as the offer letter: the PDF is produced and downloaded,
-  // then the compose window opens ready for it. A mailto: link cannot carry
-  // an attachment, so the download is the only honest way to get the file
-  // into the message.
-  const openMailClient = async () => {
-    const ref = buildRateRefs(customer)[0] || customer.barcode;
-    const fileName = `Agreement-${customer.accountName.replace(/[^a-zA-Z0-9]+/g, '-')}-${ref}.pdf`;
 
-    const prepared = await composeMailWithLetter({
-      node: <AgreementLetter c={customer} />,
-      kind: 'agreement',
-      fileName,
-      widthMm: 169.4,
-      to: customer.email,
-      subject: `Agreement — ${customer.accountName} (${ref})`,
-      body: `Dear ${customer.accountName},\n\nPlease find our agreement attached for your signature.\n\nReference: ${ref}\n\nKind regards,\nMILEX`,
-    });
 
-    showToast(
-      prepared
-        ? `Your email is open and the agreement is ready as "${fileName}" — drag it in or use the paperclip.`
-        : 'The email opened, but the agreement could not be prepared. Use Print Only to produce it.',
-      prepared ? 'info' : 'warning',
-      10000
-    );
-  };
-
-  const send = async (via) => {
+  const send = async (via = 'MAIL') => {
     if (submitLockRef.current) return;
 
     const ok = await confirm({
       title: 'Send the agreement?',
       message:
-        via === 'MAIL'
-          ? 'Your mail application will open with the agreement ready to send, and the copy will be recorded against the customer.'
-          : 'This records the agreement as sent by hard copy and unlocks the document upload.',
-      confirmLabel: via === 'MAIL' ? 'Open mail & record' : 'Record as sent',
+        'This records the agreement as sent and unlocks the document upload. Use Print Only first if you need a copy to send.',
+      confirmLabel: 'Record as sent',
     });
     if (!ok) return;
 
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      // Recorded first: opening the mail client before knowing the copy was
-      // written would leave someone composing a message for a send that
-      // never happened on our side.
+      // The agreement itself goes out however the person already sends
+      // things; what is recorded here is that it went.
       await sendAgreement(customer.id, agreementText, via);
-      showToast('Agreement recorded', 'success');
-      if (via === 'MAIL') await openMailClient();
+      showToast('Agreement recorded as sent', 'success');
       onSent?.();
     } catch (err) {
       showToast(err?.message || 'Failed to send agreement', 'error');

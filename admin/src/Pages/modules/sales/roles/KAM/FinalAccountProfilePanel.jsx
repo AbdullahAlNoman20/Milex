@@ -132,7 +132,7 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
         await updateFinalProfile(customer.id, payload);
         await submitFinalOnboarding(customer.id);
       }
-      showToast('Submitted for Final Onboarding — awaiting Line Manager verification', 'success');
+      showToast('Submitted — awaiting Head of Department approval to activate the account', 'success');
       onSaved?.();
     } catch (err) {
       showToast(err?.message || 'Submission failed', 'error');
@@ -173,8 +173,8 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
         </div>
         <p className="text-[10px] text-slate-400 mt-2">
           {mode === 'REGULAR'
-            ? 'Fill everything, then submit once — this goes to your Line Manager for final approval.'
-            : 'Each field and document you provide saves automatically as a draft. Submit for Final Onboarding once ready — your Line Manager will do the final review.'}
+            ? 'Fill everything, then submit once — the Head of Department approves it before the account goes live.'
+            : 'Each field and document you provide saves automatically as a draft. Submit once ready — the Head of Department approves it before the account goes live.'}
         </p>
       </div>
 

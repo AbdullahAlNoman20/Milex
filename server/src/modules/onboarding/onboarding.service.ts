@@ -7,7 +7,7 @@ import { runFileScan } from '../../jobs/file-scan.job';
 import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { logAudit } from "../../common/utils/auditLog.util";
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
-import { DOCUMENT_TYPE_LABELS, SELF_APPROVING_ROLES, notifyHeadsOfDepartment } from "../customers/customers.service";
+import { DOCUMENT_TYPE_LABELS, notifyHeadsOfDepartment } from "../customers/customers.service";
 import { assertKamOwnsCustomerIfKam } from "../../common/utils/scopeGuard.util";
 import { assertLineManagerOwnsCustomer } from "../../common/utils/scopeGuard.util";
 import { ensureCustomerAccount } from "../customers/customerAccount.service";
@@ -225,21 +225,10 @@ export const submitFinalOnboardingRequest = async (
     };
   }
 
-  // Created by someone whose own approval this step represents — submitting
-  // it is the approval, so the account goes live straight away.
-  if (SELF_APPROVING_ROLES.includes(customer.createdByRole || '')) {
-    const activated = await transitionCustomerStatus({
-      customerId,
-      toStatus: CUSTOMER_STATUS.ACTIVE_ACCOUNT,
-      actorId: kamId,
-      extraUpdates: { accountProfileType: 'REGULAR' },
-      historyAction: 'FINAL ONBOARDING COMPLETED — ACCOUNT ACTIVATED',
-      historySubText: 'Review skipped: the case owner submitted it themselves',
-    });
-    ensureCustomerAccount(customerId).catch(() => {});
-    return activated;
-  }
-
+  // Every account goes to the Head of Department, whoever raised it. The
+  // rate approval can be skipped when the person setting it is the person
+  // who would approve it, but activation cannot: it is the last irreversible
+  // step, and it belongs to one desk regardless of who prepared the case.
   const submitted = await transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,

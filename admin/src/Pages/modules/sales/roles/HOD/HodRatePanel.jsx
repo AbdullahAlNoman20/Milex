@@ -124,7 +124,7 @@ const HodRatePanel = ({ customer, onUpdated }) => {
         ) : (
           <CheckCircle size={16} className="mr-1.5" />
         )}
-        Set Best Rate &amp; Send to KAM
+        Set Best Rate 
       </button>
     </div>
   );
