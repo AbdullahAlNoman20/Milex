@@ -42,6 +42,16 @@ export const PROVISIONAL_RULES = Object.freeze({
   LM_EXTENSION_DAYS: 5,
 });
 
+// Whoever holds the account collects the customer's answer. Naming the KAM
+// when a manager raised it themselves points people at somebody who is not
+// involved.
+const ownerLabel = (customer) => {
+  const owner = customer?.createdByRole;
+  if (owner === 'HEAD_OF_DEPARTMENT') return 'Head of Department';
+  if (owner === 'LINE_MANAGER') return 'Line Manager';
+  return 'KAM';
+};
+
 export const getWorkflowStageLabel = (customer) => {
   if (!customer) return '';
   switch (customer.status) {
@@ -58,7 +68,7 @@ export const getWorkflowStageLabel = (customer) => {
     case STATUS.APPROVED_PENDING_OFFER:
       return 'Waiting for Sales Coordinator to Send the Offer Letter';
     case STATUS.OFFER_REVIEW:
-      return "Waiting for Customer's Feedback (via KAM)";
+      return `Waiting for Customer's Feedback (via ${ownerLabel(customer)})`;
     case STATUS.INFO_UPDATE_PENDING:
       return 'Waiting for Line Manager Approval (Info Update)';
     case STATUS.PROVISIONAL_EXTENSION_REQUESTED:
@@ -69,9 +79,12 @@ export const getWorkflowStageLabel = (customer) => {
       // A rejected offer keeps the account provisional — the document
       // window is still running, only the rate is back with the Line
       // Manager — so this is checked before the offer-sent checks below.
-      if (customer.offerRejected) return 'Customer Rejected the Offer — Waiting for Line Manager to Approve a New Rate';
+      if (customer.offerRejected)
+        return `Customer Rejected the Offer — Waiting for ${
+          customer.createdByRole === 'HEAD_OF_DEPARTMENT' ? 'Head of Department' : 'Line Manager'
+        } to Approve a New Rate`;
       if (!customer.offerSent) return 'Waiting for Sales Coordinator to Send Offer Letter';
-      if (!customer.offerAccepted) return "Waiting for Customer's Feedback (via KAM)";
+      if (!customer.offerAccepted) return `Waiting for Customer's Feedback (via ${ownerLabel(customer)})`;
       if (!customer.agreementSent) return 'Waiting for Sales Coordinator to Collect Agreement';
       return 'Waiting for Document Upload & Final Onboarding';
     case STATUS.PROVISIONAL_EXPIRED:
