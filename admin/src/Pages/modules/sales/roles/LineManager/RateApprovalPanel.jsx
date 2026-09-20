@@ -4,6 +4,8 @@ import { CheckCircle, FileOutput, Loader2, ArrowUpCircle } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
+import { useAuth } from '../../../../../Components/hooks/useAuth';
+import { ROLES } from '../../../../../Components/constants/roles';
 import { getDocumentSignedUrl, escalateRateToHod } from '../../services/customerService';
 import { STATUS, CREDIT_RULES } from '../../constants/salesStatus';
 import { isRequired, isValidCreditPeriod } from '../../../../../Components/utils/validators';
@@ -16,6 +18,11 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
   const { updateStatus } = useSales();
   const { showToast } = useToast();
   const confirm = useConfirm();
+  const { currentUser } = useAuth();
+  // There is nobody above the Head of Department to escalate to, so for them
+  // this panel is a single decision rather than a choice between two.
+  const canEscalate =
+    currentUser?.role !== ROLES.HEAD_OF_DEPARTMENT && currentUser?.role !== ROLES.SUPER_ADMIN;
   const [tab, setTab] = useState('approve');
   const [approvedRate, setApprovedRate] = useState(customer.approvedRate || customer.proposedRate || '');
   const [lmNote, setLmNote] = useState('');
@@ -139,32 +146,34 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
         </div>
       )}
 
-      <div className="flex gap-1 border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setTab('approve')}
-          className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
-            tab === 'approve'
-              ? 'border-emerald-600 text-emerald-700'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          Approve Rate
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('request')}
-          className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
-            tab === 'request'
-              ? 'border-indigo-600 text-indigo-700'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          Request Best Rate from HOD
-        </button>
-      </div>
+      {canEscalate && (
+        <div className="flex gap-1 border-b border-slate-200">
+          <button
+            type="button"
+            onClick={() => setTab('approve')}
+            className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
+              tab === 'approve'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            Approve Rate
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('request')}
+            className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
+              tab === 'request'
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            Request Best Rate from HOD
+          </button>
+        </div>
+      )}
 
-      {tab === 'approve' ? (
+      {!canEscalate || tab === 'approve' ? (
         <div className="space-y-4">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">

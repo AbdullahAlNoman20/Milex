@@ -11,19 +11,37 @@ export const rateSourceLabel = (source) => RATE_SOURCE_LABELS[source] || 'Line M
 // The reference is anchored to the customer's own id and never changes for
 // the life of the account — a hundred revisions later it is still the same
 // code with a different suffix, which is what makes it usable as a filing
-// reference on paper. Inbound service carries an IB marker so the two
-// directions can be told apart at a glance; outbound is the plain form.
+// reference on paper.
+//
+// Inbound work carries an IB marker; outbound is the plain form. A customer
+// doing both has two references, because the two directions are priced and
+// invoiced separately and a single code could not tell them apart.
+//
+// The direction comes from the shipping rows the customer actually gave,
+// since that is where Import and Export are stated. `serviceRequired` is
+// only the fallback for a record that has no rows yet.
 export const buildRateRefs = (customer) => {
   if (!customer) return [];
   const base = customer.rateRef || customer.barcode;
   if (!base) return [];
   const suffix = customer.revision > 0 ? `-R${customer.revision}` : '';
-  const service = customer.serviceRequired;
 
-  if (service === 'IB') return [`REF-${base}IB${suffix}`];
-  // Both directions are quoted, so both references exist side by side.
-  if (service === 'BOTH') return [`REF-${base}IB${suffix}`, `REF-${base}${suffix}`];
-  return [`REF-${base}${suffix}`];
+  const directions = (customer.shippingDetails || []).map((s) =>
+    String(s.rateFor || '').toLowerCase()
+  );
+  let hasImport = directions.some((d) => d.includes('import') || d.includes('both'));
+  let hasExport = directions.some((d) => d.includes('export') || d.includes('both'));
+
+  if (!hasImport && !hasExport) {
+    hasImport = customer.serviceRequired === 'IB' || customer.serviceRequired === 'BOTH';
+    hasExport = customer.serviceRequired === 'OB' || customer.serviceRequired === 'BOTH';
+  }
+
+  const refs = [];
+  if (hasImport) refs.push(`REF-${base}IB${suffix}`);
+  if (hasExport) refs.push(`REF-${base}${suffix}`);
+  // Neither stated yet — the plain form still identifies the account.
+  return refs.length > 0 ? refs : [`REF-${base}${suffix}`];
 };
 
 export const formatRateRef = (customer) => buildRateRefs(customer)[0] || null;
