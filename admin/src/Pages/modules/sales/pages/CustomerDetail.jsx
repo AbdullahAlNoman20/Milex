@@ -158,6 +158,9 @@ const CustomerDetail = () => {
   // ACTIVE does it become request-only (account-profile fields are always
   // request-only for them, enforced server-side).
   const isActiveAccount = customer.status === STATUS.ACTIVE;
+  // Everything on this record that talks about credit only applies when the
+  // customer is actually on credit terms.
+  const isCashAccount = customer.accountType === "CASH";
   // Sales Coordinators never get direct edit — their changes always route
   // through an LM-approved edit request, matching the server-side rule.
   const canDirectEdit = isLmOrAdmin || (role === ROLES.KAM && !isActiveAccount);
@@ -552,11 +555,22 @@ const CustomerDetail = () => {
                       "Email",
                       customer.email || "—",
                     ],
+                    // A cash account has no credit to limit, so the row says
+                    // so rather than printing a currency symbol against
+                    // nothing.
                     [
                       "Credit Limit",
-                      `TK ${customer.creditLimitTk}`,
+                      isCashAccount
+                        ? "Cash — no credit"
+                        : customer.creditLimitTk
+                          ? `TK ${customer.creditLimitTk}`
+                          : "—",
                       "Credit Period",
-                      `${customer.creditPeriodDays} Days`,
+                      isCashAccount
+                        ? "Cash — no credit"
+                        : customer.creditPeriodDays
+                          ? `${customer.creditPeriodDays} Days`
+                          : "—",
                     ],
                     [
                       "Approved Rate",
@@ -621,7 +635,11 @@ const CustomerDetail = () => {
                       Credit Period
                     </td>
                     <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
-                      {customer.creditPeriodDays} Days
+                      {isCashAccount
+                        ? "Cash — no credit"
+                        : customer.creditPeriodDays
+                          ? `${customer.creditPeriodDays} Days`
+                          : "—"}
                     </td>
                   </tr>
                   <tr className="sm:hidden border-b border-slate-100">

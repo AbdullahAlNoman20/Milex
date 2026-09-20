@@ -701,7 +701,20 @@ const NewRecommendationWizard = () => {
                 <select
                   className="w-full border border-slate-200 p-3 rounded text-sm bg-white focus:border-emerald-500 outline-none"
                   value={form.accountType}
-                  onChange={(e) => setField("accountType", e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setField("accountType", next);
+                    // Switching to cash clears the credit terms rather than
+                    // leaving them hidden but still set — a figure nobody can
+                    // see is a figure nobody can correct.
+                    if (next === "CASH") {
+                      setField("creditLimitTk", "");
+                      setField("creditPeriodDays", "");
+                      setField("creditPeriodExtended", false);
+                    } else if (!form.creditPeriodDays) {
+                      setField("creditPeriodDays", String(CREDIT_RULES.DEFAULT_PERIOD_DAYS));
+                    }
+                  }}
                 >
                   <option value="">Select...</option>
                   {ACCOUNT_TYPE_OPTIONS.map((o) => (

@@ -268,7 +268,10 @@ export const SELF_APPROVING_ROLES = ['LINE_MANAGER', 'HEAD_OF_DEPARTMENT', 'SUPE
 
 export const createRecommendation = async (data: any, kamId: string, creatorRole = 'KAM') => {
   const clean = sanitizeAndEscape(data);
-  if (clean.creditPeriodDays) {
+  // A cash account carries no credit terms, so there is nothing to validate
+  // and nothing to store.
+  const isCash = clean.accountType === 'CASH';
+  if (!isCash && clean.creditPeriodDays) {
     assertValidCreditPeriodValue(clean.creditPeriodDays);
   }
   const barcode = await generateUniqueBarcode();
@@ -303,8 +306,8 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
       serviceRequired: clean.serviceRequired,
       accountMode: clean.accountMode,
       accountType: clean.accountType,
-      creditLimitTk: clean.creditLimitTk,
-      creditPeriodDays: clean.creditPeriodDays || '15',
+      creditLimitTk: isCash ? null : clean.creditLimitTk,
+      creditPeriodDays: isCash ? null : clean.creditPeriodDays || '15',
       creditPeriodExtendedByLM: false,
       proposedRate: clean.proposedRate,
       recNote: clean.recNote,

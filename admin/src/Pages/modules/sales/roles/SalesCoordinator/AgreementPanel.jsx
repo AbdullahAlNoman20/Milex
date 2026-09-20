@@ -16,7 +16,11 @@ const AgreementPanel = ({ customer, onSent }) => {
   const { setPrintData } = useSales();
   const agreementText =
     customer.agreementText ||
-    `This agreement is made between MILEX and ${customer.accountName}.\n\nThe customer agrees to the rates defined in Annexure ${customer.rateRef || ''} with a credit limit of BDT ${customer.creditLimitTk}.\n\n${SIGNATURE_LIBRARY.SALES}`;
+    `This agreement is made between MILEX and ${customer.accountName}.\n\nThe customer agrees to the rates defined in Annexure ${customer.rateRef || ''}${
+      customer.accountType === 'CASH'
+        ? ' on a cash basis.'
+        : ` with a credit limit of BDT ${customer.creditLimitTk}.`
+    }\n\n${SIGNATURE_LIBRARY.SALES}`;
 
   const [isSendMenuOpen, setIsSendMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);

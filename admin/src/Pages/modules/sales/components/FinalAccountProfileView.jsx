@@ -8,6 +8,12 @@ const findLabel = (options, value) => options.find((o) => o.value === value)?.la
 const FinalAccountProfileView = ({ customer }) => {
   if (!customer?.finalProfileCompleted) return null;
 
+  const isCashAccount = customer.accountType === 'CASH';
+  const creditValue = (value, suffix = '') => {
+    if (isCashAccount) return 'Cash — no credit';
+    return value ? `${value}${suffix}` : '—';
+  };
+
   const rows = [
     [
       'Managing Partner',
@@ -21,7 +27,12 @@ const FinalAccountProfileView = ({ customer }) => {
     ['Preferred Carrier', customer.preferredCarrier, 'Nature of Business', customer.natureOfBusiness],
     ['Area', customer.area, 'Zone', customer.zone],
     ['Type', findLabel(GAIN_TYPE_OPTIONS, customer.gainType), 'Mode', findLabel(FINANCE_MODE_OPTIONS, customer.financeMode)],
-    ['Final Amount Limit (BDT)', customer.creditLimitTk, 'Final Time Limit (Days)', customer.creditPeriodDays],
+    [
+      'Final Amount Limit (BDT)',
+      creditValue(customer.creditLimitTk),
+      'Final Time Limit (Days)',
+      creditValue(customer.creditPeriodDays, ' Days'),
+    ],
   ];
 
   return (

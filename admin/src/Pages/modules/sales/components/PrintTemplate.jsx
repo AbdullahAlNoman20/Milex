@@ -54,12 +54,27 @@ const RFormBarcode = ({ value }) => {
       JsBarcode(svgRef.current, value, {
         format: 'CODE128', width: 1.3, height: 34, displayValue: false, margin: 0, background: 'transparent', lineColor: '#000',
       });
+
+      // JsBarcode writes its own width and height attributes, which the
+      // browser treats as an intrinsic size and honours before any CSS runs.
+      // Turning that into a viewBox instead lets the graphic scale to the
+      // space it is given, so the bars line up with the code printed beneath
+      // them rather than overflowing the column.
+      const svg = svgRef.current;
+      const naturalWidth = Number(svg.getAttribute('width')) || 0;
+      const naturalHeight = Number(svg.getAttribute('height')) || 34;
+      if (naturalWidth > 0) {
+        svg.setAttribute('viewBox', `0 0 ${naturalWidth} ${naturalHeight}`);
+        svg.setAttribute('preserveAspectRatio', 'xMinYMid meet');
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+      }
     } catch {
       /* invalid chars — bars just won't render */
     }
   }, [value]);
   if (!value) return null;
-  return <svg ref={svgRef} />;
+  return <svg ref={svgRef} style={{ width: '100%', height: '34px', display: 'block' }} />;
 };
 
 // Simple bordered key/value table matching the reference PDF's plain black-
@@ -432,6 +447,9 @@ export const AgreementLetter = ({ c }) => {
   // Final account profile values
   const limit = Number(c.creditLimitTk) || 0;
   const days = Number(c.creditPeriodDays) || 0;
+  // Nothing about credit belongs in a cash customer's agreement — printing a
+  // limit of nothing reads as an oversight rather than a deliberate term.
+  const isCash = c.accountType === 'CASH';
   const limitText = limit
     ? `Taka ${limit.toLocaleString('en-US')}/= (${numberToWordsBDT(limit).replace(/ Only$/, '')} Taka)`
     : '';
@@ -542,26 +560,45 @@ export const AgreementLetter = ({ c }) => {
       </AgClause>
       <AgSp pt={12} />
 
-      <AgClause label="(f)" className="font-bold">
-        ANROOT LOGEX LTD. will provide credit to {co} for availing following services of ANROOT LOGEX LTD. Under code number {code}.
-      </AgClause>
-      <AgSp pt={18} />
+      {isCash ? (
+        <>
+          <AgClause label="(f)" className="font-bold">
+            {co} will avail the following services of ANROOT LOGEX LTD. under code number {code} on a cash basis.
+          </AgClause>
+          <AgSp pt={18} />
 
-      <AgClause label="(3)" labelWidth="7.62mm" className="font-bold">Outgoing delivery on prepaid basis:</AgClause>
-      <AgSp pt={9} />
+          <AgClause label="(3)" labelWidth="7.62mm" className="font-bold">Outgoing delivery on prepaid basis:</AgClause>
+          <AgSp pt={9} />
 
-      <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
-        <b>(3.i) Time Limit:</b> {AR} will raise invoice on monthly basis and {CO} will settle total dues of {AR} within {daysText} days from the receipt of invoice.
-      </p>
-      <AgSp pt={9} />
-      <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
-        <b>(3.ii) Credit Limit:</b> {AR} will give credit up to maximum of {limitText} per month to {CO}
-      </p>
-      <AgSp pt={9} />
-      <p className="text-justify" style={{ paddingLeft: '3.8mm', textIndent: '7.3mm' }}>
-        <b>(3.iii)</b> {CO} needs to settle full dues of ANROOT LOGEX LTD. before exceeding any of the said limits.
-      </p>
-      <AgSp pt={9} />
+          <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
+            <b>(3.i) Payment:</b> {CO} will settle the charges for each shipment to {AR} at the time of pick-up or delivery. No credit facility applies to this account.
+          </p>
+          <AgSp pt={9} />
+        </>
+      ) : (
+        <>
+          <AgClause label="(f)" className="font-bold">
+            ANROOT LOGEX LTD. will provide credit to {co} for availing following services of ANROOT LOGEX LTD. Under code number {code}.
+          </AgClause>
+          <AgSp pt={18} />
+
+          <AgClause label="(3)" labelWidth="7.62mm" className="font-bold">Outgoing delivery on prepaid basis:</AgClause>
+          <AgSp pt={9} />
+
+          <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
+            <b>(3.i) Time Limit:</b> {AR} will raise invoice on monthly basis and {CO} will settle total dues of {AR} within {daysText} days from the receipt of invoice.
+          </p>
+          <AgSp pt={9} />
+          <p className="text-justify" style={{ paddingLeft: '11.1mm' }}>
+            <b>(3.ii) Credit Limit:</b> {AR} will give credit up to maximum of {limitText} per month to {CO}
+          </p>
+          <AgSp pt={9} />
+          <p className="text-justify" style={{ paddingLeft: '3.8mm', textIndent: '7.3mm' }}>
+            <b>(3.iii)</b> {CO} needs to settle full dues of ANROOT LOGEX LTD. before exceeding any of the said limits.
+          </p>
+          <AgSp pt={9} />
+        </>
+      )}
 
       <AgClause label="(g)">
         <b style={{ fontSize: '10pt' }}>Termination:</b> Either party may terminate the agreement without assigning any reason upon giving not less than 30 (thirty days) prior written notice to the other party.
@@ -676,8 +713,11 @@ const PrintTemplate = ({ data, onClose }) => {
           return (
             <div className="text-slate-900 text-[11px] rec-form">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="shrink-0">
+                {/* The bars are for the scanner; the code underneath is for
+                    whoever is reading the printed page and needs to quote it. */}
+                <div className="shrink-0" style={{ width: '150px' }}>
                   <RFormBarcode value={c.barcode} />
+                  <p className="font-mono text-[10px] mt-0.5">{c.barcode}</p>
                 </div>
                 <h1 className="flex-1 text-center font-bold text-[15px]">CUSTOMER RECOMMENDATION FORM</h1>
                 <p className="shrink-0 text-right text-[10px] leading-tight" style={{ width: '140px' }}>
@@ -743,7 +783,12 @@ const PrintTemplate = ({ data, onClose }) => {
                 rows={[
                   ['Business Type', c.businessType, 'Service Required', c.serviceRequired === 'BOTH' ? 'IB & OB' : c.serviceRequired === 'IB' ? 'Inbound (IB)' : c.serviceRequired === 'OB' ? 'Outbound (OB)' : ''],
                   ['Account Mode', c.accountMode, 'Account Type', c.accountType === 'CREDIT CUSTOMER' ? 'Credit' : 'Cash'],
-                  ['Credit Limit (TK)', c.creditLimitTk, 'Credit Period (Days)', c.creditPeriodDays],
+                  [
+                    'Credit Limit (TK)',
+                    c.accountType === 'CASH' ? 'N/A — Cash' : c.creditLimitTk,
+                    'Credit Period (Days)',
+                    c.accountType === 'CASH' ? 'N/A — Cash' : c.creditPeriodDays,
+                  ],
                   ['Area Name', c.area, 'Zone Name', c.zone],
                 ]}
               />
@@ -839,7 +884,11 @@ const PrintTemplate = ({ data, onClose }) => {
           const keyContact = getContactByType(c.contacts, 'KEY_CONTACT_PERSON');
           const financialContact = getContactByType(c.contacts, 'FINANCIAL_CONTACT');
           const shipping = (c.shippingDetails || [])[0] || {};
-          const amountWords = numberToWordsBDT(c.creditLimitTk);
+          // A cash account carries no credit, so the limit boxes stay empty
+          // on the printed form rather than showing a figure that does not
+          // apply to it.
+          const isCash = c.accountType === 'CASH';
+          const amountWords = isCash ? '' : numberToWordsBDT(c.creditLimitTk);
 
           return (
             <div
@@ -957,8 +1006,15 @@ const PrintTemplate = ({ data, onClose }) => {
                   />
                   <PfRow l1="Area" v1={c.area} l2="Zone" v2={c.zone} />
                   <PfRow l1="Rate Ref. No." v1={buildRateRefs(c).join(' / ')} l2="Date" v2={formatPrintDate(c.createdAt)} />
-                  <PfRow l1="Amount Limit (BDT)" v1={c.creditLimitTk} l2="Time Limit (Days)" v2={c.creditPeriodDays} />
-                  <PfFull label="(In Word)" value={amountWords} />
+                  {/* A cash account has no credit to limit, so the boxes say
+                      so rather than sitting blank as if someone forgot. */}
+                  <PfRow
+                    l1="Amount Limit (BDT)"
+                    v1={isCash ? 'N/A — Cash' : c.creditLimitTk}
+                    l2="Time Limit (Days)"
+                    v2={isCash ? 'N/A — Cash' : c.creditPeriodDays}
+                  />
+                  <PfFull label="(In Word)" value={isCash ? 'N/A — Cash account' : amountWords} />
                   <PfRow l1="Account Created By" v1={c.recommendedBy?.name} l2="Account Handled By" v2={c.handledBy?.name} />
                   <PfFull label="Special Instructions (If Any)" value={c.specialInstructions} h="34px" />
                   <PfRow l1="Checked By" v1="" l2="Approved By" v2="" h="34px" />
