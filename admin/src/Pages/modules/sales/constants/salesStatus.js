@@ -73,8 +73,8 @@ export const getWorkflowStageLabel = (customer) => {
       return 'Waiting for Line Manager Approval (Info Update)';
     case STATUS.PROVISIONAL_EXTENSION_REQUESTED:
       return 'Waiting for Line Manager to Decide on Extension Request';
-    case STATUS.PROVISIONAL_FINAL_REVIEW_PENDING:
-      return 'Waiting for Line Manager Final Verification';
+    case STATUS.PROVISIONAL_FINAL_REVIEW:
+      return 'Waiting for Head of Department to Activate the Account';
     case STATUS.PROVISIONAL_ACTIVE:
       // A rejected offer keeps the account provisional — the document
       // window is still running, only the rate is back with the Line

@@ -41,10 +41,11 @@ const ROLE_PERMISSION_MAP: Record<RoleName, string[]> = {
     PERMISSIONS.VIEW_FOLLOWUP_REMINDERS,
     PERMISSIONS.VIEW_CUSTOMER_PROFILE,
     PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS,
-    PERMISSIONS.APPROVE_PROVISIONAL_ONBOARDING,
     PERMISSIONS.EXTEND_PROVISIONAL_PERIOD,
-    PERMISSIONS.FINALIZE_ONBOARDING,
     PERMISSIONS.VIEW_ACTIVITY_LOG,
+    // Activating an account is the last irreversible step, so it belongs to
+    // the Head of Department — a Line Manager prepares the case but does not
+    // close it.
     // A Line Manager may raise a rate request and create a recommendation
     // themselves, but may not answer their own request for a better rate —
     // that decision belongs to the Head of Department.
@@ -69,6 +70,7 @@ const ROLE_PERMISSION_MAP: Record<RoleName, string[]> = {
     PERMISSIONS.APPROVE_PROVISIONAL_ONBOARDING,
     PERMISSIONS.EXTEND_PROVISIONAL_PERIOD,
     PERMISSIONS.FINALIZE_ONBOARDING,
+    PERMISSIONS.ACTIVATE_PROFILE,
     PERMISSIONS.VIEW_ACTIVITY_LOG,
     PERMISSIONS.REQUEST_NEW_RATE,
     PERMISSIONS.GRANT_NEW_RATE,

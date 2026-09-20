@@ -7,7 +7,7 @@ import { runFileScan } from '../../jobs/file-scan.job';
 import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { logAudit } from "../../common/utils/auditLog.util";
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
-import { DOCUMENT_TYPE_LABELS, SELF_APPROVING_ROLES } from "../customers/customers.service";
+import { DOCUMENT_TYPE_LABELS, SELF_APPROVING_ROLES, notifyHeadsOfDepartment } from "../customers/customers.service";
 import { assertKamOwnsCustomerIfKam } from "../../common/utils/scopeGuard.util";
 import { assertLineManagerOwnsCustomer } from "../../common/utils/scopeGuard.util";
 import { ensureCustomerAccount } from "../customers/customerAccount.service";
@@ -240,22 +240,43 @@ export const submitFinalOnboardingRequest = async (
     return activated;
   }
 
-  return transitionCustomerStatus({
+  const submitted = await transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
     actorId: kamId,
-    historyAction: "FINAL ONBOARDING REQUESTED BY KAM",
-    historySubText: "Awaiting final Line Manager verification",
+    historyAction: 'FINAL ONBOARDING REQUESTED',
+    historySubText: 'Awaiting Head of Department approval',
   });
+
+  // Activation is theirs alone, so they are the only people who need to
+  // know it is waiting.
+  notifyHeadsOfDepartment(
+    `${submitted.accountName} — Onboarding complete, ready for activation`,
+    `/app/customers/${submitted.barcode}`
+  ).catch(() => {});
+
+  return submitted;
 };
 
+// Activating an account is the last irreversible step in the whole flow, so
+// it rests with the Head of Department rather than the Line Manager who may
+// have set the rate. Until they say yes the account stays provisional, which
+// keeps the customer live and working while the paperwork is checked.
 export const decideFinalOnboarding = async (
   customerId: string,
   approve: boolean,
   comments: string | undefined,
-  lmId: string
+  actorId: string,
+  actorRole = 'HEAD_OF_DEPARTMENT',
 ) => {
-  await assertLineManagerOwnsCustomer(customerId, lmId);
+  if (!['HEAD_OF_DEPARTMENT', 'SUPER_ADMIN'].includes(actorRole)) {
+    throw {
+      statusCode: 403,
+      code: 'FORBIDDEN',
+      message: 'Only the Head of Department can approve an account for activation.',
+    };
+  }
+  const lmId = actorId;
   // Explicit gate: this decision only exists for an account actually
   // waiting on final review. Without it, a stale/duplicated request from
   // another status surfaced as a raw "invalid transition" error.
@@ -298,8 +319,12 @@ export const decideFinalOnboarding = async (
     actorId: lmId,
     extraUpdates: {
       lmNote: comments ? sanitizeAndEscape({ c: comments }).c : undefined,
+      // Reopens the Final Account Profile panel so the Sales Coordinator can
+      // correct what was flagged and submit again, with nothing lost in
+      // between and the customer still live throughout.
+      finalProfileCompleted: false,
     },
-    historyAction: "FINAL ONBOARDING REJECTED — RETURNED TO KAM",
+    historyAction: 'FINAL ONBOARDING RETURNED FOR CORRECTION',
     historySubText: comments || "",
   });
 };
