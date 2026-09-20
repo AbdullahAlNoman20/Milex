@@ -24,8 +24,8 @@ router.use(requireAuth);
 router.use(requireStaff);
 router.use(verifyCsrf);
 
-router.get(
-  "/kams",
+router.get('/my-team', controller.listMyTeamHandler);
+router.get('/kams',
   requirePermission(
     PERMISSIONS.VIEW_ALL_KAM_DASHBOARDS,
     PERMISSIONS.MANAGE_USERS,

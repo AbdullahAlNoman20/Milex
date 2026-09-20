@@ -29,6 +29,49 @@ const toSafeUser = (user: any) => ({
 // Department appear alongside the KAMs because they take accounts on
 // themselves — a recommendation they raised is theirs until they hand it
 // over, and they should be able to hand it back to themselves too.
+// Everyone reporting to this person, plus whoever they report to. A Head of
+// Department sees the whole department, because that is precisely what
+// reports to them.
+export const listMyTeam = async (requester: { id: string; role: string }) => {
+  const me = await prisma.user.findUniqueOrThrow({
+    where: { id: requester.id },
+    select: { lineManagerId: true },
+  });
+
+  const manager = me.lineManagerId
+    ? await prisma.user.findUnique({
+        where: { id: me.lineManagerId },
+        select: { id: true, name: true, email: true, role: { select: { name: true } } },
+      })
+    : null;
+
+  const members =
+    requester.role === 'HEAD_OF_DEPARTMENT' || requester.role === 'SUPER_ADMIN'
+      ? await prisma.user.findMany({
+          where: { role: { name: { in: ['KAM', 'SALES_COORDINATOR', 'LINE_MANAGER'] as any } } },
+          select: { id: true, name: true, email: true, isActive: true, role: { select: { name: true } } },
+          orderBy: [{ role: { name: 'asc' } }, { name: 'asc' }],
+        })
+      : await prisma.user.findMany({
+          where: { lineManagerId: requester.id },
+          select: { id: true, name: true, email: true, isActive: true, role: { select: { name: true } } },
+          orderBy: [{ role: { name: 'asc' } }, { name: 'asc' }],
+        });
+
+  return {
+    manager: manager
+      ? { id: manager.id, name: manager.name, email: manager.email, role: manager.role.name }
+      : null,
+    members: members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      isActive: m.isActive,
+      role: m.role.name,
+    })),
+  };
+};
+
 export const listKams = async (lineManagerId?: string, includeManagers = false) => {
   const roleFilter = includeManagers
     ? { name: { in: ['KAM', 'LINE_MANAGER', 'HEAD_OF_DEPARTMENT'] as any } }

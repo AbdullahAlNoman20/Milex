@@ -60,7 +60,9 @@ export const getWorkflowStageLabel = (customer) => {
     case STATUS.PENDING_APPROVAL:
       return 'Waiting for Line Manager to Set the Rate or Escalate to HOD';
     case STATUS.PENDING_HOD_RATE:
-      return 'Waiting for Head of Department to Set the Best Rate';
+      return customer.pendingApproverName
+        ? `Waiting for ${customer.pendingApproverName} (Head of Department) to set the best rate`
+        : 'Waiting for the Head of Department to Set the Best Rate';
     case STATUS.PENDING_KAM_REVIEW:
       return 'Waiting for KAM to Accept the Rate or Request a Better One';
     case STATUS.PENDING_LM_REVIEW:
@@ -74,7 +76,11 @@ export const getWorkflowStageLabel = (customer) => {
     case STATUS.PROVISIONAL_EXTENSION_REQUESTED:
       return 'Waiting for Line Manager to Decide on Extension Request';
     case STATUS.PROVISIONAL_FINAL_REVIEW:
-      return 'Waiting for Head of Department to Activate the Account';
+      // Naming the person, not just the role: on a team of any size "waiting
+      // for the Head of Department" is not enough to know who to chase.
+      return customer.pendingApproverName
+        ? `Waiting for ${customer.pendingApproverName} (Head of Department) to activate the account`
+        : 'Waiting for the Head of Department to Activate the Account';
     case STATUS.PROVISIONAL_ACTIVE:
       // A rejected offer keeps the account provisional — the document
       // window is still running, only the rate is back with the Line
@@ -85,7 +91,7 @@ export const getWorkflowStageLabel = (customer) => {
         } to Approve a New Rate`;
       if (!customer.offerSent) return 'Waiting for Sales Coordinator to Send Offer Letter';
       if (!customer.offerAccepted) return `Waiting for Customer's Feedback (via ${ownerLabel(customer)})`;
-      if (!customer.agreementSent) return 'Waiting for Sales Coordinator to Collect Agreement';
+      if (!customer.agreementSent) return 'Waiting for Sales Coordinator to send the Agreement';
       return 'Waiting for Document Upload & Final Onboarding';
     case STATUS.PROVISIONAL_EXPIRED:
       return 'Provisional Period Expired — KAM Can Request a 5-Day Extension';

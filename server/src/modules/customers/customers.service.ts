@@ -13,6 +13,7 @@ import { assertLineManagerOwnsCustomer, assertKamOwnsCustomerIfKam } from '../..
 import { assertValidCreditPeriodValue, isCreditPeriodField } from '../../common/utils/creditRules.util';
 import { createNotificationsForUsers } from '../notifications/notifications.service';
 import { ensureCustomerAccount } from './customerAccount.service';
+import { appendRateProcessStep } from '../../common/utils/rateProcess.util';
 
 const generateBarcode = () => `MLX${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -262,6 +263,21 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   });
   if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
 
+  // An account waiting to be activated is waiting on a specific person, and
+  // the audit trail should say who rather than leaving people to work it out.
+  let pendingApproverName: string | null = null;
+  if (
+    customer.status === CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING ||
+    customer.status === CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL
+  ) {
+    const hod = await prisma.user.findFirst({
+      where: { role: { name: 'HEAD_OF_DEPARTMENT' }, isActive: true },
+      select: { name: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    pendingApproverName = hod?.name || null;
+  }
+
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
@@ -272,7 +288,7 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   ) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
   }
-  return customer;
+  return { ...customer, pendingApproverName };
 };
 
 // Whoever creates a recommendation has already made their own decision on it
@@ -739,7 +755,7 @@ export const finalizeOffer = async (
   const updated = await prisma.$transaction(async (tx) => {
     const current = await tx.customer.findUnique({
       where: { id: customerId },
-      select: { status: true, isDeleted: true, offerRejected: true },
+      select: { status: true, isDeleted: true, offerRejected: true, rateProcessActive: true },
     });
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
@@ -748,7 +764,10 @@ export const finalizeOffer = async (
       current.status === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER ||
       current.status === CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK ||
       // A live provisional account being re-quoted stays provisional.
-      current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE;
+      current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE ||
+      // A long-active customer being re-quoted: the account does not move
+      // backwards, only the new rate goes out to them.
+      (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT && current.rateProcessActive);
     if (!canSendOffer) {
       throw {
         statusCode: 409,
@@ -760,7 +779,7 @@ export const finalizeOffer = async (
       throw {
         statusCode: 409,
         code: 'AWAITING_NEW_RATE',
-        message: 'The customer rejected the last offer. The Line Manager must approve a new rate before another offer can be sent.',
+        message: 'The customer rejected the last offer. A new rate has to be approved before another offer can be sent.',
       };
     }
     const customer = await tx.customer.update({
@@ -770,7 +789,11 @@ export const finalizeOffer = async (
         offerSent: true,
         offerAccepted: false,
         offerRejected: false,
-        status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK as any,
+        // An active customer being re-quoted keeps their standing — the
+        // account is not un-made by asking them about a new rate.
+        ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
+          ? {}
+          : { status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK as any }),
       },
       include: CUSTOMER_WITH_HANDLER,
     });
@@ -793,13 +816,17 @@ export const finalizeOffer = async (
         sentVia: sentVia || null,
       },
     });
-    await tx.customerHistoryEntry.updateMany({
-      where: { customerId, status: 'active' },
-      data: { status: 'completed' },
-    });
-    await tx.customerHistoryEntry.create({
-      data: { customerId, action: 'OFFER LETTER SENT', subText: 'Awaiting customer feedback via KAM', status: 'active' },
-    });
+    if (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT && current.rateProcessActive) {
+      await appendRateProcessStep(tx, customerId, scId, 'OFFER LETTER SENT', 'Awaiting the customer\'s answer');
+    } else {
+      await tx.customerHistoryEntry.updateMany({
+        where: { customerId, status: 'active' },
+        data: { status: 'completed' },
+      });
+      await tx.customerHistoryEntry.create({
+        data: { customerId, action: 'OFFER LETTER SENT', subText: 'Awaiting the customer\'s answer', status: 'active' },
+      });
+    }
     return customer;
   });
   logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_LETTER_SENT', actorId: scId, afterState: { offerSent: true } }).catch(() => {});
@@ -941,11 +968,16 @@ export const submitClientFeedback = async (
         where: { id: customerId },
         data: {
           offerAccepted: true,
-          // Accepting is what makes the account provisional. Until this
-          // moment it was a quote, not a customer.
-          status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any,
-          accountProfileType: 'PROVISIONAL' as any,
-          ...(startsNow
+          // Accepting is what makes the account provisional — unless it is
+          // already a live customer being re-quoted, in which case nothing
+          // about their standing changes at all.
+          ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
+            ? { rateProcessActive: false }
+            : {
+                status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any,
+                accountProfileType: 'PROVISIONAL' as any,
+              }),
+          ...(current.status !== CUSTOMER_STATUS.ACTIVE_ACCOUNT && startsNow
             ? {
                 provisionalCreatedAt: now,
                 provisionalExpiryDate: new Date(now.getTime() + 21 * 86400000),
@@ -954,10 +986,24 @@ export const submitClientFeedback = async (
         },
         include: CUSTOMER_WITH_HANDLER,
       });
-      await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
-      await tx.customerHistoryEntry.create({
-        data: { customerId, action: 'OFFER ACCEPTED BY CUSTOMER', subText: 'Awaiting Sales Coordinator to send the Agreement', status: 'active' },
-      });
+      if (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT) {
+        await appendRateProcessStep(
+          tx,
+          customerId,
+          kamId,
+          'NEW RATE ACCEPTED BY CUSTOMER',
+          'The new rate is now in force'
+        );
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { rateProcessActive: false },
+        });
+      } else {
+        await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
+        await tx.customerHistoryEntry.create({
+          data: { customerId, action: 'OFFER ACCEPTED BY CUSTOMER', subText: 'Awaiting the agreement to be sent', status: 'active' },
+        });
+      }
       return customer;
     });
     logAudit({ entity: 'Customer', entityId: customerId, action: 'OFFER_ACCEPTED', actorId: kamId, afterState: { offerAccepted: true } }).catch(() => {});
@@ -994,6 +1040,7 @@ export const submitClientFeedback = async (
         revision: true,
         accountProfileType: true,
         createdByRole: true,
+        rateProcessActive: true,
       },
     });
     if (!current || current.isDeleted) {
@@ -1028,29 +1075,38 @@ export const submitClientFeedback = async (
         // and turned it down, so whatever goes out next is the next
         // revision — REF-…-R1, then -R2, and so on.
         revision: current.revision + 1,
-        // Straight back to the Line Manager, who runs the same decision
-        // again — set a rate, or take it up to the Head of Department.
-        //
-        // An account that is already provisional keeps that standing and the
-        // countdown already running against it: the customer is a customer,
-        // only the rate is back in question. Everything earlier in the flow
-        // returns to the Line Manager's desk properly.
-        ...(current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE
+        // Back to whoever owns the rate decision. An account that is already
+        // provisional keeps that standing and the countdown running against
+        // it, and a live customer keeps theirs entirely — in both cases the
+        // customer is a customer and only the rate is back in question.
+        // Everything earlier in the flow returns to the right desk properly.
+        ...(current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE ||
+        current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
           ? {}
-          : { status: CUSTOMER_STATUS.PENDING_RATE_APPROVAL as any }),
+          : { status: rateDeskFor(current.createdByRole) as any }),
       },
       include: CUSTOMER_WITH_HANDLER,
     });
 
-    await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
-    await tx.customerHistoryEntry.create({
-      data: {
+    if (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT) {
+      await appendRateProcessStep(
+        tx,
         customerId,
-        action: 'OFFER REJECTED BY CUSTOMER',
-        subText: clean.r ? `${clean.r} — back to the Line Manager for a new rate` : 'Back to the Line Manager for a new rate',
-        status: 'active',
-      },
-    });
+        kamId,
+        'NEW RATE REJECTED BY CUSTOMER',
+        clean.r || 'Awaiting another rate'
+      );
+    } else {
+      await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
+      await tx.customerHistoryEntry.create({
+        data: {
+          customerId,
+          action: 'OFFER REJECTED BY CUSTOMER',
+          subText: clean.r ? `${clean.r} — back for a new rate` : 'Back for a new rate',
+          status: 'active',
+        },
+      });
+    }
 
     return customer;
   });

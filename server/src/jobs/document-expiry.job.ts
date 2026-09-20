@@ -37,8 +37,21 @@ export const runDocumentExpiryReminders = async () => {
       0,
       Math.ceil(((doc.expiryDate as Date).getTime() - now.getTime()) / 86400000)
     );
+    // The Sales Coordinator files the renewed copy and the Line Manager
+    // carries the consequence if it lapses, so neither should have to hear
+    // about it second-hand from the KAM.
     // eslint-disable-next-line no-await-in-loop
-    await createNotificationsForUsers([doc.customer.handledById], {
+    const others = await prisma.user.findMany({
+      where: {
+        role: { name: { in: ['SALES_COORDINATOR', 'LINE_MANAGER'] as any } },
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const recipients = [...new Set([doc.customer.handledById, ...others.map((u) => u.id)])];
+
+    // eslint-disable-next-line no-await-in-loop
+    await createNotificationsForUsers(recipients, {
       label: `${doc.customer.accountName} — Trade License expires in ${days} day${days === 1 ? '' : 's'} (${(doc.expiryDate as Date).toLocaleDateString()})`,
       link: `/app/customers/${doc.customer.barcode}`,
       isOverdue: true,

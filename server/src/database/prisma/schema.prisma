@@ -238,6 +238,14 @@ model Customer {
   accountProfileType AccountProfileType @default(REGULAR)
   isDeleted          Boolean            @default(false)
   rateHistory        Json[]             @default([])
+  // A live customer asking for new terms runs the same quote-and-accept loop
+  // again, but it is a separate episode from the onboarding that made them a
+  // customer in the first place. Keeping its steps apart means neither trail
+  // has to be read through the other.
+  rateProcessHistory Json[]             @default([])
+  // True while such a re-quote is running. Nothing about the account's
+  // onboarding changes during it — only the rate is in question.
+  rateProcessActive  Boolean            @default(false)
 
   pendingInfoUpdateField String?
   pendingInfoUpdateValue String?

@@ -160,6 +160,24 @@ const DocumentsList = ({ customer, documents = [], reloadToken = 0 }) => {
                 <p className="text-slate-600 break-words mt-0.5">
                   {doc.originalName}
                 </p>
+                {doc.expiryDate && (() => {
+                  const days = Math.ceil(
+                    (new Date(doc.expiryDate).getTime() - Date.now()) / 86400000
+                  );
+                  return (
+                    <p
+                      className={`text-[10px] font-bold mt-1 ${
+                        days < 0 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-slate-400'
+                      }`}
+                    >
+                      {days < 0
+                        ? `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`
+                        : days === 0
+                          ? 'Expires today'
+                          : `${days} day${days === 1 ? '' : 's'} until expiry`}
+                    </p>
+                  );
+                })()}
               </div>
             </div>
             <button

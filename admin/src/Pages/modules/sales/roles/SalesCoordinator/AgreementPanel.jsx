@@ -1,6 +1,6 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/AgreementPanel.jsx
 import { useState, useRef, useLayoutEffect } from 'react';
-import { Mail, Printer, PenTool, ChevronDown, Send, Loader2 } from 'lucide-react';
+import { Printer, PenTool, Send, Loader2 } from 'lucide-react';
 import { sendAgreement } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
@@ -21,8 +21,6 @@ const AgreementPanel = ({ customer, onSent }) => {
         ? ' on a cash basis.'
         : ` with a credit limit of BDT ${customer.creditLimitTk}.`
     }\n\n${SIGNATURE_LIBRARY.SALES}`;
-
-  const [isSendMenuOpen, setIsSendMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLockRef = useRef(false);
 
@@ -66,7 +64,6 @@ const AgreementPanel = ({ customer, onSent }) => {
 
   const send = async (via) => {
     if (submitLockRef.current) return;
-    setIsSendMenuOpen(false);
 
     const ok = await confirm({
       title: 'Send the agreement?',
@@ -124,53 +121,19 @@ const AgreementPanel = ({ customer, onSent }) => {
           <Printer size={14} className="mr-1.5" /> Print Only
         </button>
 
-        <div className="relative flex-[2]">
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={() => setIsSendMenuOpen((o) => !o)}
-            className="w-full bg-blue-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-800 transition flex items-center justify-center disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <Loader2 size={14} className="mr-1.5 animate-spin" />
-            ) : (
-              <Send size={14} className="mr-1.5" />
-            )}
-            Send Agreement
-            <ChevronDown size={14} className="ml-1.5" />
-          </button>
-
-          {isSendMenuOpen && (
-            <div className="absolute left-0 right-0 bottom-full mb-1.5 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-20">
-              <button
-                type="button"
-                onClick={() => send('MAIL')}
-                className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 transition flex items-center gap-2 border-b border-slate-100"
-              >
-                <Mail size={13} className="text-blue-600 shrink-0" />
-                <span>
-                  Send by email
-                  <span className="block text-[10px] font-normal text-slate-400">
-                    Opens your mail with the agreement ready to attach
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => send('HARD_COPY')}
-                className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 transition flex items-center gap-2"
-              >
-                <Printer size={13} className="text-slate-500 shrink-0" />
-                <span>
-                  Printed &amp; sent as hard copy
-                  <span className="block text-[10px] font-normal text-slate-400">
-                    Records it as delivered on paper
-                  </span>
-                </span>
-              </button>
-            </div>
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={() => send('MAIL')}
+          className="flex-[2] bg-blue-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-800 transition flex items-center justify-center disabled:opacity-50"
+        >
+          {isSubmitting ? (
+            <Loader2 size={14} className="mr-1.5 animate-spin" />
+          ) : (
+            <Send size={14} className="mr-1.5" />
           )}
-        </div>
+          Send Agreement
+        </button>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { sanitizeAndEscape } from '../customers/sanitize.helper';
 import { notifyCustomerWorkflowUsers } from '../../common/utils/stateMachine.util';
 import { createNotificationsForUsers } from '../notifications/notifications.service';
 import { assertKamOwnsCustomerIfKam, assertLineManagerOwnsCustomer } from '../../common/utils/scopeGuard.util';
+import { appendRateProcessStep } from '../../common/utils/rateProcess.util';
 
 // Which roles may actually answer a request for a better rate. A Line Manager
 // can raise one but never grant their own — that is the whole point of
@@ -21,6 +22,47 @@ export const rateSourceLabel = (source?: string | null) =>
 
 const toRateSource = (role: string) =>
   role === 'HEAD_OF_DEPARTMENT' || role === 'SUPER_ADMIN' ? 'HEAD_OF_DEPARTMENT' : 'LINE_MANAGER';
+
+// One step in a live customer's re-quote. Written to its own column so the
+// onboarding trail — which finished months or years ago — stays exactly as
+// it was left.
+export const appendRateProcessStep = async (
+  tx: any,
+  customerId: string,
+  actorId: string,
+  action: string,
+  subText = ''
+) => {
+  const actor = actorId
+    ? await tx.user.findUnique({ where: { id: actorId }, select: { name: true } })
+    : null;
+  const current = await tx.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    select: { rateProcessHistory: true },
+  });
+
+  // Whatever was in progress is finished; this is now the live step.
+  const completed = (current.rateProcessHistory || []).map((s: any) => ({
+    ...s,
+    status: 'completed',
+  }));
+
+  await tx.customer.update({
+    where: { id: customerId },
+    data: {
+      rateProcessActive: true,
+      rateProcessHistory: [
+        ...completed,
+        {
+          action: actor ? `${action} (${actor.name})` : action,
+          subText,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    },
+  });
+};
 
 export const listRateRequests = async (
   customerId: string,
@@ -79,6 +121,16 @@ export const createRateRequest = async (
       followsRejection: !!followsRejection,
     },
   });
+
+  // This opens the re-quote episode; every step from here to the customer's
+  // answer is recorded against it rather than the onboarding trail.
+  appendRateProcessStep(
+    prisma,
+    customerId,
+    requester.id,
+    'NEW RATE REQUESTED',
+    clean.reason
+  ).catch(() => {});
 
   logAudit({
     entity: 'Customer',
@@ -154,13 +206,17 @@ export const decideRateRequest = async (
     const current = await tx.customer.findUniqueOrThrow({ where: { id: request.customerId } });
 
     if (!data.approve) {
-      await tx.customerHistoryEntry.create({
-        data: {
-          customerId: request.customerId,
-          action: 'NEW RATE REQUEST DECLINED',
-          subText: clean.note || 'The existing rate stands',
-          status: 'completed',
-        },
+      await appendRateProcessStep(
+        tx,
+        request.customerId,
+        decider.id,
+        'NEW RATE REQUEST DECLINED',
+        clean.note || 'The existing rate stands'
+      );
+      // The episode is over; nothing further is expected.
+      await tx.customer.update({
+        where: { id: request.customerId },
+        data: { rateProcessActive: false },
       });
       return current;
     }
@@ -193,29 +249,26 @@ export const decideRateRequest = async (
         // is the reply to that, not a further round.
         ...(request.followsRejection ? {} : { revision: { increment: 1 } }),
         rateHistory: { push: previousEntry },
-        // A rate granted after a rejection reopens the offer step: the Sales
-        // Coordinator sends a fresh letter and the customer answers again.
-        ...(request.followsRejection
-          ? { offerRejected: false, offerSent: false, offerAccepted: false, rejectReason: null }
-          : {}),
+        // A new rate always has to be put to the customer, whether it
+        // followed a rejection or a request out of the blue. The offer flags
+        // reset so the Sales Coordinator can send a fresh letter and the
+        // customer can answer it — no documents are asked for again, because
+        // they are already on file from the original onboarding.
+        offerRejected: false,
+        offerSent: false,
+        offerAccepted: false,
+        rejectReason: null,
       },
       include: { handledBy: { select: { name: true } } },
     });
 
-    await tx.customerHistoryEntry.updateMany({
-      where: { customerId: request.customerId, status: 'active' },
-      data: { status: 'completed' },
-    });
-    await tx.customerHistoryEntry.create({
-      data: {
-        customerId: request.customerId,
-        action: `NEW RATE SET BY ${rateSourceLabel(source).toUpperCase()}`,
-        subText: request.followsRejection
-          ? 'Awaiting Sales Coordinator to send the revised offer letter'
-          : 'Rate updated',
-        status: 'active',
-      },
-    });
+    await appendRateProcessStep(
+      tx,
+      request.customerId,
+      decider.id,
+      `NEW RATE SET BY ${rateSourceLabel(source).toUpperCase()}`,
+      'Awaiting the offer letter to be sent'
+    );
 
     return result;
   });

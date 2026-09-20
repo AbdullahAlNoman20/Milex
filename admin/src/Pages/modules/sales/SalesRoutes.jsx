@@ -18,6 +18,7 @@ import MyActivityPage from './pages/MyActivityPage';
 import TeamActivityPage from './pages/TeamActivityPage';
 import NotificationsPage from './pages/NotificationsPage';
 import CustomerAssignmentsPage from './pages/CustomerAssignmentsPage';
+import MyTeamPage from './pages/MyTeamPage';
 import AdminOverview from './roles/Admin/AdminOverview';
 import SuperAdminOverview from './roles/SuperAdmin/SuperAdminOverview';
 
@@ -85,6 +86,7 @@ const SalesRoutes = [
       </RoleRoute>
     ),
   },
+  { path: 'my-team', element: <MyTeamPage /> },
   { path: 'my-activity', element: <MyActivityPage /> },
   { path: 'notifications', element: <NotificationsPage /> },
   {
