@@ -5,6 +5,15 @@ import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
 import { asString } from '../../common/utils/requestParams.util';
 import { assertLineManagerOwnsKam } from '../../common/utils/scopeGuard.util';
 
+export const listMyTeamHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await usersService.listMyTeam({ id: req.user!.id, role: req.user!.role });
+    return sendSuccess(res, data);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const listKamsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lineManagerId = req.user!.role === 'LINE_MANAGER' ? req.user!.id : undefined;

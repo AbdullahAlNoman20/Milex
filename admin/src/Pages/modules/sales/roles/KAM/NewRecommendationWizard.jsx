@@ -473,7 +473,7 @@ const NewRecommendationWizard = () => {
                   <input
                     className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                     value={form.accountName}
-                    maxLength={200}
+                    maxLength={90}
                     onChange={(e) => setField("accountName", e.target.value)}
                   />
                 </FormField>
@@ -557,7 +557,7 @@ const NewRecommendationWizard = () => {
                       <input
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.senior.name}
-                        maxLength={150}
+                        maxLength={90}
                         onChange={(e) =>
                           setContactField("senior", "name", e.target.value)
                         }
@@ -604,7 +604,7 @@ const NewRecommendationWizard = () => {
                       <input
                         className="w-full border border-slate-200 p-2.5 rounded text-sm focus:border-emerald-500 outline-none"
                         value={contacts.key.name}
-                        maxLength={150}
+                        maxLength={90}
                         onChange={(e) =>
                           setContactField("key", "name", e.target.value)
                         }

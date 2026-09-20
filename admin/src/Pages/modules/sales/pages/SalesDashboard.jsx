@@ -1,7 +1,9 @@
 // admin/src/Pages/modules/sales/pages/SalesDashboard.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, ShieldCheck, Target, Clock, Plus } from 'lucide-react';
+import { LayoutDashboard, FileText, ShieldCheck, Target, Clock, Plus, UserCog } from 'lucide-react';
+import { listTeam } from '../services/teamService';
+import { ROLES } from '../../../../Components/constants/roles';
 import { useSales } from '../hooks/useSales';
 import { usePagedCustomers } from '../hooks/usePagedCustomers';
 import { useAuth } from '../../../../Components/hooks/useAuth';
@@ -17,6 +19,26 @@ const SalesDashboard = () => {
   const { setSelectedCustomer, reloadToken } = useSales();
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
+  // Knowing who to escalate to is part of doing the job, and on a team of
+  // any size it is not something people reliably remember.
+  const [manager, setManager] = useState(null);
+  const reportsUpward =
+    currentUser?.role === ROLES.KAM || currentUser?.role === ROLES.SALES_COORDINATOR;
+
+  useEffect(() => {
+    if (!reportsUpward) return undefined;
+    let cancelled = false;
+    listTeam()
+      .then((data) => {
+        if (!cancelled) setManager(data.manager || null);
+      })
+      .catch(() => {
+        if (!cancelled) setManager(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reportsUpward]);
 
   // The role's own action queue and every headline figure are computed in the
   // database. They used to be derived by filtering a complete download of the
@@ -58,6 +80,21 @@ const SalesDashboard = () => {
           </button>
         )}
       </div>
+
+      {reportsUpward && (
+        <div className="mb-5 bg-white rounded-xl border border-slate-200 px-4 sm:px-5 py-3 flex items-center gap-3">
+          <UserCog size={16} className="text-slate-400 shrink-0" />
+          <p className="text-xs text-slate-600 min-w-0">
+            Your Line Manager:{' '}
+            <strong className="text-slate-800">
+              {manager?.name || 'not assigned yet'}
+            </strong>
+            {manager?.email && (
+              <span className="text-slate-400 break-words"> · {manager.email}</span>
+            )}
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <button

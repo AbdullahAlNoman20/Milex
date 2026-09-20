@@ -38,13 +38,7 @@ const NAV_ITEMS = [
     roles: [ROLES.KAM],
     permissions: null,
   },
-  {
-    to: '/app/follow-ups',
-    label: 'Follow-up Reminders',
-    icon: BellRing,
-    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT],
-    permissions: null,
-  },
+   { to: '/app/my-team', label: 'My Team', icon: Users, roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN] },
   {
     to: '/app/team-reports',
     label: 'Team Reports',
@@ -52,6 +46,7 @@ const NAV_ITEMS = [
     roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN],
     permissions: null,
   },
+
   {
     to: '/app/my-activity',
     label: 'My Activity',

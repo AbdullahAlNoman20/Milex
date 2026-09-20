@@ -103,6 +103,31 @@ const CategoryCard = ({ category, doc, onUpload, isUploading }) => {
         </div>
       )}
 
+      {doc && expiry && (() => {
+        // Counted from today rather than from the upload, so a licence filed
+        // with three days left shows three days — not a full renewal cycle
+        // that has already mostly passed.
+        const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / 86400000);
+        const tone =
+          days < 0
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : days <= 30
+              ? 'bg-amber-50 border-amber-200 text-amber-700'
+              : 'bg-slate-50 border-slate-200 text-slate-600';
+        return (
+          <div className={`border rounded-lg px-3 py-2 text-[11px] font-semibold ${tone}`}>
+            {days < 0
+              ? `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`
+              : days === 0
+                ? 'Expires today'
+                : `${days} day${days === 1 ? '' : 's'} until expiry`}
+            <span className="block font-normal opacity-75">
+              {new Date(expiry).toLocaleDateString()}
+            </span>
+          </div>
+        );
+      })()}
+
       <label
         htmlFor={isBlockedOnExpiry ? undefined : inputId}
         className={`block border-2 border-dashed rounded-lg py-4 text-center transition text-xs font-semibold ${

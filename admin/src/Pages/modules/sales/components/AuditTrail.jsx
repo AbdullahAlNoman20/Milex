@@ -47,7 +47,7 @@ const TimelineList = ({ items, activeLabel }) => (
     {activeLabel && <TimelineNode title={activeLabel} isPending />}
     {items.map((h, i) => (
       <TimelineNode
-        key={h.id || `${h.action}-${i}`}
+        key={h.id || `${h.action}-${h.createdAt || i}`}
         title={h.action}
         subText={h.subText}
         timestamp={h.createdAt ? new Date(h.createdAt).toLocaleString() : ""}
@@ -58,7 +58,7 @@ const TimelineList = ({ items, activeLabel }) => (
   </div>
 );
 
-const AuditTrail = ({ history = [], activeStepLabel = "" }) => {
+const AuditTrail = ({ history = [], activeStepLabel = "", title = "Onboarding Process Audit Trail" }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
@@ -74,6 +74,9 @@ const AuditTrail = ({ history = [], activeStepLabel = "" }) => {
   }, [isModalOpen]);
   const safeHistory = Array.isArray(history) ? history : [];
   const hasActiveStep = safeHistory.some((h) => h.status === "active");
+  // Rate-process entries are plain objects rather than database rows, so
+  // they have no id to key on.
+  void hasActiveStep;
 
   // Newest first, oldest at the bottom. The server already returns them in
   // this order, but sorting here as well means the view is correct even if a
@@ -88,7 +91,7 @@ const AuditTrail = ({ history = [], activeStepLabel = "" }) => {
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <div className="p-3 flex items-center border-b border-slate-100">
         <Clock size={18} className="text-slate-400 mr-2" />
-        <h3 className="font-bold text-base text-slate-800">Process Audit Trail</h3>
+        <h3 className="font-bold text-base text-slate-800">{title}</h3>
       </div>
       <div className="p-6 pb-8">
         {ordered.length === 0 ? (
@@ -124,9 +127,7 @@ const AuditTrail = ({ history = [], activeStepLabel = "" }) => {
                   <div className="p-5 flex items-center justify-between border-b border-slate-100 shrink-0">
                     <div className="flex items-center">
                       <Clock size={18} className="text-slate-400 mr-2" />
-                      <h3 className="font-bold text-base text-slate-800">
-                        Process Audit Trail
-                      </h3>
+                      <h3 className="font-bold text-base text-slate-800">{title}</h3>
                     </div>
                     <button
                       type="button"

@@ -1,8 +1,8 @@
 // admin/src/Pages/modules/sales/roles/SalesCoordinator/OfferLetterPanel.jsx
 import { useState, useRef, useLayoutEffect } from 'react';
-import { Mail, Printer, PenTool, Paperclip, X, ChevronDown, Send, Loader2 } from 'lucide-react';
+import { Printer, PenTool, Send, Loader2 } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
-import { uploadOnboardingDocument } from '../../services/customerService';
+
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
@@ -10,7 +10,7 @@ import { buildRateRefs } from '../../../../../Components/utils/format';
 import { OfferLetter } from '../../components/PrintTemplate';
 import { composeMailWithLetter } from '../../components/letterPdf';
 
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
 
 const OfferLetterPanel = ({ customer }) => {
   const { updateStatus, setPrintData } = useSales();
@@ -25,8 +25,6 @@ const OfferLetterPanel = ({ customer }) => {
         customer.approvedRate || customer.proposedRate || ''
       }\n\nRate Reference: ${buildRateRefs(customer).join(' / ')}\n\nNotes: ${customer.lmNote || 'Standard Delivery'}\n\n${SIGNATURE_LIBRARY.LM}`
   );
-  const [attachment, setAttachment] = useState(null);
-  const [isSendMenuOpen, setIsSendMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLockRef = useRef(false);
   const isResend = customer.revision > 0 && !!customer.rejectReason;
@@ -42,15 +40,7 @@ const OfferLetterPanel = ({ customer }) => {
     return () => ro.disconnect();
   }, []);
 
-  const handleAttachment = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      return showToast('The attachment must be under 10MB', 'warning');
-    }
-    setAttachment(file);
-  };
+
 
   // The letter goes out as a PDF from the person's own mail account, which
   // keeps the sending address, the signature and the sent-items record where
@@ -86,7 +76,6 @@ const OfferLetterPanel = ({ customer }) => {
 
   const send = async (via) => {
     if (submitLockRef.current) return;
-    setIsSendMenuOpen(false);
 
     const ok = await confirm({
       title: isResend ? 'Send the revised offer letter?' : 'Send the offer letter?',
@@ -121,17 +110,6 @@ const OfferLetterPanel = ({ customer }) => {
         // still safe to send because the server rejects it on an unsent offer.
       }
 
-      if (attachment) {
-        try {
-          await uploadOnboardingDocument(customer.id, {
-            documentType: 'OFFER_LETTER_EXCEL',
-            file: attachment,
-          });
-        } catch (err) {
-          showToast(err?.message || 'The letter was recorded, but the attachment could not be saved', 'warning');
-        }
-      }
-
       if (via === 'MAIL') await openMailClient();
     } finally {
       submitLockRef.current = false;
@@ -161,36 +139,7 @@ const OfferLetterPanel = ({ customer }) => {
         </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-          Attach the rate sheet (optional)
-        </label>
-        {attachment ? (
-          <div className="flex items-center justify-between text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <span className="flex items-center gap-1.5 truncate">
-              <Paperclip size={13} className="text-emerald-600 shrink-0" /> {attachment.name}
-            </span>
-            <button
-              type="button"
-              onClick={() => setAttachment(null)}
-              aria-label="Remove attachment"
-              className="text-slate-300 hover:text-red-500 shrink-0 ml-2"
-            >
-              <X size={13} />
-            </button>
-          </div>
-        ) : (
-          <label className="block border-2 border-dashed border-slate-200 rounded-lg py-2.5 text-center cursor-pointer hover:bg-slate-50 transition text-xs font-semibold text-slate-500">
-            Click to attach a PDF or spreadsheet
-            <input
-              type="file"
-              accept=".pdf,.xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleAttachment}
-            />
-          </label>
-        )}
-      </div>
+
 
       <div className="flex gap-3">
         <button
@@ -201,53 +150,19 @@ const OfferLetterPanel = ({ customer }) => {
           <Printer size={14} className="mr-1.5" /> Print Only
         </button>
 
-        <div className="relative flex-[2]">
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={() => setIsSendMenuOpen((o) => !o)}
-            className="w-full bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-800 transition flex items-center justify-center disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <Loader2 size={14} className="mr-1.5 animate-spin" />
-            ) : (
-              <Send size={14} className="mr-1.5" />
-            )}
-            {isResend ? 'Resend Offer Letter' : 'Send Offer Letter'}
-            <ChevronDown size={14} className="ml-1.5" />
-          </button>
-
-          {isSendMenuOpen && (
-            <div className="absolute left-0 right-0 bottom-full mb-1.5 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden z-20">
-              <button
-                type="button"
-                onClick={() => send('MAIL')}
-                className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 transition flex items-center gap-2 border-b border-slate-100"
-              >
-                <Mail size={13} className="text-emerald-600 shrink-0" />
-                <span>
-                  Send by email
-                  <span className="block text-[10px] font-normal text-slate-400">
-                    Opens your mail with the letter ready to attach
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => send('HARD_COPY')}
-                className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 transition flex items-center gap-2"
-              >
-                <Printer size={13} className="text-slate-500 shrink-0" />
-                <span>
-                  Printed &amp; sent as hard copy
-                  <span className="block text-[10px] font-normal text-slate-400">
-                    Records it as delivered on paper
-                  </span>
-                </span>
-              </button>
-            </div>
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={() => send('MAIL')}
+          className="flex-[2] bg-emerald-700 text-white text-xs py-2.5 rounded-lg font-bold shadow-md hover:bg-emerald-800 transition flex items-center justify-center disabled:opacity-50"
+        >
+          {isSubmitting ? (
+            <Loader2 size={14} className="mr-1.5 animate-spin" />
+          ) : (
+            <Send size={14} className="mr-1.5" />
           )}
-        </div>
+          {isResend ? 'Resend Offer Letter' : 'Send Offer Letter'}
+        </button>
       </div>
 
       <p className="text-[10px] text-slate-400">

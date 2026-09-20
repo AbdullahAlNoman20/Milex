@@ -140,14 +140,17 @@ export const transitionCustomerStatus = async ({
       data: { status: 'completed' },
     });
 
-    await tx.customerHistoryEntry.create({
-      data: {
-        customerId,
-        action: historyAction.toUpperCase().slice(0, 200),
-        subText: historySubText.slice(0, 300),
-        status: 'active',
-      },
-    });
+  // The person's name is written into the entry as it happens. Looking it up
+  // later would show who holds the role now, which after a handover is a
+  // different person from the one who actually did it.
+  const actor = actorId
+    ? await tx.user.findUnique({ where: { id: actorId }, select: { name: true } })
+    : null;
+  const actionWithName = actor ? `${historyAction} (${actor.name})` : historyAction;
+
+  await tx.customerHistoryEntry.create({
+    data: { customerId, action: actionWithName, subText: historySubText, status: 'active' },
+  });
 
     return { updated, beforeState };
   });
