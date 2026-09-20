@@ -4,6 +4,7 @@ export const CUSTOMER_STATUS = Object.freeze({
   PENDING_RATE_APPROVAL: 'PENDING_RATE_APPROVAL',
   PENDING_HOD_RATE_APPROVAL: 'PENDING_HOD_RATE_APPROVAL',
   PENDING_KAM_RATE_REVIEW: 'PENDING_KAM_RATE_REVIEW',
+  PENDING_LM_RATE_REVIEW: 'PENDING_LM_RATE_REVIEW',
   RATE_APPROVED_PENDING_OFFER: 'RATE_APPROVED_PENDING_OFFER',
   DRAFTING_OFFER_LETTER: 'DRAFTING_OFFER_LETTER',
   OFFER_SENT_AWAITING_FEEDBACK: 'OFFER_SENT_AWAITING_FEEDBACK',
@@ -29,17 +30,24 @@ export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {
   [CUSTOMER_STATUS.PENDING_RATE_PREPARATION]: [CUSTOMER_STATUS.PENDING_RATE_APPROVAL],
 
   // The Line Manager's desk. They either set the rate themselves, or escalate
-  // to the Head of Department — those are the only two ways forward.
+  // to the Head of Department — those are the only two ways forward. Where
+  // a set rate goes next depends on who owns the account: back to the KAM
+  // who raised it, or straight to the Sales Coordinator when the Line
+  // Manager raised it themselves and has nobody to hand it to.
   [CUSTOMER_STATUS.PENDING_RATE_APPROVAL]: [
     CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
     CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
+    CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
     CUSTOMER_STATUS.PENDING_RATE_PREPARATION,
   ],
 
-  // The Head of Department's desk. Granting a rate hands it to the KAM;
-  // declining hands it back to the Line Manager who asked.
+  // The Head of Department's desk. The rate they grant goes to whoever owns
+  // the account — the KAM, the Line Manager, or, when the Head of Department
+  // owns it themselves, straight out to the Sales Coordinator.
   [CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL]: [
     CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW,
+    CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
     CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
   ],
 
@@ -48,6 +56,15 @@ export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {
   // business actually runs on, and it can go round as many times as needed.
   [CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW]: [
     CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
+    CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+  ],
+
+  // The same decision in the Line Manager's hands, for an account they own
+  // themselves: accept what the Head of Department granted, or go back and
+  // ask again.
+  [CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW]: [
+    CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
+    CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
     CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
   ],
 
@@ -60,9 +77,13 @@ export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {
   // The customer's answer. Accepting is the moment the account becomes
   // provisional and the document countdown starts; rejecting sends the rate
   // back to the Line Manager and the whole loop runs again.
+  // A rejection goes back to whoever owns the rate decision on this account:
+  // the Line Manager normally, the Head of Department when the account is
+  // theirs and there is nobody above them to ask.
   [CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK]: [
     CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
     CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+    CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
     CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
   ],
 

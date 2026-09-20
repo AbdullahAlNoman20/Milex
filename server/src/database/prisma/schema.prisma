@@ -40,6 +40,10 @@ enum CustomerStatus {
   // with it — take it to the Sales Coordinator, or send it back for a better
   // one. Nothing reaches the customer until they choose.
   PENDING_KAM_RATE_REVIEW
+  // The same decision, but sitting with the Line Manager: it lands here when
+  // they own the account themselves and the Head of Department has answered
+  // their escalation. They either run with that rate or ask again.
+  PENDING_LM_RATE_REVIEW
   RATE_APPROVED_PENDING_OFFER
   DRAFTING_OFFER_LETTER
   OFFER_SENT_AWAITING_FEEDBACK

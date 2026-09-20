@@ -25,13 +25,28 @@ const toSafeUser = (user: any) => ({
   createdAt: user.createdAt,
 });
 
-export const listKams = async (lineManagerId?: string) => {
-  const kams = await prisma.user.findMany({
-    where: { role: { name: 'KAM' }, isActive: true, ...(lineManagerId ? { lineManagerId } : {}) },
-    select: { id: true, name: true, email: true },
+// Anyone who can actually hold a customer. Line Managers and the Head of
+// Department appear alongside the KAMs because they take accounts on
+// themselves — a recommendation they raised is theirs until they hand it
+// over, and they should be able to hand it back to themselves too.
+export const listKams = async (lineManagerId?: string, includeManagers = false) => {
+  const roleFilter = includeManagers
+    ? { name: { in: ['KAM', 'LINE_MANAGER', 'HEAD_OF_DEPARTMENT'] as any } }
+    : { name: 'KAM' as any };
+
+  const people = await prisma.user.findMany({
+    where: {
+      role: roleFilter,
+      isActive: true,
+      // Scoping by Line Manager only makes sense for the KAMs under them;
+      // the managers themselves are never filtered out by it.
+      ...(lineManagerId && !includeManagers ? { lineManagerId } : {}),
+    },
+    select: { id: true, name: true, email: true, role: { select: { name: true } } },
     orderBy: { name: 'asc' },
   });
-  return kams;
+
+  return people.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role.name }));
 };
 
 export const listLineManagers = async () => {

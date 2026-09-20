@@ -26,6 +26,7 @@ import Countdown from "../../../../Components/Shared/Countdown";
 
 import RateApprovalPanel from "../roles/LineManager/RateApprovalPanel";
 import HodRatePanel from "../roles/HOD/HodRatePanel";
+import LmRateReviewPanel from "../roles/LineManager/LmRateReviewPanel";
 import KamRateDecisionPanel from "../roles/KAM/KamRateDecisionPanel";
 import ReviseRateApprovalPanel from "../roles/LineManager/ReviseRateApprovalPanel";
 import CustomerInfoApprovalPanel from "../roles/LineManager/CustomerInfoApprovalPanel";
@@ -221,6 +222,14 @@ const CustomerDetail = () => {
         );
       }
       return <Waiting>Waiting for the KAM to review the rate</Waiting>;
+    }
+
+    // The same decision, on an account the Line Manager owns themselves.
+    if (customer.status === STATUS.PENDING_LM_REVIEW) {
+      if (role === ROLES.LINE_MANAGER || isSuperAdmin) {
+        return <LmRateReviewPanel customer={customer} onUpdated={refreshCustomer} />;
+      }
+      return <Waiting>Waiting for the Line Manager to review the rate</Waiting>;
     }
 
     // The Sales Coordinator's desk.

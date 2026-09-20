@@ -25,7 +25,7 @@ const CustomerAssignmentsPage = () => {
   const [pendingId, setPendingId] = useState(null);
 
   useEffect(() => {
-    listKams()
+    listKams({ includeManagers: true })
       .then(setKams)
       .catch(() => setKams([]));
   }, []);
