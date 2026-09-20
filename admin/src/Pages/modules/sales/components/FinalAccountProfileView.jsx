@@ -9,10 +9,6 @@ const FinalAccountProfileView = ({ customer }) => {
   if (!customer?.finalProfileCompleted) return null;
 
   const isCashAccount = customer.accountType === 'CASH';
-  const creditValue = (value, suffix = '') => {
-    if (isCashAccount) return 'Cash — no credit';
-    return value ? `${value}${suffix}` : '—';
-  };
 
   const rows = [
     [
@@ -27,11 +23,13 @@ const FinalAccountProfileView = ({ customer }) => {
     ['Preferred Carrier', customer.preferredCarrier, 'Nature of Business', customer.natureOfBusiness],
     ['Area', customer.area, 'Zone', customer.zone],
     ['Type', findLabel(GAIN_TYPE_OPTIONS, customer.gainType), 'Mode', findLabel(FINANCE_MODE_OPTIONS, customer.financeMode)],
+    // On a cash account the amount reads "Cash" and the term is left blank,
+    // because there is no period to state rather than one nobody filled in.
     [
       'Final Amount Limit (BDT)',
-      creditValue(customer.creditLimitTk),
+      isCashAccount ? 'Cash' : customer.creditLimitTk || '—',
       'Final Time Limit (Days)',
-      creditValue(customer.creditPeriodDays, ' Days'),
+      isCashAccount ? '' : customer.creditPeriodDays ? `${customer.creditPeriodDays} Days` : '—',
     ],
   ];
 
@@ -57,13 +55,15 @@ const FinalAccountProfileView = ({ customer }) => {
                 {l1}
               </td>
               <td className="px-4 sm:px-5 py-3 align-top font-medium text-slate-800 break-words">
-                {v1 || '—'}
+                {/* An empty string is a deliberate blank — a field that does
+                    not apply — so it is left alone rather than dashed. */}
+                {v1 === '' ? '' : v1 || '—'}
               </td>
               <td className="hidden sm:table-cell px-5 py-3 align-top text-[11px] font-bold text-slate-400 uppercase tracking-wide border-l border-slate-100">
                 {l2}
               </td>
               <td className="hidden sm:table-cell px-5 py-3 align-top font-medium text-slate-800 break-words">
-                {v2 || '—'}
+                {v2 === '' ? '' : v2 || '—'}
               </td>
             </tr>
           ))}
@@ -74,7 +74,7 @@ const FinalAccountProfileView = ({ customer }) => {
                 {l2}
               </td>
               <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
-                {v2 || '—'}
+                {v2 === '' ? '' : v2 || '—'}
               </td>
             </tr>
           ))}

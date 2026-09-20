@@ -112,44 +112,6 @@ const RTable2 = ({ rows }) => (
   </table>
 );
 
-const PBox = ({ label, value, labelWidth = '150px', center = false }) => (
-  <div className="flex items-center gap-2">
-    <span className="text-[10px] font-semibold text-slate-900 shrink-0" style={{ width: labelWidth }}>
-      {label}
-    </span>
-    <span
-      className={`flex-1 border border-slate-800 px-2 py-0.5 text-[10px] min-h-[17px] leading-[15px] text-slate-900 ${center ? 'text-center' : ''}`}
-    >
-      {value || ''}
-    </span>
-  </div>
-);
-
-const POptionRow = ({ label, options, isSelected, labelWidth = '110px' }) => (
-  <div className="flex items-center gap-2">
-    <span className="text-[10px] font-semibold text-slate-900 shrink-0" style={{ width: labelWidth }}>
-      {label}
-    </span>
-    <div className="flex border border-slate-800">
-      {options.map((opt, i) => (
-        <span
-          key={opt.value}
-          className={`px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap ${i > 0 ? 'border-l border-slate-800' : ''} ${
-            isSelected(opt.value) ? 'bg-slate-800 text-white' : 'text-slate-900'
-          }`}
-        >
-          {opt.label}
-        </span>
-      ))}
-    </div>
-  </div>
-);
-
-const PSectionTitle = ({ children }) => (
-  <p className="text-center font-bold text-[11px] underline text-slate-900 my-1.5">{children}</p>
-);
-
-// NOTE: DELETE the old PBox, POptionRow, PSectionTitle helpers above (unused now).
 const PF_TD = 'border border-slate-800 px-2 py-1 break-words';
 
 const PfBlock = ({ title, children }) => (
@@ -785,9 +747,9 @@ const PrintTemplate = ({ data, onClose }) => {
                   ['Account Mode', c.accountMode, 'Account Type', c.accountType === 'CREDIT CUSTOMER' ? 'Credit' : 'Cash'],
                   [
                     'Credit Limit (TK)',
-                    c.accountType === 'CASH' ? 'N/A — Cash' : c.creditLimitTk,
+                    c.accountType === 'CASH' ? 'Cash' : c.creditLimitTk,
                     'Credit Period (Days)',
-                    c.accountType === 'CASH' ? 'N/A — Cash' : c.creditPeriodDays,
+                    c.accountType === 'CASH' ? '' : c.creditPeriodDays,
                   ],
                   ['Area Name', c.area, 'Zone Name', c.zone],
                 ]}
@@ -1006,15 +968,16 @@ const PrintTemplate = ({ data, onClose }) => {
                   />
                   <PfRow l1="Area" v1={c.area} l2="Zone" v2={c.zone} />
                   <PfRow l1="Rate Ref. No." v1={buildRateRefs(c).join(' / ')} l2="Date" v2={formatPrintDate(c.createdAt)} />
-                  {/* A cash account has no credit to limit, so the boxes say
-                      so rather than sitting blank as if someone forgot. */}
+                  {/* A cash account has no credit to limit: the amount box
+                      reads "Cash" and the term box is left empty, because
+                      there is no period to print. */}
                   <PfRow
                     l1="Amount Limit (BDT)"
-                    v1={isCash ? 'N/A — Cash' : c.creditLimitTk}
+                    v1={isCash ? 'Cash' : c.creditLimitTk}
                     l2="Time Limit (Days)"
-                    v2={isCash ? 'N/A — Cash' : c.creditPeriodDays}
+                    v2={isCash ? '' : c.creditPeriodDays}
                   />
-                  <PfFull label="(In Word)" value={isCash ? 'N/A — Cash account' : amountWords} />
+                  <PfFull label="(In Word)" value={isCash ? '' : amountWords} />
                   <PfRow l1="Account Created By" v1={c.recommendedBy?.name} l2="Account Handled By" v2={c.handledBy?.name} />
                   <PfFull label="Special Instructions (If Any)" value={c.specialInstructions} h="34px" />
                   <PfRow l1="Checked By" v1="" l2="Approved By" v2="" h="34px" />
