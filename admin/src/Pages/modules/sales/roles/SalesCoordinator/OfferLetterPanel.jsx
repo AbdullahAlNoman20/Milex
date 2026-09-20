@@ -16,7 +16,10 @@ const OfferLetterPanel = ({ customer }) => {
   const { updateStatus, setPrintData } = useSales();
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [offerText, setOfferText] = useState(
+  // The letter's wording is generated from the record rather than typed, so
+  // this is read once and kept — the copy that goes out and the copy stored
+  // against the customer are then guaranteed to be the same text.
+  const [offerText] = useState(
     customer.offerText ||
       `Based on your projected volumes, we are pleased to offer the following competitive rate:\n\n${
         customer.approvedRate || customer.proposedRate || ''

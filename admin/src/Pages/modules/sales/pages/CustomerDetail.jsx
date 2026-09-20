@@ -555,19 +555,19 @@ const CustomerDetail = () => {
                       "Email",
                       customer.email || "—",
                     ],
-                    // A cash account has no credit to limit, so the row says
-                    // so rather than printing a currency symbol against
-                    // nothing.
+                    // A cash account has no credit to limit, so the amount
+                    // reads simply "Cash" and the period stays empty — there
+                    // is no term to state.
                     [
                       "Credit Limit",
                       isCashAccount
-                        ? "Cash — no credit"
+                        ? "Cash"
                         : customer.creditLimitTk
                           ? `TK ${customer.creditLimitTk}`
                           : "—",
                       "Credit Period",
                       isCashAccount
-                        ? "Cash — no credit"
+                        ? ""
                         : customer.creditPeriodDays
                           ? `${customer.creditPeriodDays} Days`
                           : "—",
@@ -636,7 +636,7 @@ const CustomerDetail = () => {
                     </td>
                     <td className="px-4 py-3 align-top font-medium text-slate-800 break-words">
                       {isCashAccount
-                        ? "Cash — no credit"
+                        ? ""
                         : customer.creditPeriodDays
                           ? `${customer.creditPeriodDays} Days`
                           : "—"}
