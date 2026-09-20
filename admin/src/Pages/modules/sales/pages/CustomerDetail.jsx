@@ -959,8 +959,8 @@ const CustomerDetail = () => {
                 <thead>
                   <tr className="bg-slate-200 text-slate-700">
                     <th className="px-4 py-2.5 text-left font-bold">Rate</th>
-                    <th className="px-4 py-2.5 text-left font-bold">Given By</th>
-                    <th className="px-4 py-2.5 text-left font-bold">Replaced</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Set By</th>
+                    <th className="px-4 py-2.5 text-left font-bold">Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -982,7 +982,7 @@ const CustomerDetail = () => {
                             </span>
                           )}
                           {h.reason && (
-                            <span className="block text-[10px] text-red-600 mt-1 break-words">
+                            <span className="block text-[10px] text-slate-500 mt-1 break-words">
                               {h.reason}
                             </span>
                           )}

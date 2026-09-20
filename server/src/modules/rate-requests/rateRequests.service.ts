@@ -183,7 +183,15 @@ export const decideRateRequest = async (
         rateSource: source as any,
         rateSetById: decider.id,
         lmNote: clean.note || current.lmNote,
-        revision: { increment: 1 },
+        // A live account being re-quoted is a new set of terms for the same
+        // customer, so it gets its own reference — otherwise the invoice
+        // raised under the old rate and the one raised under the new rate
+        // would quote the same code.
+        //
+        // A rate that answers a rejection is the exception: the counter
+        // already moved when the customer turned the offer down, and this
+        // is the reply to that, not a further round.
+        ...(request.followsRejection ? {} : { revision: { increment: 1 } }),
         rateHistory: { push: previousEntry },
         // A rate granted after a rejection reopens the offer step: the Sales
         // Coordinator sends a fresh letter and the customer answers again.
