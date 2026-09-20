@@ -187,6 +187,18 @@ const CustomerDetail = () => {
     const isApprover =
       role === ROLES.LINE_MANAGER || role === ROLES.HEAD_OF_DEPARTMENT;
 
+    // Who actually holds this account. A recommendation raised by a manager
+    // has no KAM below it until one is assigned, so the steps a KAM would
+    // normally take fall to whoever raised it.
+    const owner = customer.createdByRole || ROLES.KAM;
+    const isAccountOwner =
+      (owner === ROLES.KAM && role === ROLES.KAM) ||
+      (owner === ROLES.LINE_MANAGER && role === ROLES.LINE_MANAGER) ||
+      (owner === ROLES.HEAD_OF_DEPARTMENT && role === ROLES.HEAD_OF_DEPARTMENT) ||
+      // A KAM the account was later handed to owns it regardless of who
+      // raised it in the first place.
+      (role === ROLES.KAM && customer.handledById === currentUser?.id);
+
     if (customer.status === STATUS.INFO_UPDATE_PENDING && isApprover) {
       return <CustomerInfoApprovalPanel customer={customer} />;
     }
@@ -203,7 +215,8 @@ const CustomerDetail = () => {
       return <Waiting>Waiting for the Line Manager to decide on the rate</Waiting>;
     }
 
-    // Escalated. Nobody but the Head of Department can move it on.
+    // Escalated, or a rejected offer on an account the Head of Department
+    // raised themselves — either way the decision is theirs alone.
     if (customer.status === STATUS.PENDING_HOD_RATE) {
       if (role === ROLES.HEAD_OF_DEPARTMENT || isSuperAdmin) {
         return <HodRatePanel customer={customer} onUpdated={refreshCustomer} />;
@@ -242,22 +255,23 @@ const CustomerDetail = () => {
       );
     }
 
-    // The customer's answer, collected by the KAM. Once it has been given,
-    // the form disappears — there is nothing left to answer, and leaving it
-    // on screen invites the same answer being sent twice.
+    // The customer's answer, collected by whoever holds the account — a KAM
+    // normally, but a Line Manager or Head of Department when they raised it
+    // themselves and there is no KAM in between. Once the answer is given
+    // the form disappears; leaving it up invites the same answer twice.
     if (customer.status === STATUS.OFFER_REVIEW) {
       if (customer.offerAccepted) {
         return <Waiting>Offer accepted — waiting for the Sales Coordinator to send the agreement</Waiting>;
       }
       if (customer.offerRejected) {
-        return <Waiting>Offer rejected — back with the Line Manager for a new rate</Waiting>;
+        return <Waiting>Offer rejected — back for a new rate</Waiting>;
       }
-      if (role === ROLES.KAM || isSuperAdmin) {
+      if (isAccountOwner || isSuperAdmin) {
         return (
           <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />
         );
       }
-      return <Waiting>Awaiting the customer's feedback via the KAM</Waiting>;
+      return <Waiting>Awaiting the customer's feedback</Waiting>;
     }
 
     // Even after the 21-day window auto-expires, the same offer/agreement/
@@ -312,7 +326,7 @@ const CustomerDetail = () => {
           );
         return <Waiting>Waiting for KAM to complete document upload</Waiting>;
       }
-      if (role === ROLES.KAM) {
+      if (isAccountOwner) {
         if (!customer.offerSent)
           return (
             <Waiting>

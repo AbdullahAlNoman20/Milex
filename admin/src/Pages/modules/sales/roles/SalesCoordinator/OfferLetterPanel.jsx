@@ -8,6 +8,7 @@ import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
 import { buildRateRefs } from '../../../../../Components/utils/format';
 import { OfferLetter } from '../../components/PrintTemplate';
+import { composeMailWithLetter } from '../../components/letterPdf';
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
@@ -48,15 +49,36 @@ const OfferLetterPanel = ({ customer }) => {
     setAttachment(file);
   };
 
-  // Opening the person's own mail client keeps the sending account, the
-  // signature and the sent-items record where they already are, rather than
-  // routing customer correspondence through a server address nobody watches.
-  const openMailClient = () => {
-    const subject = `Offer Letter — ${customer.accountName} (${buildRateRefs(customer)[0] || customer.barcode})`;
-    const href = `mailto:${encodeURIComponent(customer.email || '')}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(offerText)}`;
-    window.location.href = href;
+  // The letter goes out as a PDF from the person's own mail account, which
+  // keeps the sending address, the signature and the sent-items record where
+  // they already are.
+  //
+  // A mailto: link cannot carry an attachment — no browser and no mail
+  // provider allows it, because a page that could attach arbitrary files to
+  // an outgoing message would be a serious hole. So the file is downloaded
+  // first and the compose window opens ready for it, with the toast below
+  // saying so plainly rather than leaving someone to notice the gap.
+  const openMailClient = async () => {
+    const ref = buildRateRefs(customer)[0] || customer.barcode;
+    const fileName = `Offer-Letter-${customer.accountName.replace(/[^a-zA-Z0-9]+/g, '-')}-${ref}.pdf`;
+
+    const prepared = await composeMailWithLetter({
+      node: <OfferLetter c={{ ...customer, offerText }} />,
+      kind: 'offer',
+      fileName,
+      widthMm: 172,
+      to: customer.email,
+      subject: `Offer Letter — ${customer.accountName} (${ref})`,
+      body: `Dear ${customer.accountName},\n\nPlease find our offer letter attached.\n\nRate Reference: ${ref}\n\nKind regards,\nMILEX`,
+    });
+
+    showToast(
+      prepared
+        ? `Your email is open and the offer letter is ready as "${fileName}" — drag it in or use the paperclip.`
+        : 'The email opened, but the letter could not be prepared. Use Print Only to produce it.',
+      prepared ? 'info' : 'warning',
+      10000
+    );
   };
 
   const send = async (via) => {
@@ -107,7 +129,7 @@ const OfferLetterPanel = ({ customer }) => {
         }
       }
 
-      if (via === 'MAIL') openMailClient();
+      if (via === 'MAIL') await openMailClient();
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
@@ -135,16 +157,6 @@ const OfferLetterPanel = ({ customer }) => {
           <OfferLetter c={customer} />
         </div>
       </div>
-
-      <details className="text-xs">
-        <summary className="cursor-pointer font-bold text-slate-600">Email message</summary>
-        <textarea
-          className="mt-2 w-full text-xs font-mono border border-slate-300 p-3 rounded-lg min-h-[160px] outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
-          value={offerText}
-          maxLength={5000}
-          onChange={(e) => setOfferText(e.target.value)}
-        />
-      </details>
 
       <div>
         <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -213,7 +225,7 @@ const OfferLetterPanel = ({ customer }) => {
                 <span>
                   Send by email
                   <span className="block text-[10px] font-normal text-slate-400">
-                    Opens your mail app with the letter ready
+                    Opens your mail with the letter ready to attach
                   </span>
                 </span>
               </button>

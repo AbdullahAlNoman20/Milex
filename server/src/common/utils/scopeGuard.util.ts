@@ -41,6 +41,10 @@ export const assertLineManagerOwnsCustomer = async (customerId: string, actorId:
 // Sales Coordinator and other elevated roles keep their existing, intentionally
 // broader access (per VIEW_ALL_KAM_DASHBOARDS-style permissions) — this guard
 // is a no-op for them by design, not an oversight.
+// A manager who raised a recommendation holds it exactly as a KAM would, so
+// the steps that belong to the account's owner are open to them too. Only a
+// KAM is narrowed here, because only a KAM can be handed someone else's
+// account by mistake.
 export const assertKamOwnsCustomerIfKam = async (customerId: string, actorId: string, actorRole: string) => {
   if (actorRole !== 'KAM') return;
   const customer = await prisma.customer.findUnique({

@@ -8,6 +8,7 @@ import { useSales } from '../../hooks/useSales';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
 import { buildRateRefs } from '../../../../../Components/utils/format';
 import { AgreementLetter } from '../../components/PrintTemplate';
+import { composeMailWithLetter } from '../../components/letterPdf';
 
 const AgreementPanel = ({ customer, onSent }) => {
   const { showToast } = useToast();
@@ -32,14 +33,31 @@ const AgreementPanel = ({ customer, onSent }) => {
     return () => ro.disconnect();
   }, []);
 
-  // Opening the person's own mail client keeps the sending account, the
-  // signature and the sent-items record where they already are.
-  const openMailClient = () => {
-    const subject = `Agreement — ${customer.accountName} (${buildRateRefs(customer)[0] || customer.barcode})`;
-    const href = `mailto:${encodeURIComponent(customer.email || '')}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(agreementText)}`;
-    window.location.href = href;
+  // Same approach as the offer letter: the PDF is produced and downloaded,
+  // then the compose window opens ready for it. A mailto: link cannot carry
+  // an attachment, so the download is the only honest way to get the file
+  // into the message.
+  const openMailClient = async () => {
+    const ref = buildRateRefs(customer)[0] || customer.barcode;
+    const fileName = `Agreement-${customer.accountName.replace(/[^a-zA-Z0-9]+/g, '-')}-${ref}.pdf`;
+
+    const prepared = await composeMailWithLetter({
+      node: <AgreementLetter c={customer} />,
+      kind: 'agreement',
+      fileName,
+      widthMm: 169.4,
+      to: customer.email,
+      subject: `Agreement — ${customer.accountName} (${ref})`,
+      body: `Dear ${customer.accountName},\n\nPlease find our agreement attached for your signature.\n\nReference: ${ref}\n\nKind regards,\nMILEX`,
+    });
+
+    showToast(
+      prepared
+        ? `Your email is open and the agreement is ready as "${fileName}" — drag it in or use the paperclip.`
+        : 'The email opened, but the agreement could not be prepared. Use Print Only to produce it.',
+      prepared ? 'info' : 'warning',
+      10000
+    );
   };
 
   const send = async (via) => {
@@ -64,7 +82,7 @@ const AgreementPanel = ({ customer, onSent }) => {
       // never happened on our side.
       await sendAgreement(customer.id, agreementText, via);
       showToast('Agreement recorded', 'success');
-      if (via === 'MAIL') openMailClient();
+      if (via === 'MAIL') await openMailClient();
       onSent?.();
     } catch (err) {
       showToast(err?.message || 'Failed to send agreement', 'error');
@@ -129,7 +147,7 @@ const AgreementPanel = ({ customer, onSent }) => {
                 <span>
                   Send by email
                   <span className="block text-[10px] font-normal text-slate-400">
-                    Opens your mail app with the agreement ready
+                    Opens your mail with the agreement ready to attach
                   </span>
                 </span>
               </button>
