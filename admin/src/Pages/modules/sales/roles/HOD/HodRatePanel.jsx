@@ -57,15 +57,6 @@ const HodRatePanel = ({ customer, onUpdated }) => {
       <h3 className="font-bold text-slate-900 text-base">Best Rate Requested</h3>
 
       <div className="space-y-2">
-        {customer.proposedRate && (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">
-              Originally proposed by the KAM
-            </p>
-            <p className="text-xs text-slate-700 break-words">{customer.proposedRate}</p>
-          </div>
-        )}
-
         {history.map((h, i) => (
           <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">

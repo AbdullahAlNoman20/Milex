@@ -301,6 +301,19 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
       // The rate reference is derived from the customer's own id, so it stays
       // the same for the life of the account and only the revision suffix
       // moves. See buildRateRef().
+      // The rate proposed at creation is the first entry in the account's
+      // rate history, whoever raised it. Without it the history starts at
+      // the first approval and the original ask — the number the KAM
+      // actually put forward — is nowhere on the record.
+      rateHistory: [
+        {
+          rate: clean.proposedRate || '',
+          rateRef: barcode,
+          source: selfApproves ? rateSource : null,
+          changedAt: new Date().toISOString(),
+          reason: `Proposed on the recommendation by ${humanizeStatus(creatorRole)}`,
+        },
+      ],
       ...(selfApproves
         ? {
             rateRef: barcode,
@@ -484,9 +497,11 @@ export const approveRate = async (customerId: string, data: any, actorId: string
       creditPeriodDays: data.creditPeriodDays || existing.creditPeriodDays,
       creditPeriodExtendedByLM: !!data.creditPeriodExtendedByLM,
       rateRef,
-      ...(isRevision
-        ? { revision: existing.revision + 1, rateHistory: { push: buildRateHistoryEntry(existing) } }
-        : {}),
+      // The history grows with every rate that is set, but the revision
+      // number does not. A revision marks a round trip to the customer —
+      // REF-…-R2 means they have seen two offers — so it moves only when
+      // they answer one, not when the figure is adjusted internally.
+      ...(isRevision ? { rateHistory: { push: buildRateHistoryEntry(existing) } } : {}),
       offerSent: false,
       offerAccepted: false,
       offerRejected: false,
@@ -575,9 +590,7 @@ export const grantHodRate = async (
       rateSetById: hodId,
       lmNote: clean.note || null,
       rateRef: existing.rateRef || existing.barcode,
-      ...(isRevision
-        ? { revision: existing.revision + 1, rateHistory: { push: buildRateHistoryEntry(existing) } }
-        : {}),
+      ...(isRevision ? { rateHistory: { push: buildRateHistoryEntry(existing) } } : {}),
       offerSent: false,
       offerAccepted: false,
       offerRejected: false,
@@ -689,14 +702,12 @@ export const kamRequestBetterRate = async (
 
 export const rejectRate = async (customerId: string, lmId: string) => {
   await assertLineManagerOwnsCustomer(customerId, lmId);
-  const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   return transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PENDING_RATE_PREPARATION,
     actorId: lmId,
-    extraUpdates: { revision: customer.revision + 1 },
     historyAction: 'RATE REJECTED BY LM',
-    historySubText: `Revision R-${customer.revision + 1} requested`,
+    historySubText: 'Sent back to the KAM for a revised proposal',
   });
 };
 
@@ -1013,6 +1024,9 @@ export const submitClientFeedback = async (
         offerAccepted: false,
         offerRejected: true,
         rejectReason: clean.r,
+        // The one place the counter moves: the customer has seen an offer
+        // and turned it down, so whatever goes out next is the next
+        // revision — REF-…-R1, then -R2, and so on.
         revision: current.revision + 1,
         // Straight back to the Line Manager, who runs the same decision
         // again — set a rate, or take it up to the Head of Department.
@@ -1117,9 +1131,8 @@ export const reapproveRateAfterRejection = async (
         rateSource: source as any,
         rateSetById: lmId,
         lmNote: clean.lmNote || null,
-        // The reference itself never changes — only the revision counter does,
-        // which is what produces REF-MLX…-R1, -R2 and so on.
-        revision: { increment: 1 },
+        // The revision was already counted when the customer rejected. This
+        // is the answer to that rejection, not a further round.
         rejectReason: null,
         offerRejected: false,
         offerSent: false,
@@ -1165,12 +1178,11 @@ export const reapproveRateAfterRejection = async (
 
 export const reviseRateAfterRejection = async (customerId: string, proposedRate: string, kamId: string, actorRole = 'KAM') => {
   await assertKamOwnsCustomerIfKam(customerId, kamId, actorRole);
-  const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   return transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
     actorId: kamId,
-    extraUpdates: { proposedRate: sanitizeAndEscape({ proposedRate }).proposedRate, revision: customer.revision + 1 },
+    extraUpdates: { proposedRate: sanitizeAndEscape({ proposedRate }).proposedRate },
     historyAction: 'REVISED RATE SUBMITTED TO LM',
   });
 };
@@ -1716,7 +1728,6 @@ export const decideFieldChangeRequest = async (requestId: string, approve: boole
             where: { id: request.customerId },
             data: {
               approvedRate: request.newValue,
-              revision: { increment: 1 },
               rateHistory: { push: previousEntry },
             },
           });
@@ -1880,7 +1891,6 @@ if (contactRef) {
       where: { id: customerId },
       data: {
         approvedRate: clean.v,
-        revision: { increment: 1 },
         rateHistory: { push: previousEntry },
       },
       include: CUSTOMER_WITH_HANDLER,
