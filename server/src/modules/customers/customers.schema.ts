@@ -110,6 +110,9 @@ export const finalProfileSchema = z
   .object({
     managingPartnerName: z.preprocess(emptyToUndefined, z.string().max(150).optional().nullable()),
     managingPartnerDesignation: z.preprocess(emptyToUndefined, z.string().max(100).optional().nullable()),
+    // Carried over from the recommendation rather than typed here, so an
+    // empty value simply means the recommendation had none — not an invalid
+    // choice to reject.
     accountMode: z.preprocess(
       emptyToUndefined,
       z.enum(['Express', 'Freight', 'Express & Freight', 'Fair']).optional().nullable()
@@ -148,7 +151,14 @@ export const listCustomersQuerySchema = z
   })
   .strict();
 
-export const reassignCustomerSchema = z.object({ newKamId: z.string().min(1, 'Please choose a Key Account Manager to reassign to.') }).strict();
+export const reassignCustomerSchema = z
+  .object({
+    newKamId: z.string().min(1, 'Please choose who will hold this account.'),
+    // Why the account moved. Optional, but a handover with a reason attached
+    // is far easier to understand a year later than a bare date.
+    note: z.string().max(500).optional(),
+  })
+  .strict();
 
 export const reapproveRateSchema = z
   .object({

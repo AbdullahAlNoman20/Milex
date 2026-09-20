@@ -267,9 +267,17 @@ export const deleteCustomer = async (id) => {
   await request(`/customers/${id}`, { method: 'DELETE' });
 };
 
-export const reassignCustomer = async (id, newKamId) => {
-  const { data } = await request(`/customers/${id}/reassign`, { method: 'POST', body: { newKamId } });
+export const reassignCustomer = async (id, newKamId, note) => {
+  const { data } = await request(`/customers/${id}/reassign`, {
+    method: 'POST',
+    body: note ? { newKamId, note } : { newKamId },
+  });
   return data.customer;
+};
+
+export const listAssignmentHistory = async (id) => {
+  const { data } = await request(`/customers/${id}/assignments`);
+  return data.items;
 };
 
 export const uploadRecommendationAttachment = async (customerId, file) => {

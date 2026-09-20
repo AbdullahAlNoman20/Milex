@@ -93,5 +93,6 @@ router.post('/:id/reapprove-rate', requirePermission(PERMISSIONS.APPROVE_RATE), 
 router.delete('/:id', requirePermission(PERMISSIONS.DELETE_CUSTOMER, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.deleteCustomerHandler);
 router.get('/:id/edit-history', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listEditHistoryHandler);
 router.get('/:id/correspondence', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listCorrespondenceHandler);
+router.get('/:id/assignments', requirePermission(PERMISSIONS.VIEW_CUSTOMER_PROFILE, PERMISSIONS.FULL_SYSTEM_CONTROL), controller.listAssignmentHistoryHandler);
 
 export default router;

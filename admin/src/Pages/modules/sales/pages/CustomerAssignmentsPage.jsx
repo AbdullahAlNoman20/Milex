@@ -1,6 +1,7 @@
 // admin/src/Pages/modules/sales/pages/CustomerAssignmentsPage.jsx
 import { useState, useEffect } from 'react';
-import { Search, X, Loader2, UserCog } from 'lucide-react';
+import { Search, X, Loader2, UserCog, History } from 'lucide-react';
+import AssignmentHistoryCard from '../components/AssignmentHistoryCard';
 import { usePagedCustomers } from '../hooks/usePagedCustomers';
 import { listKams } from '../services/teamService';
 import { reassignCustomer } from '../services/customerService';
@@ -23,6 +24,9 @@ const CustomerAssignmentsPage = () => {
   const [search, setSearch] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
   const [pendingId, setPendingId] = useState(null);
+  // The chain of custody for one account, opened from its own row rather
+  // than by navigating away and coming back.
+  const [historyFor, setHistoryFor] = useState(null);
 
   useEffect(() => {
     listKams({ includeManagers: true })
@@ -105,19 +109,20 @@ const CustomerAssignmentsPage = () => {
               <th className="p-4 pl-6">CUSTOMER CODE</th>
               <th className="p-4">ACCOUNT NAME</th>
               <th className="p-4">CURRENT KAM</th>
-              <th className="p-4 pr-6">ASSIGN TO</th>
+              <th className="p-4">ASSIGN TO</th>
+              <th className="p-4 pr-6 text-right">HISTORY</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
             {isLoading ? (
               <tr>
-                <td colSpan={4} className="p-10">
+                <td colSpan={5} className="p-10">
                   <Loader label="Loading customers..." />
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-slate-400">
+                <td colSpan={5} className="p-8 text-center text-slate-400">
                   {search.trim() ? 'No customer matches your search.' : 'No customers yet.'}
                 </td>
               </tr>
@@ -129,7 +134,7 @@ const CustomerAssignmentsPage = () => {
                   <td className="p-4 text-xs font-medium text-slate-500">
                     {c.handledBy?.name || <span className="text-amber-600">Unassigned</span>}
                   </td>
-                  <td className="p-4 pr-6">
+                  <td className="p-4">
                     <div className="flex items-center gap-2">
                       <select
                         disabled={pendingId === c.id}
@@ -151,6 +156,16 @@ const CustomerAssignmentsPage = () => {
                       )}
                     </div>
                   </td>
+                  <td className="p-4 pr-6 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFor(c)}
+                      aria-label={`Ownership history for ${c.accountName}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-100 transition"
+                    >
+                      <History size={13} /> View
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -164,6 +179,38 @@ const CustomerAssignmentsPage = () => {
         pageSize={PAGE_SIZE}
         onChange={setPage}
       />
+
+      {historyFor && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          onClick={() => setHistoryFor(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 flex items-center justify-between border-b border-slate-100 shrink-0">
+              <div className="min-w-0">
+                <h3 className="font-bold text-base text-slate-800 truncate">{historyFor.accountName}</h3>
+                <p className="text-xs text-slate-400 font-mono">{historyFor.barcode}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryFor(null)}
+                aria-label="Close"
+                className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 transition shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              <AssignmentHistoryCard customer={historyFor} reloadToken={reloadToken} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -43,6 +43,7 @@ import CustomerEditRequestModal from "../components/CustomerEditRequestModal";
 import AdminCustomerActions from "../components/AdminCustomerActions";
 import RateRequestPanel from "../components/RateRequestPanel";
 import CustomerEditHistoryModal from "../components/CustomerEditHistoryModal";
+import AssignmentHistoryCard from "../components/AssignmentHistoryCard";
 
 
 const PROVISIONAL_COUNTDOWN_STATUSES = [
@@ -818,6 +819,8 @@ const CustomerDetail = () => {
             </div>
             <CustomerContactsCard contacts={customer.contacts} />
           </div>
+
+          <AssignmentHistoryCard customer={customer} reloadToken={refreshTick} />
 
           {customer.recNote && (
             <div className="p-4 sm:p-5 bg-amber-50 rounded-xl border border-amber-200">
