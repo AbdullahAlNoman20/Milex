@@ -89,7 +89,6 @@ const roleQueueFilter = (role: string): any | null => {
                 CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW,
                 CUSTOMER_STATUS.INFO_UPDATE_PENDING_LM_APPROVAL,
                 CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED,
-                CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
                 CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
               ],
             },
@@ -99,8 +98,17 @@ const roleQueueFilter = (role: string): any | null => {
     // Only escalations reach the Head of Department's queue. Everything else
     // in the department is visible to them, but visible is not the same as
     // waiting on them.
+    // Escalated rates, and every account waiting to be activated. Those are
+    // the two things that genuinely stop without them.
     case 'HEAD_OF_DEPARTMENT':
-      return { status: CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL };
+      return {
+        status: {
+          in: [
+            CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
+            CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+          ],
+        },
+      };
     case 'KAM':
       return {
         OR: [
@@ -392,7 +400,7 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
 // Notifies only the Head of Department. Used when a Line Manager escalates:
 // nobody else is being asked for anything at that point, so telling the KAM
 // would be telling them about a decision they cannot influence.
-const notifyHeadsOfDepartment = async (label: string, link: string) => {
+export const notifyHeadsOfDepartment = async (label: string, link: string) => {
   try {
     const hods = await prisma.user.findMany({
       where: { role: { name: 'HEAD_OF_DEPARTMENT' }, isActive: true },
@@ -1401,14 +1409,21 @@ export const submitFinalOnboardingRegular = async (customerId: string, actorId: 
     return activated;
   }
 
-  return transitionCustomerStatus({
+  const submitted = await transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
     actorId,
     extraUpdates: { accountProfileType: 'REGULAR' },
     historyAction: 'FINAL ONBOARDING REQUESTED (REGULAR ACCOUNT)',
-    historySubText: 'Awaiting Line Manager final verification',
+    historySubText: 'Awaiting Head of Department approval',
   });
+
+  notifyHeadsOfDepartment(
+    `${submitted.accountName} — Onboarding complete, ready for activation`,
+    `/app/customers/${submitted.barcode}`
+  ).catch(() => {});
+
+  return submitted;
 };
 
 export type EditFieldType = 'text' | 'textarea' | 'number' | 'select' | 'document';
@@ -2013,7 +2028,13 @@ export const listAssignmentHistory = async (
   // One lookup for every name the list needs, rather than a join per row.
   const ids = [
     ...new Set(
-      rows.flatMap((r) => [r.assignedToId, r.previousId, r.assignedById]).filter(Boolean) as string[]
+      rows
+        .flatMap((r: { assignedToId: string; previousId: string | null; assignedById: string }) => [
+          r.assignedToId,
+          r.previousId,
+          r.assignedById,
+        ])
+        .filter(Boolean) as string[]
     ),
   ];
   const users = await prisma.user.findMany({
@@ -2022,7 +2043,7 @@ export const listAssignmentHistory = async (
   });
   const byId = new Map(users.map((u) => [u.id, u]));
 
-  return rows.map((r) => ({
+  return rows.map((r: any) => ({
     id: r.id,
     reason: r.reason,
     note: r.note,

@@ -45,7 +45,10 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
     setIsSubmitting(true);
     try {
       const updated = await decideFinalOnboarding(customer.id, approve, comments);
-      showToast(approve ? 'Account activated' : 'Sent back to KAM for revision', 'success');
+      showToast(
+        approve ? 'Account activated' : 'Returned to the Sales Coordinator for correction',
+        'success'
+      );
       onUpdated?.(updated);
       setComments('');
     } catch (err) {
@@ -101,9 +104,13 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
 
       {isFinalReview && (
         <div className="space-y-3">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Approving activates the account. Returning it sends the profile back to the Sales
+            Coordinator to correct — the customer stays provisional in the meantime.
+          </p>
           <textarea
             className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-purple-500 min-h-[70px]"
-            placeholder="Comments (required if rejecting)"
+            placeholder="What needs correcting? (required if returning)"
             value={comments}
             maxLength={1000}
             onChange={(e) => setComments(e.target.value)}
@@ -123,7 +130,7 @@ const FinalOnboardingReviewPanel = ({ customer, onUpdated }) => {
               onClick={() => handleFinalDecision(false)}
               className="bg-white border border-red-400 text-red-500 font-bold py-3 rounded-xl flex justify-center items-center text-sm hover:bg-red-50 transition disabled:opacity-50"
             >
-              <XCircle size={16} className="mr-1.5" /> Reject
+              <XCircle size={16} className="mr-1.5" /> Return
             </button>
           </div>
         </div>

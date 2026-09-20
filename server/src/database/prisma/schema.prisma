@@ -263,6 +263,7 @@ model Customer {
   history             CustomerHistoryEntry[]
   rateRequests        RateRequest[]
   correspondence      CustomerCorrespondence[]
+  assignments         CustomerAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -277,6 +278,33 @@ model Customer {
   @@index([status, offerRejected])
   @@index([accountProfileType, status])
   @@index([handledById, status])
+}
+
+// Who has held this customer, and who handed them over. The Customer row
+// only ever carries the current handler, so without this the previous one —
+// and the fact a handover happened at all — disappears the moment it does.
+// That matters when a commission, a complaint or a promise has to be traced
+// back to whoever was actually on the account at the time.
+model CustomerAssignment {
+  id             String   @id @default(uuid())
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // The person the customer was given to.
+  assignedToId   String
+  // Null on the first entry — nobody held it before the account existed.
+  previousId     String?
+  // Who made the handover, and in what capacity. The role is stored rather
+  // than looked up later because a person's role can change afterwards, and
+  // the record should say what they were when they did it.
+  assignedById   String
+  assignedByRole RoleName?
+  // CREATED on the opening entry, REASSIGNED on every handover after it.
+  reason         String   @default("REASSIGNED")
+  note           String?
+  createdAt      DateTime @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([assignedToId])
 }
 
 // A request for a different rate. Raised by a Line Manager asking the Head of

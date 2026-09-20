@@ -378,18 +378,33 @@ const CustomerDetail = () => {
     // hiding the review panel for those accounts. Extension requests are
     // still provisional-only by nature (PROVISIONAL_EXTENSION_REQUESTED only
     // ever fires from a provisional flow), so this still works correctly.
+    // Extension requests stay with the Line Manager; activating the account
+    // is the Head of Department's decision alone.
     if (
       isApprover &&
-      [
-        STATUS.PROVISIONAL_EXTENSION_REQUESTED,
-        STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
-      ].includes(customer.status)
+      customer.status === STATUS.PROVISIONAL_EXTENSION_REQUESTED
     ) {
       return (
         <FinalOnboardingReviewPanel
           customer={customer}
           onUpdated={refreshCustomer}
         />
+      );
+    }
+
+    if (customer.status === STATUS.PROVISIONAL_FINAL_REVIEW_PENDING) {
+      if (role === ROLES.HEAD_OF_DEPARTMENT || isSuperAdmin) {
+        return (
+          <FinalOnboardingReviewPanel
+            customer={customer}
+            onUpdated={refreshCustomer}
+          />
+        );
+      }
+      return (
+        <Waiting>
+          Onboarding submitted — waiting for the Head of Department to activate the account
+        </Waiting>
       );
     }
 
