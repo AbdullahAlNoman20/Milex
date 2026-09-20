@@ -8,7 +8,7 @@ import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
 import { buildRateRefs } from '../../../../../Components/utils/format';
 import { OfferLetter } from '../../components/PrintTemplate';
-import { composeMailWithLetter } from '../../components/letterPdf';
+
 
 
 
@@ -42,75 +42,32 @@ const OfferLetterPanel = ({ customer }) => {
 
 
 
-  // The letter goes out as a PDF from the person's own mail account, which
-  // keeps the sending address, the signature and the sent-items record where
-  // they already are.
-  //
-  // A mailto: link cannot carry an attachment — no browser and no mail
-  // provider allows it, because a page that could attach arbitrary files to
-  // an outgoing message would be a serious hole. So the file is downloaded
-  // first and the compose window opens ready for it, with the toast below
-  // saying so plainly rather than leaving someone to notice the gap.
-  const openMailClient = async () => {
-    const ref = buildRateRefs(customer)[0] || customer.barcode;
-    const fileName = `Offer-Letter-${customer.accountName.replace(/[^a-zA-Z0-9]+/g, '-')}-${ref}.pdf`;
 
-    const prepared = await composeMailWithLetter({
-      node: <OfferLetter c={{ ...customer, offerText }} />,
-      kind: 'offer',
-      fileName,
-      widthMm: 172,
-      to: customer.email,
-      subject: `Offer Letter — ${customer.accountName} (${ref})`,
-      body: `Dear ${customer.accountName},\n\nPlease find our offer letter attached.\n\nRate Reference: ${ref}\n\nKind regards,\nMILEX`,
-    });
 
-    showToast(
-      prepared
-        ? `Your email is open and the offer letter is ready as "${fileName}" — drag it in or use the paperclip.`
-        : 'The email opened, but the letter could not be prepared. Use Print Only to produce it.',
-      prepared ? 'info' : 'warning',
-      10000
-    );
-  };
-
-  const send = async (via) => {
+  const send = async (via = 'MAIL') => {
     if (submitLockRef.current) return;
 
     const ok = await confirm({
       title: isResend ? 'Send the revised offer letter?' : 'Send the offer letter?',
       message:
-        via === 'MAIL'
-          ? 'Your mail application will open with this letter ready to send, and the copy will be recorded against the customer.'
-          : 'This records the letter as sent by hard copy and moves the customer on to their feedback.',
-      confirmLabel: via === 'MAIL' ? 'Open mail & record' : 'Record as sent',
+        'This records the letter as sent and moves the customer on to their feedback. Use Print Only first if you need a copy to send.',
+      confirmLabel: 'Record as sent',
     });
     if (!ok) return;
 
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      // The letter is recorded first. Opening the mail client before knowing
-      // the record was written would leave the person composing a message for
-      // a send that never actually happened on our side.
-      const before = customer.offerSent;
+      // The letter itself is sent outside this system — printed, or emailed
+      // from whatever the person already uses. What is recorded here is that
+      // it went, so the customer can be moved on to their feedback.
       await updateStatus(
         customer.id,
         customer.status,
         { offerText, sentVia: via },
         'OFFER LETTER SENT',
-        via === 'MAIL' ? `Emailed to ${customer.email}` : 'Printed and sent as a hard copy'
+        'Recorded as sent to the customer'
       );
-
-      // updateStatus reports its own failures as a toast rather than throwing,
-      // so the attachment and the mail client are only reached once the record
-      // has genuinely moved on.
-      if (customer.offerSent === before && !customer.offerSent) {
-        // The refetch has not landed yet in this closure; the attachment is
-        // still safe to send because the server rejects it on an unsent offer.
-      }
-
-      if (via === 'MAIL') await openMailClient();
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);

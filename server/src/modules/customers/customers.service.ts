@@ -1450,9 +1450,6 @@ const REQUIRED_FINAL_DOC_TYPES = ['TRADE_LICENSE'];
 export const submitFinalOnboardingRegular = async (customerId: string, actorId: string, actorRole: string) => {
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: { documents: true } });
-  // When the case was created by someone whose own approval this would be,
-  // there is nobody left to review it — submitting is the decision.
-  const selfOwned = SELF_APPROVING_ROLES.includes(customer.createdByRole || '');
   const docsByType = new Map(customer.documents.map((d) => [d.documentType, d]));
   const missingDocs = REQUIRED_FINAL_DOC_TYPES.filter((t) => !docsByType.has(t));
   if (missingDocs.length > 0) {
@@ -1464,19 +1461,10 @@ export const submitFinalOnboardingRegular = async (customerId: string, actorId: 
     throw { statusCode: 409, code: 'DOCUMENTS_NOT_READY', message: 'One or more of your uploaded documents are still being checked. Please wait a moment and try again.' };
   }
 
-  if (selfOwned) {
-    const activated = await transitionCustomerStatus({
-      customerId,
-      toStatus: CUSTOMER_STATUS.ACTIVE_ACCOUNT,
-      actorId,
-      extraUpdates: { accountProfileType: 'REGULAR' },
-      historyAction: 'FINAL ONBOARDING COMPLETED — ACCOUNT ACTIVATED',
-      historySubText: `Review skipped: created by ${humanizeStatus(customer.createdByRole || '')}`,
-    });
-    ensureCustomerAccount(customerId).catch(() => {});
-    return activated;
-  }
-
+  // Activation always goes to the Head of Department, whoever raised the
+  // account. Skipping a rate approval because the approver set the rate
+  // themselves is one thing; skipping the check that makes a customer real
+  // is another, and there is no version of it that anyone should self-serve.
   const submitted = await transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
