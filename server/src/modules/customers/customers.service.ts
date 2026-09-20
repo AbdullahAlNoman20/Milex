@@ -56,6 +56,7 @@ const GROUP_FILTERS: Record<string, any> = {
         CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
         CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
         CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+        CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW,
         CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
         CUSTOMER_STATUS.DRAFTING_OFFER_LETTER,
         CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
@@ -85,6 +86,7 @@ const roleQueueFilter = (role: string): any | null => {
             status: {
               in: [
                 CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+                CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW,
                 CUSTOMER_STATUS.INFO_UPDATE_PENDING_LM_APPROVAL,
                 CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED,
                 CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
@@ -288,7 +290,9 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
             approvedRate: clean.proposedRate,
             rateSource: rateSource as any,
             rateSetById: kamId,
-            status: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW as any,
+            // Their own rate needs no further sign-off, so it goes straight
+            // out for an offer letter.
+            status: CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER as any,
           }
         : {}),
       accountName: clean.accountName,
@@ -330,12 +334,17 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
   // Scoped to this KAM's own Line Manager; only falls back to every LM when
   // the KAM has not been assigned one yet.
   if (selfApproves) {
-    // The rate is already set, so the Line Manager step is skipped entirely
-    // and it sits with the KAM who handles the account.
-    createNotificationsForUsers([customer.handledById], {
-      label: `${customer.accountName} — Rate already set, please review and send for an offer letter`,
-      link: `/app/customers/${barcode}`,
-    }).catch(() => {});
+    // The rate is set and signed off in the same act, so the only person
+    // waiting is the Sales Coordinator.
+    prisma.user
+      .findMany({ where: { role: { name: 'SALES_COORDINATOR' }, isActive: true }, select: { id: true } })
+      .then((scs) =>
+        createNotificationsForUsers(scs.map((s) => s.id), {
+          label: `${customer.accountName} — Rate set, please send the offer letter`,
+          link: `/app/customers/${barcode}`,
+        })
+      )
+      .catch(() => {});
   } else {
     const kam = await prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true } });
     const lineManagers = kam?.lineManagerId
@@ -379,6 +388,35 @@ const notifyHeadsOfDepartment = async (label: string, link: string) => {
 const rateSourceFor = (role: string) =>
   role === 'HEAD_OF_DEPARTMENT' || role === 'SUPER_ADMIN' ? 'HEAD_OF_DEPARTMENT' : 'LINE_MANAGER';
 
+// Where a freshly-set rate goes next depends entirely on who owns the
+// account. A KAM raised it, so a KAM reviews it. A Line Manager raised it
+// themselves and has nobody below to hand it to, so it goes straight out for
+// an offer letter — pausing for their own approval of their own decision is
+// a step that means nothing. The Head of Department works the same way.
+const nextStopAfterRate = (createdByRole: string | null | undefined, setByRole: string) => {
+  const owner = createdByRole || 'KAM';
+  if (owner === 'KAM' || owner === 'SALES_COORDINATOR') {
+    return CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW;
+  }
+  // The Line Manager owns it. If the rate came back from the Head of
+  // Department they still get to look before it goes out; if they set it
+  // themselves there is nothing left to look at.
+  if (owner === 'LINE_MANAGER') {
+    return setByRole === 'HEAD_OF_DEPARTMENT'
+      ? CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW
+      : CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER;
+  }
+  // The Head of Department owns it — their own rate needs no further sign-off.
+  return CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER;
+};
+
+// Where a rejected offer goes back to. The Head of Department answers their
+// own accounts directly, because there is nobody above them to escalate to.
+const rateDeskFor = (createdByRole: string | null | undefined) =>
+  createdByRole === 'HEAD_OF_DEPARTMENT' || createdByRole === 'SUPER_ADMIN'
+    ? CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL
+    : CUSTOMER_STATUS.PENDING_RATE_APPROVAL;
+
 // Keeps the superseded rate, with the reference and the authority behind it,
 // so the sequence stays readable however many rounds it takes.
 const buildRateHistoryEntry = (customer: any, reason?: string) => ({
@@ -404,10 +442,11 @@ export const approveRate = async (customerId: string, data: any, actorId: string
   const rateRef = existing.rateRef || existing.barcode;
   const source = rateSourceFor(actorRole);
   const isRevision = !!existing.approvedRate;
+  const nextStatus = nextStopAfterRate(existing.createdByRole, source);
 
   const updated = await transitionCustomerStatus({
     customerId,
-    toStatus: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    toStatus: nextStatus,
     actorId,
     extraUpdates: {
       approvedRate: clean.rate,
@@ -426,8 +465,13 @@ export const approveRate = async (customerId: string, data: any, actorId: string
       rejectReason: null,
     },
     historyAction: `RATE SET BY ${source === 'HEAD_OF_DEPARTMENT' ? 'HEAD OF DEPARTMENT' : 'LINE MANAGER'}`,
-    historySubText: 'Awaiting the KAM to accept it or ask for a better one',
+    historySubText:
+      nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER
+        ? 'Awaiting the Sales Coordinator to send the offer letter'
+        : 'Awaiting review before it goes to the customer',
     skipWorkflowNotification: true,
+    // Straight to the Sales Coordinator means it is their turn now.
+    notifySalesCoordinators: nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
   });
 
   createNotificationsForUsers([updated.handledById], {
@@ -491,10 +535,11 @@ export const grantHodRate = async (
   const existing = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
   const clean = sanitizeAndEscape({ rate: data.approvedRate, note: data.lmNote || '' });
   const isRevision = !!existing.approvedRate;
+  const nextStatus = nextStopAfterRate(existing.createdByRole, 'HEAD_OF_DEPARTMENT');
 
   const updated = await transitionCustomerStatus({
     customerId,
-    toStatus: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW,
+    toStatus: nextStatus,
     actorId: hodId,
     extraUpdates: {
       approvedRate: clean.rate,
@@ -511,10 +556,14 @@ export const grantHodRate = async (
       rejectReason: null,
     },
     historyAction: 'BEST RATE SET BY HEAD OF DEPARTMENT',
-    historySubText: 'Awaiting the KAM to accept it or ask for a better one',
+    historySubText:
+      nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER
+        ? 'Awaiting the Sales Coordinator to send the offer letter'
+        : 'Awaiting review before it goes to the customer',
     // The notification below names the rate and who set it, which is what
     // people actually need — the generic one would only repeat the heading.
     skipWorkflowNotification: true,
+    notifySalesCoordinators: nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
   });
 
   // The open escalation is closed out with the answer it received.
@@ -544,7 +593,8 @@ export const grantHodRate = async (
   return updated;
 };
 
-// The KAM takes the rate forward. Nothing has reached the customer until now.
+// Whoever holds the account takes the rate forward — a KAM normally, a Line
+// Manager when it is theirs. Nothing has reached the customer until now.
 export const sendRateToSalesCoordinator = async (customerId: string, actorId: string, actorRole: string) => {
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   return transitionCustomerStatus({
@@ -567,14 +617,35 @@ export const kamRequestBetterRate = async (
 ) => {
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   const clean = sanitizeAndEscape({ reason });
+  const existing = await prisma.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    select: { createdByRole: true },
+  });
+  // A Line Manager asking for better goes straight to the Head of
+  // Department; there is no intermediate desk between them.
+  const isLineManagerOwned = existing.createdByRole === 'LINE_MANAGER';
+  const toStatus = isLineManagerOwned
+    ? CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL
+    : CUSTOMER_STATUS.PENDING_RATE_APPROVAL;
 
   const updated = await transitionCustomerStatus({
     customerId,
-    toStatus: CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+    toStatus,
     actorId,
-    historyAction: 'BETTER RATE REQUESTED BY KAM',
+    extraUpdates: isLineManagerOwned ? { lmNote: clean.reason } : {},
+    historyAction: isLineManagerOwned
+      ? 'BEST RATE REQUESTED FROM HEAD OF DEPARTMENT'
+      : 'BETTER RATE REQUESTED BY KAM',
     historySubText: clean.reason,
+    skipWorkflowNotification: isLineManagerOwned,
   });
+
+  if (isLineManagerOwned) {
+    notifyHeadsOfDepartment(
+      `${updated.accountName} — A best rate has been requested by the Line Manager`,
+      `/app/customers/${updated.barcode}`
+    ).catch(() => {});
+  }
 
   await prisma.rateRequest.create({
     data: {
@@ -883,6 +954,7 @@ export const submitClientFeedback = async (
         offerRejected: true,
         revision: true,
         accountProfileType: true,
+        createdByRole: true,
       },
     });
     if (!current || current.isDeleted) {
@@ -956,6 +1028,15 @@ export const submitClientFeedback = async (
     { label: `${updated.accountName} — Customer rejected the offer, a new rate is needed`, link: `/app/customers/${updated.barcode}` },
     kamId,
   ).catch(() => {});
+
+  // On an account the Head of Department owns, the decision is theirs — the
+  // usual workflow audience does not include them.
+  if (rateDeskFor(updated.createdByRole) === CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL) {
+    notifyHeadsOfDepartment(
+      `${updated.accountName} — Customer rejected the offer, a new rate is needed`,
+      `/app/customers/${updated.barcode}`
+    ).catch(() => {});
+  }
 
   return updated;
 };
@@ -1877,8 +1958,21 @@ export const reassignCustomer = async (
     prisma.customer.findUniqueOrThrow({ where: { id: customerId } }),
     prisma.user.findUniqueOrThrow({ where: { id: newKamId }, include: { role: true } }),
   ]);
-  if (newKam.role.name !== 'KAM') {
-    throw { statusCode: 400, code: 'INVALID_ASSIGNEE', message: 'Customers can only be reassigned to a Key Account Manager.' };
+  // A manager who raised the account keeps it until they hand it over, so
+  // they are valid holders too — including handing it back to themselves.
+  if (!['KAM', 'LINE_MANAGER', 'HEAD_OF_DEPARTMENT'].includes(newKam.role.name)) {
+    throw {
+      statusCode: 400,
+      code: 'INVALID_ASSIGNEE',
+      message: 'Customers can only be held by a Key Account Manager, a Line Manager or the Head of Department.',
+    };
+  }
+  if (customer.handledById === newKamId) {
+    throw {
+      statusCode: 409,
+      code: 'ALREADY_ASSIGNED',
+      message: 'This customer is already held by that person.',
+    };
   }
   const previousKamId = customer.handledById;
   const updated = await prisma.customer.update({
@@ -1894,10 +1988,26 @@ export const reassignCustomer = async (
     beforeState: { handledById: previousKamId },
     afterState: { handledById: newKamId },
   }).catch(() => {});
-  notifyCustomerWorkflowUsers(newKamId, {
+  // Three people need to know, and each for a different reason: the person
+  // taking it on, the person losing it — who may have promises outstanding —
+  // and the Head of Department, who watches the whole book.
+  createNotificationsForUsers([newKamId], {
     label: `${updated.accountName} — This customer has been assigned to you`,
     link: `/app/customers/${updated.barcode}`,
-  }, actorId).catch(() => {});
+  }).catch(() => {});
+
+  if (previousKamId && previousKamId !== newKamId) {
+    createNotificationsForUsers([previousKamId], {
+      label: `${updated.accountName} — This customer has been moved to ${newKam.name}`,
+      link: `/app/customers/${updated.barcode}`,
+    }).catch(() => {});
+  }
+
+  notifyHeadsOfDepartment(
+    `${updated.accountName} — Reassigned to ${newKam.name}`,
+    `/app/customers/${updated.barcode}`
+  ).catch(() => {});
+
   return updated;
 };
 

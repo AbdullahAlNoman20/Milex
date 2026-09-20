@@ -1,8 +1,9 @@
 // admin/src/Pages/modules/sales/services/teamService.js
 import { request } from '../../../../Components/services/api';
 
-export const listKams = async () => {
-  const { data } = await request('/users/kams');
+export const listKams = async ({ includeManagers = false } = {}) => {
+  const query = includeManagers ? '?includeManagers=true' : '';
+  const { data } = await request(`/users/kams${query}`);
   return data.kams;
 };
 

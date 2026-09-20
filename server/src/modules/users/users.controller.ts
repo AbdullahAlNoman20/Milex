@@ -8,7 +8,10 @@ import { assertLineManagerOwnsKam } from '../../common/utils/scopeGuard.util';
 export const listKamsHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const lineManagerId = req.user!.role === 'LINE_MANAGER' ? req.user!.id : undefined;
-    const kams = await usersService.listKams(lineManagerId);
+    // The assignment picker asks for managers too, so an account can be held
+    // by the person who raised it.
+    const includeManagers = String(req.query.includeManagers ?? '') === 'true';
+    const kams = await usersService.listKams(lineManagerId, includeManagers);
     return sendSuccess(res, { kams });
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);

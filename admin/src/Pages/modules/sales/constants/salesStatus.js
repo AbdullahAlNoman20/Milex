@@ -4,6 +4,7 @@ export const STATUS = Object.freeze({
   PENDING_APPROVAL: 'PENDING_RATE_APPROVAL',
   PENDING_HOD_RATE: 'PENDING_HOD_RATE_APPROVAL',
   PENDING_KAM_REVIEW: 'PENDING_KAM_RATE_REVIEW',
+  PENDING_LM_REVIEW: 'PENDING_LM_RATE_REVIEW',
   APPROVED_PENDING_OFFER: 'RATE_APPROVED_PENDING_OFFER',
   OFFER_DRAFTING: 'DRAFTING_OFFER_LETTER',
   OFFER_REVIEW: 'OFFER_SENT_AWAITING_FEEDBACK',
@@ -52,6 +53,8 @@ export const getWorkflowStageLabel = (customer) => {
       return 'Waiting for Head of Department to Set the Best Rate';
     case STATUS.PENDING_KAM_REVIEW:
       return 'Waiting for KAM to Accept the Rate or Request a Better One';
+    case STATUS.PENDING_LM_REVIEW:
+      return 'Waiting for Line Manager to Accept the Rate or Ask Again';
     case STATUS.APPROVED_PENDING_OFFER:
       return 'Waiting for Sales Coordinator to Send the Offer Letter';
     case STATUS.OFFER_REVIEW:

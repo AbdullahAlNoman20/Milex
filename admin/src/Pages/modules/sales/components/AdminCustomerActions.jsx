@@ -18,6 +18,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
   const navigate = useNavigate();
   const [kams, setKams] = useState([]);
   const [selectedKam, setSelectedKam] = useState("");
+  const [reassignNote, setReassignNote] = useState("");
   const [isReassigning, setIsReassigning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showReassign, setShowReassign] = useState(false);
@@ -26,7 +27,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
 
   useEffect(() => {
     if (showReassign && kams.length === 0) {
-      listKams()
+      listKams({ includeManagers: true })
         .then(setKams)
         .catch(() => setKams([]));
     }
@@ -45,8 +46,9 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
     actionLockRef.current = true;
     setIsReassigning(true);
     try {
-      await reassignCustomer(customer.id, selectedKam);
+      await reassignCustomer(customer.id, selectedKam, reassignNote.trim() || undefined);
       showToast('Customer reassigned', 'success');
+      setReassignNote("");
       setShowReassign(false);
       onChanged?.();
     } catch (err) {
@@ -85,7 +87,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
         <UserCog size={16} className="mr-2 text-red-500" /> Customer Assignment
       </h3>
       <p className="text-[11px] text-slate-500">
-        Currently handled by <strong>{customer.handledBy?.name || 'nobody'}</strong>. 
+        Currently handled by <strong>{customer.handledBy?.name || 'nobody'}</strong>.
       </p>
       {!showReassign ? (
         <button
@@ -93,7 +95,7 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
           onClick={() => setShowReassign(true)}
           className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 py-2 rounded-lg hover:bg-slate-100 transition"
         >
-          Reassign to Another KAM
+          Assign to Someone Else
         </button>
       ) : (
         <div className="space-y-2">
@@ -102,13 +104,26 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
             value={selectedKam}
             onChange={(e) => setSelectedKam(e.target.value)}
           >
-            <option value="">Select KAM...</option>
-            {kams.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.name}
-              </option>
-            ))}
+            <option value="">Select who will hold this account...</option>
+            {kams
+              .filter((k) => k.id !== customer.handledById)
+              .map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                  {k.id === currentUser?.id ? ' (you)' : ''}
+                  {k.role && k.role !== 'KAM'
+                    ? ` — ${k.role === 'LINE_MANAGER' ? 'Line Manager' : 'HOD'}`
+                    : ''}
+                </option>
+              ))}
           </select>
+          <input
+            className="w-full border border-slate-200 p-2 rounded text-xs outline-none focus:border-emerald-500"
+            placeholder="Why is it moving? (optional)"
+            value={reassignNote}
+            maxLength={500}
+            onChange={(e) => setReassignNote(e.target.value)}
+          />
           <div className="flex gap-2">
             <button
               type="button"
