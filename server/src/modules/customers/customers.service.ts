@@ -1207,10 +1207,14 @@ export const submitClientFeedback = async (
         rateProcessOwnerId: true,
       },
     });
+    if (!current || current.isDeleted) {
+      throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
+    }
     // The re-quote's own owner decides where a refusal goes back to: a Line
     // Manager or the Head of Department running one themselves has nobody
     // below them, so it returns to the Head of Department rather than to a
-    // Line Manager who was never part of it.
+    // Line Manager who was never part of it. Read after the record has been
+    // confirmed to exist, not before.
     const requoteOwnerRole = current.rateProcessOwnerId
       ? (
           await tx.user.findUnique({
@@ -1219,9 +1223,6 @@ export const submitClientFeedback = async (
           })
         )?.role?.name
       : null;
-    if (!current || current.isDeleted) {
-      throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
-    }
     if (!current.offerSent) {
       throw {
         statusCode: 409,
