@@ -138,9 +138,13 @@ const TeamReportsPage = () => {
     });
   };
 
-  useEffect(() => {
+  // Narrowing the list sends the reader back to the first page. Done in the
+  // handler that caused it rather than in an effect reacting to it, so there
+  // is no second render pass.
+  const changeSearch = (value) => {
+    setSearch(value);
     setPage(1);
-  }, [search]);
+  };
 
   const loadKams = useCallback(() => {
     setIsLoading(true);
@@ -250,7 +254,7 @@ const TeamReportsPage = () => {
   }, [dailyReports, reportSearch, dateFrom, dateTo]);
 
   const exportReports = () => {
-    let rows = [];
+    let rows;
     if (tab === "weekly") {
       rows = hasDateFilter
         ? weekSets.flatMap((set) =>
@@ -304,7 +308,7 @@ const TeamReportsPage = () => {
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => changeSearch(e.target.value)}
                 maxLength={150}
                 placeholder="Search for employee"
                 className="pl-7 pr-2 py-2.5 w-44 sm:w-56 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"

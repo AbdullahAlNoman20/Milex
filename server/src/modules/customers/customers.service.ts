@@ -91,7 +91,12 @@ const GROUP_FILTERS: Record<string, any> = {
       ],
     },
   },
-  pipeline: { status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT } },
+  // Anything with work outstanding. A live customer being re-quoted is still
+  // a live customer, so it never entered this view — and the whole re-quote
+  // ran without ever appearing on anyone's task list.
+  pipeline: {
+    OR: [{ status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT } }, { rateProcessActive: true }],
+  },
 };
 
 // What a Line Manager is allowed to see: accounts they hold themselves,
@@ -109,6 +114,15 @@ const lineManagerScope = (lmId: string) => ({
 
 // Mirrors exactly what the dashboard's "Action Required Queue" used to
 // compute in the browser, so the numbers and rows are identical.
+// A re-quote on a live account runs the same desks as a fresh recommendation,
+// so each role's queue picks it up at exactly the point it becomes theirs.
+// The account's own status never moves off ACTIVE_ACCOUNT throughout, which
+// is why every one of these has to be matched on the stage instead.
+const requoteAt = (...stages: string[]) => ({
+  rateProcessActive: true,
+  rateProcessStage: { in: stages },
+});
+
 const roleQueueFilter = (role: string): any | null => {
   switch (role) {
     case 'SALES_COORDINATOR':
@@ -116,6 +130,7 @@ const roleQueueFilter = (role: string): any | null => {
         OR: [
           { status: CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER },
           { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerRejected: false, offerAccepted: true, agreementSent: false },
+          requoteAt(RATE_PROCESS_STAGE.PENDING_OFFER),
         ],
       };
     case 'LINE_MANAGER':
@@ -133,6 +148,10 @@ const roleQueueFilter = (role: string): any | null => {
               ],
             },
           },
+          // Rates asked of them, and — on an account they hold themselves —
+          // the decision on what comes back.
+          requoteAt(RATE_PROCESS_STAGE.PENDING_LM_RATE),
+          { ...requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW), createdByRole: 'LINE_MANAGER' as any },
         ],
       };
     // Only escalations reach the Head of Department's queue. Everything else
@@ -142,12 +161,18 @@ const roleQueueFilter = (role: string): any | null => {
     // the two things that genuinely stop without them.
     case 'HEAD_OF_DEPARTMENT':
       return {
-        status: {
-          in: [
-            CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
-            CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
-          ],
-        },
+        OR: [
+          {
+            status: {
+              in: [
+                CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL,
+                CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+              ],
+            },
+          },
+          requoteAt(RATE_PROCESS_STAGE.PENDING_HOD_RATE),
+          { ...requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW), createdByRole: 'HEAD_OF_DEPARTMENT' as any },
+        ],
       };
     case 'KAM':
       return {
@@ -155,6 +180,9 @@ const roleQueueFilter = (role: string): any | null => {
           { status: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW },
           { status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK },
           { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerSent: true, offerAccepted: false },
+          // The list is already narrowed to the customers this KAM holds, so
+          // these are only ever the re-quotes waiting on them personally.
+          requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW, RATE_PROCESS_STAGE.AWAITING_FEEDBACK),
         ],
       };
     default:
@@ -242,6 +270,10 @@ export const listCustomers = async (
         // Needed by the ownership card and the workflow-stage label; without
         // it a list-sourced record fell back to the wrong role.
         createdByRole: true, rateSource: true,
+        // A live account can still have work outstanding on it. Without these
+        // the lists showed a plain "Active Account" badge and no sign that a
+        // re-quote was running.
+        rateProcessActive: true, rateProcessStage: true,
         revision: true, status: true, accountProfileType: true,
         provisionalCreatedAt: true, provisionalExpiryDate: true, provisionalExtensionDays: true,
         followUpDate: true, followUpNote: true,
@@ -324,7 +356,10 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   let pendingApproverName: string | null = null;
   if (
     customer.status === CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING ||
-    customer.status === CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL
+    customer.status === CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL ||
+    // A re-quote sitting on the Head of Department's desk names them too —
+    // on a team of any size the role alone is not enough to know who to chase.
+    customer.rateProcessStage === RATE_PROCESS_STAGE.PENDING_HOD_RATE
   ) {
     const hod = await prisma.user.findFirst({
       where: { role: { name: 'HEAD_OF_DEPARTMENT' }, isActive: true },
@@ -904,7 +939,7 @@ export const finalizeOffer = async (
       },
     });
     if (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT && current.rateProcessActive) {
-      await appendRateProcessStep(tx, customerId, scId, 'OFFER LETTER SENT', 'Awaiting the customer\'s answer');
+      await appendRateProcessStep(tx, customerId, scId, 'OFFER LETTER SENT', 'Awaiting the customer\'s answer on the new rate');
     } else {
       await tx.customerHistoryEntry.updateMany({
         where: { customerId, status: 'active' },

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { useSales } from '../hooks/useSales';
 import { usePagedCustomers } from '../hooks/usePagedCustomers';
-import StatusBadge from '../components/StatusBadge';
+import StatusBadge, { RateProcessBadge } from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
 import Pagination from '../../../../Components/Shared/Pagination';
 import { formatRevision } from '../../../../Components/utils/format';
@@ -108,6 +108,7 @@ const TaskQueue = () => {
                         Offer rejected
                       </span>
                     )}
+                    <RateProcessBadge customer={c} />
                   </td>
                   <td className="p-4 text-xs font-bold text-slate-500">{formatRevision(c.revision)}</td>
                   <td className="p-4 text-xs font-medium text-slate-500">{c.handledBy?.name || '—'}</td>

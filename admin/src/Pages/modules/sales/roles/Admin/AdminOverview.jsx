@@ -255,15 +255,18 @@ const AdminOverview = () => {
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const backupLockRef = useRef(false);
 
-  // Typing shouldn't fire a request per keystroke; every other narrowing
-  // control applies immediately.
+  // Typing shouldn't fire a request per keystroke. Going back to the first
+  // page happens in the handler below rather than here, so the debounce
+  // effect only ever carries the search term across.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
-    }, search ? SEARCH_DEBOUNCE_MS : 0);
+    const timer = setTimeout(() => setDebouncedSearch(search), search ? SEARCH_DEBOUNCE_MS : 0);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const changeSearch = (value) => {
+    setSearch(value);
+    setPage(1);
+  };
 
   const loadStats = useCallback(async () => {
     try {
@@ -285,6 +288,9 @@ const AdminOverview = () => {
   }, [showToast]);
 
   useEffect(() => {
+    // Both are async: nothing lands until the network call resolves, which
+    // the lint cannot see through the function boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     Promise.all([loadStats(), loadSupport()]).finally(() => setIsLoading(false));
   }, [loadStats, loadSupport, reloadToken]);
 
@@ -292,6 +298,7 @@ const AdminOverview = () => {
   useEffect(() => {
     let cancelled = false;
     const requestId = ++requestIdRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsTableLoading(true);
     listAllUsers({ page, pageSize: PAGE_SIZE, search: debouncedSearch, role: roleFilter, status: statusFilter })
       .then((result) => {
@@ -439,8 +446,8 @@ const AdminOverview = () => {
     setIsExporting(true);
     try {
       const all = [];
+      // Sequential by design: each page tells us whether there is another.
       for (let p = 1; ; p += 1) {
-        // eslint-disable-next-line no-await-in-loop
         const result = await listAllUsers({
           page: p,
           pageSize: EXPORT_PAGE_SIZE,
@@ -537,7 +544,7 @@ const AdminOverview = () => {
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => changeSearch(e.target.value)}
                 maxLength={150}
                 placeholder="Search users..."
                 className="pl-7 pr-2 py-2.5 w-40 sm:w-52 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -638,7 +645,7 @@ const AdminOverview = () => {
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => changeSearch(e.target.value)}
                   maxLength={150}
                   placeholder="Search table..."
                   className="w-full pl-7 pr-2 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
