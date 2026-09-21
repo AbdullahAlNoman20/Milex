@@ -3,16 +3,13 @@ module.exports = {
     {
       name: 'milex-api',
       script: 'dist/server.js',
-      instances: 1,
-      exec_mode: 'fork',
+      instances: 2,
+      exec_mode: 'cluster',
       autorestart: true,
       max_restarts: 10,
       min_uptime: '30s',
       restart_delay: 3000,
-      // A full backup (database rows plus embedded files) is the single
-      // largest thing this process ever holds. 400M cut it off part-way
-      // through and restarted the server mid-download.
-      max_memory_restart: '1G',
+      max_memory_restart: '800M',
       env: {
         NODE_ENV: 'production',
       },
