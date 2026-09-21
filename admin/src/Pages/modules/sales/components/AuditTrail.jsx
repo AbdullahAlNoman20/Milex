@@ -73,10 +73,9 @@ const AuditTrail = ({ history = [], activeStepLabel = "", title = "Onboarding Pr
     };
   }, [isModalOpen]);
   const safeHistory = Array.isArray(history) ? history : [];
+  // Rate-process entries are plain objects rather than database rows, so the
+  // key below falls back to the action and timestamp when there is no id.
   const hasActiveStep = safeHistory.some((h) => h.status === "active");
-  // Rate-process entries are plain objects rather than database rows, so
-  // they have no id to key on.
-  void hasActiveStep;
 
   // Newest first, oldest at the bottom. The server already returns them in
   // this order, but sorting here as well means the view is correct even if a

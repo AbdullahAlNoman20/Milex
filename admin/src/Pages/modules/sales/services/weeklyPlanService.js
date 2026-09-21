@@ -49,19 +49,6 @@ export const savePlan = async (plan) => {
   return data.plan;
 };
 
-export const submitPlan = async (weekStartDate) => {
-  const { data } = await request('/weekly-plans/submit', { method: 'POST', body: { weekStartDate } });
-  return data.plan;
-};
-
-export const deletePlan = async (id) => {
-  await request(`/weekly-plans/${id}`, { method: 'DELETE' });
-};
-
-export const reviewPlan = async (id, { approved, comments }) => {
-  const { data } = await request(`/weekly-plans/${id}/review`, {
-    method: 'POST',
-    body: { approved, comments },
-  });
-  return data.plan;
-};
+// submitPlan / deletePlan / reviewPlan have been removed along with the
+// review screen: a plan is saved and edited, never submitted for approval,
+// and the server refuses deletion outright.

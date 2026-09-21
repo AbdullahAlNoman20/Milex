@@ -11,8 +11,6 @@ import {
   Search,
   X,
   Copy,
-  ChevronLeft,
-  ChevronRight,
   Bell,
   UserPlus,
   DatabaseBackup,
@@ -25,6 +23,7 @@ import { useToast } from '../../../../../Components/hooks/useToast';
 import { downloadCsv } from '../../../../../Components/utils/csv';
 import {
   listAllUsers,
+  getUserStats,
   listLineManagers,
   createUserAdmin,
   updateUserAdmin,
@@ -35,6 +34,7 @@ import BulkImportKamModal from './BulkImportKamModal';
 import PasswordField from '../../../../../Components/Shared/PasswordField';
 import { PASSWORD_RULES } from '../../../../../Components/Shared/passwordRules';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
+import Pagination from '../../../../../Components/Shared/Pagination';
 
 // Used only for displaying an existing account's role.
 const ROLE_OPTIONS = [
@@ -76,17 +76,17 @@ const ROLE_DONUT_COLOR = {
 
 const roleLabel = (value) => ROLE_OPTIONS.find((r) => r.value === value)?.label || value;
 
-const emptyForm = { name: '', email: '', password: '', role: 'KAM', lineManagerId: '', sendWelcomeEmail: true };
+const emptyForm = { name: '', email: '', password: '', role: 'KAM', lineManagerId: '' };
 
 const PAGE_SIZE = 10;
+const EXPORT_PAGE_SIZE = 500;
+const SEARCH_DEBOUNCE_MS = 350;
 
 // Cryptographically random rather than Math.random(): a predictable
 // temporary password is guessable by anyone who knows roughly when the
 // account was created.
 // One character is drawn from each required class FIRST, then the rest at
-// random, then the whole thing is shuffled. The previous version drew every
-// character from one pooled alphabet, so it occasionally produced a password
-// with (say) no digit at all — which the server then rejected as too weak.
+// random, then the whole thing is shuffled.
 const PASSWORD_SETS = Object.freeze({
   upper: 'ABCDEFGHJKLMNPQRSTUVWXYZ',
   lower: 'abcdefghijkmnpqrstuvwxyz',
@@ -121,34 +121,8 @@ const formatBytes = (bytes) => {
   return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 };
 
-// Real month-by-month counts derived from each user's createdAt, replacing
-// the hardcoded percentages and the fixed decorative polyline that used to
-// show the same numbers to everyone regardless of the data.
-const buildMonthlySeries = (users, predicate) => {
-  const buckets = Array(8).fill(0);
-  const now = new Date();
-  const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-  const months = Array.from({ length: 8 }, (_, i) =>
-    startOfMonth(new Date(now.getFullYear(), now.getMonth() - (7 - i), 1))
-  );
-  users.forEach((u) => {
-    if (predicate && !predicate(u)) return;
-    const created = u.createdAt ? new Date(u.createdAt) : null;
-    if (!created || Number.isNaN(created.getTime())) return;
-    const ms = startOfMonth(created);
-    for (let i = months.length - 1; i >= 0; i -= 1) {
-      if (ms >= months[i]) {
-        // Cumulative: each point is the total that existed at that month.
-        for (let j = i; j < buckets.length; j += 1) buckets[j] += 1;
-        break;
-      }
-    }
-  });
-  return buckets;
-};
-
 const trendFromSeries = (series) => {
-  if (series.length < 2) return null;
+  if (!Array.isArray(series) || series.length < 2) return null;
   const prev = series[series.length - 2];
   const curr = series[series.length - 1];
   if (prev === 0) return curr === 0 ? { value: '0.0', up: true } : { value: '100.0', up: true };
@@ -156,13 +130,14 @@ const trendFromSeries = (series) => {
   return { value: Math.abs(pct).toFixed(1), up: pct >= 0 };
 };
 
-const Sparkline = ({ series, up }) => {
-  const max = Math.max(1, ...series);
-  const step = series.length > 1 ? 100 / (series.length - 1) : 100;
-  const points = series.map((v, i) => `${(i * step).toFixed(1)},${(24 - (v / max) * 22).toFixed(1)}`).join(' ');
+const Sparkline = ({ series = [], up }) => {
+  const points = series.length > 0 ? series : [0, 0];
+  const max = Math.max(1, ...points);
+  const step = points.length > 1 ? 100 / (points.length - 1) : 100;
+  const coords = points.map((v, i) => `${(i * step).toFixed(1)},${(24 - (v / max) * 22).toFixed(1)}`).join(' ');
   return (
     <svg viewBox="0 0 100 24" className="w-full h-6 mt-2" preserveAspectRatio="none">
-      <polyline points={points} fill="none" stroke={up === false ? '#EF4444' : '#059669'} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      <polyline points={coords} fill="none" stroke={up === false ? '#EF4444' : '#059669'} strokeWidth="2" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 };
@@ -242,9 +217,15 @@ const Avatar = ({ name }) => {
 const AdminOverview = () => {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [users, setUsers] = useState([]);
+
+  const [stats, setStats] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [lineManagers, setLineManagers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTableLoading, setIsTableLoading] = useState(true);
+
   const [form, setForm] = useState(emptyForm);
   const [isCreating, setIsCreating] = useState(false);
   const createLockRef = useRef(false);
@@ -254,10 +235,15 @@ const AdminOverview = () => {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const savePasswordLockRef = useRef(false);
   const [requireChangeOnLogin, setRequireChangeOnLogin] = useState(true);
+
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [reloadToken, setReloadToken] = useState(0);
+  const requestIdRef = useRef(0);
+  const [isExporting, setIsExporting] = useState(false);
 
   // --- System maintenance ---
   const [backupStats, setBackupStats] = useState(null);
@@ -269,70 +255,83 @@ const AdminOverview = () => {
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const backupLockRef = useRef(false);
 
-  const loadAll = useCallback(async () => {
-    setIsLoading(true);
+  // Typing shouldn't fire a request per keystroke; every other narrowing
+  // control applies immediately.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, search ? SEARCH_DEBOUNCE_MS : 0);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const loadStats = useCallback(async () => {
     try {
-      const [userRes, lms] = await Promise.all([listAllUsers(1, 5000), listLineManagers()]);
-      setUsers(userRes.items);
-      setLineManagers(lms);
+      setStats(await getUserStats());
     } catch (err) {
-      showToast(err?.message || 'Failed to load users', 'error');
-    } finally {
-      setIsLoading(false);
+      showToast(err?.message || 'Failed to load user statistics', 'error');
+    }
+  }, [showToast]);
+
+  const loadSupport = useCallback(async () => {
+    try {
+      setLineManagers(await listLineManagers());
+    } catch (err) {
+      showToast(err?.message || 'Failed to load Line Managers', 'error');
     }
     getBackupStats()
       .then(setBackupStats)
       .catch(() => setBackupStats(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAll();
-  }, [loadAll]);
+    Promise.all([loadStats(), loadSupport()]).finally(() => setIsLoading(false));
+  }, [loadStats, loadSupport, reloadToken]);
 
-  const totalUsers = users.length;
-  const activeUsers = users.filter((u) => u.isActive).length;
-  const inactiveUsers = users.filter((u) => !u.isActive).length;
+  // Guards against an older, slower response overwriting a newer one.
+  useEffect(() => {
+    let cancelled = false;
+    const requestId = ++requestIdRef.current;
+    setIsTableLoading(true);
+    listAllUsers({ page, pageSize: PAGE_SIZE, search: debouncedSearch, role: roleFilter, status: statusFilter })
+      .then((result) => {
+        if (cancelled || requestId !== requestIdRef.current) return;
+        setRows(result.items);
+        setTotal(result.total);
+        setTotalPages(result.totalPages);
+      })
+      .catch((err) => {
+        if (cancelled || requestId !== requestIdRef.current) return;
+        setRows([]);
+        setTotal(0);
+        setTotalPages(1);
+        showToast(err?.message || 'Failed to load users', 'error');
+      })
+      .finally(() => {
+        if (!cancelled && requestId === requestIdRef.current) setIsTableLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch, roleFilter, statusFilter, reloadToken, showToast]);
 
-  const totalSeries = useMemo(() => buildMonthlySeries(users, null), [users]);
-  const activeSeries = useMemo(() => buildMonthlySeries(users, (u) => u.isActive), [users]);
-  const inactiveSeries = useMemo(() => buildMonthlySeries(users, (u) => !u.isActive), [users]);
+  const reloadAll = useCallback(() => setReloadToken((t) => t + 1), []);
+
+  const totalUsers = stats?.total ?? 0;
+  const activeUsers = stats?.active ?? 0;
+  const inactiveUsers = stats?.inactive ?? 0;
 
   const roleDistribution = useMemo(() => {
-    const counts = {};
-    users.forEach((u) => {
-      counts[u.role] = (counts[u.role] || 0) + 1;
-    });
+    const byRole = stats?.byRole || [];
     return ROLE_OPTIONS.map((r) => ({
       role: r.value,
       label: r.label,
-      value: counts[r.value] || 0,
+      value: byRole.find((b) => b.role === r.value)?.count || 0,
       color: ROLE_DONUT_COLOR[r.value],
     })).filter((seg) => seg.value > 0);
-  }, [users]);
+  }, [stats]);
 
-  const recentUsers = useMemo(
-    () =>
-      [...users]
-        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-        .slice(0, 5),
-    [users]
-  );
-
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return users.filter((u) => {
-      const matchesSearch = !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
-      const matchesRole = !roleFilter || u.role === roleFilter;
-      const matchesStatus = !statusFilter || (statusFilter === 'active' ? u.isActive : !u.isActive);
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [users, search, roleFilter, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
-  const pageClamped = Math.min(page, totalPages);
-  const pagedUsers = filteredUsers.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
+  const recentUsers = stats?.recent || [];
 
   const handleCreate = async () => {
     if (createLockRef.current) return;
@@ -348,13 +347,12 @@ const AdminOverview = () => {
         password: form.password,
         role: form.role,
         lineManagerId: ['KAM', 'SALES_COORDINATOR'].includes(form.role) && form.lineManagerId ? form.lineManagerId : null,
-        sendWelcomeEmail: !!form.sendWelcomeEmail,
       });
       showToast('User created — they will be asked to set their own password at first login', 'success');
       setForm(emptyForm);
       setIsCreatePanelOpen(false);
       setPage(1);
-      loadAll();
+      reloadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to create user', 'error');
     } finally {
@@ -373,7 +371,7 @@ const AdminOverview = () => {
     try {
       await updateUserAdmin(user.id, { role });
       showToast('Role updated', 'success');
-      loadAll();
+      reloadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to update role', 'error');
     }
@@ -383,7 +381,7 @@ const AdminOverview = () => {
     try {
       await updateUserAdmin(user.id, { lineManagerId: lineManagerId || null });
       showToast('Line Manager assignment updated', 'success');
-      loadAll();
+      reloadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to update assignment', 'error');
     }
@@ -402,7 +400,7 @@ const AdminOverview = () => {
     try {
       await updateUserAdmin(user.id, { isActive: !user.isActive });
       showToast(user.isActive ? 'User deactivated' : 'User reactivated', 'success');
-      loadAll();
+      reloadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to update user', 'error');
     }
@@ -424,7 +422,7 @@ const AdminOverview = () => {
       setPasswordTargetId(null);
       setNewPassword('');
       setRequireChangeOnLogin(true);
-      loadAll();
+      reloadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to set password', 'error');
     } finally {
@@ -433,16 +431,41 @@ const AdminOverview = () => {
     }
   };
 
-  const exportUsers = () => {
-    const rows = filteredUsers.map((u) => ({
-      Name: u.name,
-      Email: u.email,
-      Role: roleLabel(u.role),
-      'Line Manager': lineManagers.find((lm) => lm.id === u.lineManagerId)?.name || '',
-      Status: u.isActive ? 'Active' : 'Deactivated',
-      Created: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '',
-    }));
-    if (!downloadCsv('users_export.csv', rows)) showToast('Nothing to export', 'warning');
+  // Pages through the whole matching set rather than exporting only what is
+  // currently on screen, so the file always holds every account the filters
+  // describe — however many that is.
+  const exportUsers = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const all = [];
+      for (let p = 1; ; p += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        const result = await listAllUsers({
+          page: p,
+          pageSize: EXPORT_PAGE_SIZE,
+          search: debouncedSearch,
+          role: roleFilter,
+          status: statusFilter,
+        });
+        all.push(...result.items);
+        if (result.items.length === 0 || p >= result.totalPages) break;
+      }
+      const csvRows = all.map((u) => ({
+        Name: u.name,
+        Email: u.email,
+        Role: roleLabel(u.role),
+        'Line Manager': lineManagers.find((lm) => lm.id === u.lineManagerId)?.name || '',
+        Status: u.isActive ? 'Active' : 'Deactivated',
+        Created: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '',
+      }));
+      if (!downloadCsv('users_export.csv', csvRows)) showToast('Nothing to export', 'warning');
+      else showToast(`${csvRows.length} user(s) exported`, 'success');
+    } catch (err) {
+      showToast(err?.message || 'Export failed', 'error');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleDownloadBackup = async (includeFiles) => {
@@ -514,10 +537,7 @@ const AdminOverview = () => {
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => setSearch(e.target.value)}
                 maxLength={150}
                 placeholder="Search users..."
                 className="pl-7 pr-2 py-2.5 w-40 sm:w-52 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -526,18 +546,19 @@ const AdminOverview = () => {
             <button
               type="button"
               onClick={exportUsers}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 border border-slate-200 bg-white px-3 py-2.5 rounded-lg hover:bg-slate-50 transition"
+              disabled={isExporting}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 border border-slate-200 bg-white px-3 py-2.5 rounded-lg hover:bg-slate-50 transition disabled:opacity-50"
             >
-              <Download size={14} /> Export Users
+              {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Export Users
             </button>
             <button
               type="button"
-              onClick={loadAll}
-              disabled={isLoading}
+              onClick={reloadAll}
+              disabled={isTableLoading}
               aria-label="Refresh"
               className="inline-flex items-center justify-center text-slate-600 border border-slate-200 bg-white w-9 h-9 rounded-lg hover:bg-slate-50 transition disabled:opacity-50"
             >
-              {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {isTableLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             </button>
             <button
               type="button"
@@ -558,13 +579,13 @@ const AdminOverview = () => {
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Users" value={totalUsers} trend={trendFromSeries(totalSeries)} series={totalSeries} iconBg="bg-emerald-50 text-emerald-600" />
-          <StatCard icon={Users} label="Active Users" value={activeUsers} trend={trendFromSeries(activeSeries)} series={activeSeries} iconBg="bg-emerald-50 text-emerald-600" />
-          <StatCard icon={Users} label="Inactive Users" value={inactiveUsers} trend={trendFromSeries(inactiveSeries)} series={inactiveSeries} iconBg="bg-red-50 text-red-600" />
+          <StatCard icon={Users} label="Total Users" value={totalUsers} trend={trendFromSeries(stats?.series?.total)} series={stats?.series?.total} iconBg="bg-emerald-50 text-emerald-600" />
+          <StatCard icon={Users} label="Active Users" value={activeUsers} trend={trendFromSeries(stats?.series?.active)} series={stats?.series?.active} iconBg="bg-emerald-50 text-emerald-600" />
+          <StatCard icon={Users} label="Inactive Users" value={inactiveUsers} trend={trendFromSeries(stats?.series?.inactive)} series={stats?.series?.inactive} iconBg="bg-red-50 text-red-600" />
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.05)] min-w-0">
             <p className="text-xs font-bold text-slate-600 mb-2">Role Distribution</p>
             {roleDistribution.length === 0 ? (
-              <p className="text-[11px] text-slate-400">No users yet.</p>
+              <p className="text-[11px] text-slate-400">{isLoading ? 'Loading…' : 'No users yet.'}</p>
             ) : (
               <div className="flex items-center gap-3">
                 <Donut segments={roleDistribution} />
@@ -617,10 +638,7 @@ const AdminOverview = () => {
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
+                  onChange={(e) => setSearch(e.target.value)}
                   maxLength={150}
                   placeholder="Search table..."
                   className="w-full pl-7 pr-2 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -630,7 +648,7 @@ const AdminOverview = () => {
 
             {/* Users table */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
-              {isLoading ? (
+              {isTableLoading ? (
                 <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400">
                   <Loader2 size={16} className="animate-spin" /> Loading users...
                 </div>
@@ -648,7 +666,7 @@ const AdminOverview = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {pagedUsers.map((u, idx) => (
+                      {rows.map((u, idx) => (
                         <tr key={u.id} className={`align-top ${idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'} hover:bg-emerald-50/30 transition-colors`}>
                           <td className="py-2.5 px-4">
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -714,7 +732,7 @@ const AdminOverview = () => {
                           </td>
                         </tr>
                       ))}
-                      {pagedUsers.length === 0 && (
+                      {rows.length === 0 && (
                         <tr>
                           <td colSpan={6} className="py-10 text-center text-xs text-slate-400">
                             No users match your filters.
@@ -725,29 +743,14 @@ const AdminOverview = () => {
                   </table>
                 </div>
               )}
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-                <span className="text-[10px] text-slate-400">
-                  Page {pageClamped} of {totalPages} · {filteredUsers.length} user(s)
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={pageClamped <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="w-7 h-7 rounded-full border border-slate-200 text-slate-500 inline-flex items-center justify-center disabled:opacity-40 hover:bg-slate-50 transition"
-                  >
-                    <ChevronLeft size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pageClamped >= totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="w-7 h-7 rounded-full border border-slate-200 text-slate-500 inline-flex items-center justify-center disabled:opacity-40 hover:bg-slate-50 transition"
-                  >
-                    <ChevronRight size={13} />
-                  </button>
-                </div>
-              </div>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={total}
+                pageSize={PAGE_SIZE}
+                onChange={setPage}
+                className="px-4"
+              />
             </div>
           </div>
 
@@ -758,7 +761,7 @@ const AdminOverview = () => {
                 <Bell size={14} className="text-slate-400" /> New Users
               </h3>
               {recentUsers.length === 0 ? (
-                <p className="text-xs text-slate-400">No users yet.</p>
+                <p className="text-xs text-slate-400">{isLoading ? 'Loading…' : 'No users yet.'}</p>
               ) : (
                 <div className="space-y-3">
                   {recentUsers.map((u) => (
@@ -967,18 +970,6 @@ const AdminOverview = () => {
                   )}
                 </div>
               )}
-              <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={form.sendWelcomeEmail}
-                  onChange={(e) => setForm((p) => ({ ...p, sendWelcomeEmail: e.target.checked }))}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-xs font-semibold text-slate-600">Send welcome email</span>
-              </label>
-              <p className="text-[10px] text-slate-400 -mt-2">
-                Recorded against the account. Delivery starts as soon as an email provider is connected.
-              </p>
             </div>
             <div className="px-5 py-4 border-t border-slate-100 shrink-0">
               <button
@@ -1074,7 +1065,7 @@ const AdminOverview = () => {
         <BulkImportKamModal
           lineManagers={lineManagers}
           onClose={() => setIsBulkImportOpen(false)}
-          onImported={loadAll}
+          onImported={reloadAll}
         />
       )}
 

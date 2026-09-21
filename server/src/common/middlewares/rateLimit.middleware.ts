@@ -1,8 +1,8 @@
 // server/src/common/middlewares/rateLimit.middleware.ts
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import jwt from 'jsonwebtoken';
 import { Request } from 'express';
 import { env } from '../../config/env';
+import { verifyAccessToken } from '../utils/jwt.util';
 
 // Per-SESSION key instead of per-IP. An entire office behind one NAT/public
 // IP (or a shared mobile-data CGNAT) used to share a single bucket, so 60
@@ -19,10 +19,17 @@ const sessionKey = (req: Request): string => {
   const authenticatedId = (req as any).user?.id;
   if (typeof authenticatedId === 'string' && authenticatedId) return `u:${authenticatedId}`;
 
+  // The token is VERIFIED, never merely decoded. Decoding alone let anyone
+  // hand-craft a cookie with a fresh `sub` on every request and so get an
+  // unlimited number of fresh buckets, which made this limiter decorative.
   const token = (req as any).cookies?.access_token;
   if (typeof token === 'string' && token.length > 0) {
-    const decoded = jwt.decode(token) as { sub?: string } | null;
-    if (decoded?.sub) return `u:${decoded.sub}`;
+    try {
+      const payload = verifyAccessToken(token);
+      if (payload?.sub) return `u:${payload.sub}`;
+    } catch {
+      /* forged or expired — falls through to the IP bucket below */
+    }
   }
   return `i:${ipKeyGenerator(req.ip ?? '')}`;
 };

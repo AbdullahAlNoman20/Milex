@@ -1,80 +1,82 @@
 // server/src/modules/file-storage/fileStorage.access.ts
 import { prisma } from "../../config/db";
+import { isUnassignedSubordinate } from "../../common/utils/scopeGuard.util";
 
-// Super Admin and Sales Coordinator keep their existing, intentionally
-// broad access (SC's role is designed to work across every KAM's pipeline
-// per VIEW_ALL_KAM_DASHBOARDS). Line Manager is scoped to their own team
-// below instead of being fully unrestricted.
-// Everyone working the pipeline needs the paperwork that belongs to it: the
-// KAM who owns the relationship, the Line Manager over them, the Head of
-// Department over the whole thing, and the Coordinator who files it. The
-// guard exists to keep a customer's documents inside the company, not to
-// keep colleagues from doing their jobs.
-const UNRESTRICTED_ROLES = [
-  "SUPER_ADMIN",
-  "HEAD_OF_DEPARTMENT",
-  "LINE_MANAGER",
-  "SALES_COORDINATOR",
-  "KAM",
-];
+// Only these two see every customer's paperwork by design: the Super Admin,
+// and the Head of Department that the whole department reports up to.
+// A Sales Coordinator files paperwork across every KAM's pipeline, so they
+// are included as well. A KAM sees only the customers they hold; a Line
+// Manager only their own team's.
+const UNRESTRICTED_ROLES = ["SUPER_ADMIN", "HEAD_OF_DEPARTMENT", "SALES_COORDINATOR"];
 
-const customerLmSelect = {
+const customerScopeSelect = {
   handledById: true,
-  handledBy: { select: { lineManagerId: true } },
+  handledBy: { select: { lineManagerId: true, role: { select: { name: true } } } },
 } as const;
 
-const canAccessCustomer = (
-  customer: { handledById: string; handledBy: { lineManagerId: string | null } | null },
-  requester: { id: string; role: string },
-) => {
+type ScopedCustomer = {
+  handledById: string;
+  handledBy: { lineManagerId: string | null; role: { name: string } | null } | null;
+};
+
+const canAccessCustomer = (customer: ScopedCustomer, requester: { id: string; role: string }) => {
   if (customer.handledById === requester.id) return true;
-  if (requester.role === "LINE_MANAGER" && customer.handledBy?.lineManagerId === requester.id) return true;
+  if (requester.role === "LINE_MANAGER") {
+    if (customer.handledBy?.lineManagerId === requester.id) return true;
+    if (isUnassignedSubordinate(customer.handledBy?.lineManagerId, customer.handledBy?.role?.name)) return true;
+  }
   return false;
 };
 
-// Closes an IDOR: a KAM must own (handle) the customer that the requested
-// document belongs to, and a Line Manager must be that KAM's actual manager
-// — not any Line Manager in the system.
+const forbidden = () => ({
+  statusCode: 403,
+  code: "FORBIDDEN",
+  message: "You don't have access to this file.",
+});
+
+export interface StoredFileMeta {
+  mimeType: string | null;
+  originalName: string | null;
+}
+
+// Closes an IDOR: a KAM must hold the customer that the requested document
+// belongs to, and a Line Manager must be that KAM's actual manager — not any
+// Line Manager in the system. Returns the stored file's metadata so the
+// download handler can serve it with the correct, non-guessed content type.
 export const assertUserCanAccessStorageKey = async (
   storageKey: string,
   requester: { id: string; role: string },
-) => {
-  if (UNRESTRICTED_ROLES.includes(requester.role)) return;
-
+): Promise<StoredFileMeta> => {
   const doc = await prisma.onboardingDocument.findFirst({
     where: { storageKey },
-    include: { customer: { select: customerLmSelect } },
+    select: {
+      mimeType: true,
+      originalName: true,
+      customer: { select: customerScopeSelect },
+    },
   });
   if (doc) {
-    if (!canAccessCustomer(doc.customer, requester)) {
-      throw {
-        statusCode: 403,
-        code: "FORBIDDEN",
-        message: "You don't have access to this file.",
-      };
+    if (!UNRESTRICTED_ROLES.includes(requester.role) && !canAccessCustomer(doc.customer as ScopedCustomer, requester)) {
+      throw forbidden();
     }
-    return;
+    return { mimeType: doc.mimeType, originalName: doc.originalName };
   }
 
   const pending = await prisma.fieldChangeRequest.findFirst({
     where: { pendingFileStorageKey: storageKey },
-    include: { customer: { select: customerLmSelect } },
+    select: {
+      pendingFileMime: true,
+      pendingFileName: true,
+      customer: { select: customerScopeSelect },
+    },
   });
   if (pending) {
-    if (!canAccessCustomer(pending.customer, requester)) {
-      throw {
-        statusCode: 403,
-        code: "FORBIDDEN",
-        message: "You don't have access to this file.",
-      };
+    if (!UNRESTRICTED_ROLES.includes(requester.role) && !canAccessCustomer(pending.customer as ScopedCustomer, requester)) {
+      throw forbidden();
     }
-    return;
+    return { mimeType: pending.pendingFileMime, originalName: pending.pendingFileName };
   }
 
-  // Fail closed on any key we can't tie to a customer this user can access.
-  throw {
-    statusCode: 403,
-    code: "FORBIDDEN",
-    message: "You don't have access to this file.",
-  };
+  // Fail closed on any key we can't tie to a customer record at all.
+  throw forbidden();
 };

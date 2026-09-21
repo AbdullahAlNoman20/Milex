@@ -1,15 +1,21 @@
 // src/modules/reports-export/reportsExport.service.ts
 import crypto from 'crypto';
-import { runExportJob } from '../../jobs/export-report.job';
+import { runExportJob, ExportFilters } from '../../jobs/export-report.job';
 import { logAudit } from '../../common/utils/auditLog.util';
 
 export const requestExport = async (
   reportType: string,
-  filters: Record<string, unknown>,
-  actorId: string
+  filters: ExportFilters,
+  requester: { id: string; role: string }
 ) => {
   const jobId = crypto.randomUUID();
-  const result = await runExportJob(reportType, filters);
-  await logAudit({ entity: 'Report', entityId: jobId, action: 'EXPORT_REQUESTED', actorId, afterState: { reportType, filters } });
-  return { jobId, result };
+  const result = await runExportJob(reportType, filters, requester);
+  await logAudit({
+    entity: 'Report',
+    entityId: jobId,
+    action: 'EXPORT_REQUESTED',
+    actorId: requester.id,
+    afterState: { reportType, filters, rowCount: Array.isArray(result) ? result.length : 0 },
+  });
+  return { jobId, rowCount: Array.isArray(result) ? result.length : 0, result };
 };

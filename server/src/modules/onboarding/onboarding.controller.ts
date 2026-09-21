@@ -79,7 +79,10 @@ export const decideFinalOnboardingHandler = async (req: Request, res: Response, 
       asString(req.params.id),
       req.body.approve,
       req.body.comments,
-      req.user!.id
+      req.user!.id,
+      // Without this the service always saw the default role and its own
+      // Head-of-Department check could never fail.
+      req.user!.role
     );
     return sendSuccess(res, { customer });
   } catch (err: any) {

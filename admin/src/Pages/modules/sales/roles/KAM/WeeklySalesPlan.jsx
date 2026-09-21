@@ -14,6 +14,7 @@ import {
 import { listPlansForKam, savePlan } from "../../services/weeklyPlanService";
 import { isRequired } from "../../../../../Components/utils/validators";
 import CustomerSearchSelect from "../../components/CustomerSearchSelect";
+import { useConfirm } from "../../../../../Components/hooks/useConfirm";
 
 const buildEmptyPlan = (weekStartDate = getWeekStart()) => ({
   id: null,
@@ -202,8 +203,8 @@ const VisitRowCard = ({ v, locked, readOnly = false, onChange, onRemove, onUnloc
             <Pencil size={14} />
           </button>
         )}
-        {!readOnly && isNewRow(v.id) && (
-          <button type="button" onClick={() => onRemove(v.id)} className="text-slate-300 hover:text-red-500 transition" aria-label="Delete">
+        {!readOnly && (
+          <button type="button" onClick={() => onRemove(v)} className="text-slate-300 hover:text-red-500 transition" aria-label="Delete">
             <Trash2 size={14} />
           </button>
         )}
@@ -244,6 +245,7 @@ const VisitRowCard = ({ v, locked, readOnly = false, onChange, onRemove, onUnloc
 
 const WeeklySalesPlan = () => {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const currentWeekStart = getWeekStart();
   const [plan, setPlan] = useState(buildEmptyPlan(currentWeekStart));
   const [allPlans, setAllPlans] = useState([]);
@@ -319,9 +321,25 @@ const WeeklySalesPlan = () => {
     setPlan((prev) => ({ ...prev, [key]: prev[key].map((v) => (v.id === id ? updated : v)) }));
   };
 
-  const removeVisit = (section, id) => {
+  // A saved visit could never be removed, only edited — the delete control was
+  // limited to rows that had not been written yet, so a visit added by mistake
+  // stayed on the plan for good. A saved row is confirmed first because
+  // removing it also detaches whatever the Daily Report recorded against it.
+  const removeVisit = async (section, visit) => {
     const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
-    setPlan((prev) => ({ ...prev, [key]: prev[key].filter((v) => v.id !== id) }));
+    if (!isNewRow(visit.id)) {
+      const ok = await confirm({
+        title: "Remove this visit?",
+        message: `${visit.customerName || "This visit"} will be taken off the plan. Anything already recorded for it in a Daily Visiting Report stays, but will no longer be linked here.`,
+        confirmLabel: "Remove visit",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    setPlan((prev) => ({ ...prev, [key]: prev[key].filter((v) => v.id !== visit.id) }));
+    if (!isNewRow(visit.id)) {
+      showToast("Removed — press Save Weekly Plan to confirm it", "info", 5000);
+    }
   };
 
   const unlockRow = (id) => setEditingRowIds((prev) => new Set(prev).add(id));
@@ -624,10 +642,10 @@ const sanitizeVisit = (v) => ({
                               <Pencil size={13} />
                             </button>
                           )}
-                          {!isReadOnly && isNewRow(v.id) && (
+                          {!isReadOnly && (
                             <button
                               type="button"
-                              onClick={() => removeVisit(activeTab, v.id)}
+                              onClick={() => removeVisit(activeTab, v)}
                               className="text-slate-300 hover:text-red-500 transition"
                               aria-label="Delete"
                             >
@@ -652,7 +670,7 @@ const sanitizeVisit = (v) => ({
                   readOnly={isReadOnly}
                   locked={isReadOnly || (!isNewRow(v.id) && !editingRowIds.has(v.id))}
                   onChange={(updated) => updateVisit(activeTab, v.id, updated)}
-                  onRemove={(id) => removeVisit(activeTab, id)}
+                  onRemove={(visit) => removeVisit(activeTab, visit)}
                   onUnlock={unlockRow}
                   searchableCustomer={activeTab === VISIT_SECTIONS.EXISTING}
                 />

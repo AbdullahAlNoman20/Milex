@@ -127,6 +127,9 @@ export const finalProfileSchema = z
     area: z.preprocess(emptyToUndefined, z.string().max(100).optional().nullable()),
     zone: z.preprocess(emptyToUndefined, z.string().max(100).optional().nullable()),
     specialInstructions: z.preprocess(emptyToUndefined, z.string().max(500).optional().nullable()),
+    // Only an explicit submit marks the profile complete; the field-by-field
+    // autosave leaves it as a draft.
+    markComplete: z.boolean().optional(),
   })
   .strict();
 
@@ -146,7 +149,7 @@ export const listCustomersQuerySchema = z
     pageSize: z.string().optional(),
     status: z.string().optional(),
     search: z.string().max(100).optional(),
-    group: z.enum(['customer', 'provisional', 'pending', 'pipeline', 'queue']).optional(),
+    group: z.enum(['all', 'customer', 'provisional', 'pending', 'pipeline', 'queue']).optional(),
     withCounts: z.enum(['true', 'false']).optional(),
   })
   .strict();

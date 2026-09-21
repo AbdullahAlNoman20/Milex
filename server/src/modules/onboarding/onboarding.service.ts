@@ -160,11 +160,16 @@ export const decideTimeExtension = async (
   });
 
   if (!approve) {
+    // An extension is only ever requested from an already-expired account, so
+    // refusing one must leave it expired. Sending it back to
+    // PROVISIONAL_ACTIVE revived the very account that had just been refused
+    // more time.
     return transitionCustomerStatus({
       customerId: customer.id,
-      toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
+      toStatus: CUSTOMER_STATUS.PROVISIONAL_EXPIRED,
       actorId: lmId,
       historyAction: "TIME EXTENSION REJECTED BY LM",
+      historySubText: "The provisional period remains expired",
     });
   }
 

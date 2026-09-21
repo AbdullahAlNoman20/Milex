@@ -654,12 +654,29 @@ const PrintTemplate = ({ data, onClose }) => {
     // the `hidden print:block` wrapper below) and only exists to trigger
     // the browser's native print dialog, then removes itself once that
     // dialog closes (whether the person printed or cancelled it).
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      onClose?.();
+    };
     const timer = setTimeout(() => window.print(), 60);
-    const handleAfterPrint = () => onClose?.();
+    // Some browsers never raise afterprint when the dialog is cancelled, and
+    // because this component replaces the whole application while it is open,
+    // that left the person looking at a blank page with no way back. Regaining
+    // focus is the reliable signal that the dialog has gone, whichever way it
+    // went, so it is used as a fallback.
+    const handleAfterPrint = () => close();
+    const handleFocus = () => setTimeout(close, 300);
     window.addEventListener('afterprint', handleAfterPrint);
+    window.addEventListener('focus', handleFocus);
+    // Last resort for a browser that raises neither.
+    const failsafe = setTimeout(close, 120000);
     return () => {
       clearTimeout(timer);
+      clearTimeout(failsafe);
       window.removeEventListener('afterprint', handleAfterPrint);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [data, onClose]);
 

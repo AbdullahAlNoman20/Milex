@@ -10,7 +10,10 @@ import { runDocumentExpiryReminders } from "./document-expiry.job";
 // ever scaled to multiple PM2 workers, move these to one dedicated worker
 // or a distributed lock so the jobs don't fire once per worker.
 export const startScheduledJobs = () => {
-  cron.schedule("0 * * * *", async () => {
+  // Every ten minutes rather than hourly. The on-screen countdown reaches
+  // zero the moment it does, so an hourly sweep left the record claiming to
+  // be live for up to an hour after the window had visibly closed.
+  cron.schedule("*/10 * * * *", async () => {
     try {
       const count = await expireOverdueProvisionalAccounts();
       if (count > 0)
@@ -41,6 +44,6 @@ export const startScheduledJobs = () => {
   });
 
   logger.info(
-    "[cron] Scheduled jobs registered (provisional expiry hourly, expiry reminders 07:00, retention cleanup 03:00)",
+    "[cron] Scheduled jobs registered (provisional expiry every 10 min, expiry reminders 07:00, retention cleanup 03:00)",
   );
 };

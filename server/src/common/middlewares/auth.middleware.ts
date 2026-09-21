@@ -17,7 +17,34 @@ interface CachedUser {
 // + join just to authenticate. TTL kept short (30s) so role/permission/
 // deactivation changes still take effect almost immediately.
 const PERMISSION_CACHE_TTL_MS = 30_000;
+const CACHE_SWEEP_INTERVAL_MS = 60_000;
+const CACHE_MAX_ENTRIES = 5_000;
 const userCache = new Map<string, CachedUser>();
+
+// Expired entries were checked on read but never removed, so every account
+// that ever signed in stayed in memory for the life of the process. This
+// evicts them on a timer, and hard-caps the map so it can never grow without
+// bound however many people use the system.
+const sweepUserCache = () => {
+  const now = Date.now();
+  for (const [id, entry] of userCache) {
+    if (entry.expiresAt < now) userCache.delete(id);
+  }
+  if (userCache.size > CACHE_MAX_ENTRIES) {
+    // Insertion order: the oldest entries go first.
+    const excess = userCache.size - CACHE_MAX_ENTRIES;
+    let removed = 0;
+    for (const id of userCache.keys()) {
+      userCache.delete(id);
+      removed += 1;
+      if (removed >= excess) break;
+    }
+  }
+};
+
+const sweepTimer = setInterval(sweepUserCache, CACHE_SWEEP_INTERVAL_MS);
+// Never keeps the process alive on its own account during shutdown.
+sweepTimer.unref();
 
 const loadUser = async (userId: string): Promise<CachedUser | null> => {
   const dbUser = await prisma.user.findUnique({

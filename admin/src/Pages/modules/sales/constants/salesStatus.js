@@ -75,7 +75,10 @@ export const getWorkflowStageLabel = (customer) => {
       return 'Waiting for Line Manager Approval (Info Update)';
     case STATUS.PROVISIONAL_EXTENSION_REQUESTED:
       return 'Waiting for Line Manager to Decide on Extension Request';
-    case STATUS.PROVISIONAL_FINAL_REVIEW:
+    // The key is PROVISIONAL_FINAL_REVIEW_PENDING — the shortened name does
+    // not exist, so this case was `undefined` and never matched, leaving the
+    // stage label stuck on "In Progress".
+    case STATUS.PROVISIONAL_FINAL_REVIEW_PENDING:
       // Naming the person, not just the role: on a team of any size "waiting
       // for the Head of Department" is not enough to know who to chase.
       return customer.pendingApproverName

@@ -8,10 +8,12 @@ const HTML_ESCAPE_MAP = Object.freeze({
   '/': '&#x2F;',
 });
 
-// Only for the few places that build raw markup (print templates). It must
-// NOT be used on values heading to the API — React escapes on render and the
-// server strips tags on write, so escaping here as well meant "Rate & Fee"
-// was being stored, and then displayed, as "Rate &amp; Fee".
+// Nothing in the application builds raw markup any more — the print
+// templates render through React like everything else, so this is kept only
+// as the correct helper to reach for if that ever changes. It must NOT be
+// used on values heading to the API: React escapes on render and the server
+// strips tags on write, so escaping here as well stored "Rate & Fee" as
+// "Rate &amp; Fee".
 export const escapeHtml = (value) => {
   if (typeof value !== 'string') return '';
   return value.replace(/[&<>"'/]/g, (ch) => HTML_ESCAPE_MAP[ch]);

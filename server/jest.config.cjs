@@ -5,4 +5,6 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/test'],
   testMatch: ['**/*.test.ts'],
+  // The integration test builds the real app, which reads config on import.
+  testTimeout: 20000,
 };

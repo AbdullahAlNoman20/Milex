@@ -1,9 +1,20 @@
-// server/src/modules/file-storage/fileStorage.controller.ts (FULL REPLACEMENT — adds download handler)
+// server/src/modules/file-storage/fileStorage.controller.ts
 import { Request, Response, NextFunction } from "express";
 import * as fileStorageService from "./fileStorage.service";
 import { sendSuccess, sendError } from "../../common/utils/apiResponse.util";
 import { asOptionalString } from "../../common/utils/requestParams.util";
 import { assertUserCanAccessStorageKey } from "./fileStorage.access";
+
+// Only these render safely in a browser tab. Everything else is handed over
+// as a download rather than being opened in a document context.
+const INLINE_SAFE_MIME = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "text/plain",
+]);
 
 export const getSignedUrlHandler = async (
   req: Request,
@@ -45,20 +56,21 @@ export const downloadHandler = async (
     if (!fileStorageService.verifyDownloadSignature(storageKey, exp, sig)) {
       return sendError(res, 403, "LINK_EXPIRED", "This link has expired");
     }
-    await assertUserCanAccessStorageKey(storageKey, {
+    const meta = await assertUserCanAccessStorageKey(storageKey, {
       id: req.user!.id,
       role: req.user!.role,
     });
+
+    const mimeType = meta.mimeType || "application/octet-stream";
+    const disposition = INLINE_SAFE_MIME.has(mimeType) ? "inline" : "attachment";
+    const safeName = (meta.originalName || storageKey).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 200);
+
     const fullPath = fileStorageService.streamFile(storageKey);
     res.setHeader("X-Content-Type-Options", "nosniff");
-    // Belt-and-braces against a stored-XSS style payload rendering in the
-    // browser: the file is served as an opaque download, never inline, and
-    // never in a document context that could execute.
+    res.setHeader("Content-Type", mimeType);
+    // Nothing served from here may ever execute or load anything else.
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${storageKey.replace(/[^a-zA-Z0-9._-]/g, "_")}"`,
-    );
+    res.setHeader("Content-Disposition", `${disposition}; filename="${safeName}"`);
     res.sendFile(fullPath, (err) => {
       if (err) next(err);
     });

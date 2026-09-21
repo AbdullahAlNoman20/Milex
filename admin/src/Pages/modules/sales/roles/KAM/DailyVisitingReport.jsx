@@ -265,12 +265,22 @@ const DailyVisitingReport = () => {
     if (v.completed === false && !v.reasonIfNotCompleted.trim()) {
       return showToast('Enter a reason for skipping this visit', 'warning');
     }
-    // Only this row's edit is applied on top of the last-saved baseline,
-    // so unsaved edits sitting in other pending rows are never persisted.
-    const baseline = savedVisits.some((r) => r.id === v.id)
-      ? savedVisits.map((r) => (r.id === v.id ? v : r))
-      : [...savedVisits, v];
-    persist(baseline, v.id);
+    // Everything currently on screen is sent, not just this row on top of the
+    // last-saved state — saving one card used to silently discard whatever had
+    // been typed into the others. A half-finished skip elsewhere (marked
+    // skipped, no reason given yet) would be refused by the server, so those
+    // rows fall back to their last saved form rather than blocking this save.
+    const savedById = new Map(savedVisits.map((r) => [r.id, r]));
+    const payload = visits.map((row) => {
+      if (row.id === v.id) return v;
+      if (!row.customerName.trim()) return savedById.get(row.id) || row;
+      if (row.completed === false && !row.reasonIfNotCompleted.trim()) {
+        return savedById.get(row.id) || { ...row, completed: null };
+      }
+      return row;
+    });
+    const hasTarget = payload.some((r) => r.id === v.id);
+    persist(hasTarget ? payload : [...payload, v], v.id);
   };
 
   if (isLoading) {

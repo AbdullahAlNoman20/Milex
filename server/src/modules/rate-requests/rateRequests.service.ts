@@ -6,6 +6,7 @@ import { notifyCustomerWorkflowUsers } from '../../common/utils/stateMachine.uti
 import { createNotificationsForUsers } from '../notifications/notifications.service';
 import { assertKamOwnsCustomerIfKam, assertLineManagerOwnsCustomer } from '../../common/utils/scopeGuard.util';
 import { appendRateProcessStep } from '../../common/utils/rateProcess.util';
+import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
 
 // Which roles may actually answer a request for a better rate. A Line Manager
 // can raise one but never grant their own — that is the whole point of
@@ -217,6 +218,16 @@ export const decideRateRequest = async (
         offerSent: false,
         offerAccepted: false,
         rejectReason: null,
+        // The offer flags were cleared without moving the status, so a
+        // customer sitting in OFFER_SENT_AWAITING_FEEDBACK was left claiming
+        // to await feedback on a letter that no longer counted as sent. An
+        // account still in the quoting flow goes back to the Sales
+        // Coordinator's desk; a live or provisional one keeps its standing
+        // and is picked up by the re-quote panels instead.
+        ...(current.status === CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK ||
+        current.status === CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE
+          ? { status: CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER as any }
+          : {}),
       },
       include: { handledBy: { select: { name: true } } },
     });

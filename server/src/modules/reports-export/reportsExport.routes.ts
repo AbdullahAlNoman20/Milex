@@ -7,6 +7,8 @@ import { requirePermission } from "../../common/middlewares/permission.middlewar
 import { exportRateLimiter } from "../../common/middlewares/rateLimit.middleware";
 import { PERMISSIONS } from "../../common/constants/permissions.constant";
 import { verifyCsrf } from "../../common/middlewares/csrf.middleware";
+import { validateBody } from "../../common/middlewares/validate.middleware";
+import { requestExportSchema } from "./reportsExport.schema";
 
 const router = Router();
 
@@ -18,6 +20,7 @@ router.post(
   "/",
   exportRateLimiter,
   requirePermission(PERMISSIONS.EXPORT_DATA, PERMISSIONS.FULL_SYSTEM_CONTROL),
+  validateBody(requestExportSchema),
   controller.requestExportHandler,
 );
 

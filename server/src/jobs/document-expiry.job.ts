@@ -32,23 +32,26 @@ export const runDocumentExpiryReminders = async () => {
 
   if (due.length === 0) return { reminded: 0 };
 
+  // The Sales Coordinator files the renewed copy and the Line Manager carries
+  // the consequence if it lapses, so neither should have to hear about it
+  // second-hand from the KAM. The same list serves every document, so it is
+  // read once rather than once per licence — it used to be a clean N+1 that
+  // fired five hundred identical queries on a busy night.
+  const others = await prisma.user.findMany({
+    where: {
+      role: { name: { in: ['SALES_COORDINATOR', 'LINE_MANAGER'] as any } },
+      isActive: true,
+    },
+    select: { id: true },
+  });
+  const otherIds = others.map((u) => u.id);
+
   for (const doc of due) {
     const days = Math.max(
       0,
       Math.ceil(((doc.expiryDate as Date).getTime() - now.getTime()) / 86400000)
     );
-    // The Sales Coordinator files the renewed copy and the Line Manager
-    // carries the consequence if it lapses, so neither should have to hear
-    // about it second-hand from the KAM.
-    // eslint-disable-next-line no-await-in-loop
-    const others = await prisma.user.findMany({
-      where: {
-        role: { name: { in: ['SALES_COORDINATOR', 'LINE_MANAGER'] as any } },
-        isActive: true,
-      },
-      select: { id: true },
-    });
-    const recipients = [...new Set([doc.customer.handledById, ...others.map((u) => u.id)])];
+    const recipients = [...new Set([doc.customer.handledById, ...otherIds])];
 
     // eslint-disable-next-line no-await-in-loop
     await createNotificationsForUsers(recipients, {

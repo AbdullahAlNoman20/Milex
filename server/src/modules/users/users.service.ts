@@ -3,7 +3,6 @@ import { prisma } from '../../config/db';
 import { hashPassword, isPasswordPolicyCompliant, PASSWORD_POLICY_MESSAGE } from '../../common/utils/hash.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
-import { sendNotification } from '../../jobs/notification.job';
 
 const assertUserIsLineManager = async (userId: string) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
@@ -73,18 +72,28 @@ export const listMyTeam = async (requester: { id: string; role: string }) => {
 };
 
 export const listKams = async (lineManagerId?: string, includeManagers = false) => {
-  const roleFilter = includeManagers
-    ? { name: { in: ['KAM', 'LINE_MANAGER', 'HEAD_OF_DEPARTMENT'] as any } }
-    : { name: 'KAM' as any };
+  // Asking for managers used to drop the Line Manager scoping for EVERYONE,
+  // so a Line Manager could reassign a customer to another team's KAM. The
+  // scope is kept on the KAMs and only lifted for the manager roles, which
+  // are never "someone else's team" to begin with.
+  const subordinateClause: any = {
+    role: { name: { in: ['KAM', 'SALES_COORDINATOR'] as any } },
+    ...(lineManagerId ? { OR: [{ lineManagerId }, { lineManagerId: null }] } : {}),
+  };
+
+  const where: any = includeManagers
+    ? {
+        isActive: true,
+        OR: [subordinateClause, { role: { name: { in: ['LINE_MANAGER', 'HEAD_OF_DEPARTMENT'] as any } } }],
+      }
+    : {
+        isActive: true,
+        role: { name: 'KAM' as any },
+        ...(lineManagerId ? { OR: [{ lineManagerId }, { lineManagerId: null }] } : {}),
+      };
 
   const people = await prisma.user.findMany({
-    where: {
-      role: roleFilter,
-      isActive: true,
-      // Scoping by Line Manager only makes sense for the KAMs under them;
-      // the managers themselves are never filtered out by it.
-      ...(lineManagerId && !includeManagers ? { lineManagerId } : {}),
-    },
+    where,
     select: { id: true, name: true, email: true, role: { select: { name: true } } },
     orderBy: { name: 'asc' },
   });
@@ -100,17 +109,120 @@ export const listLineManagers = async () => {
   });
 };
 
-export const listUsers = async (page: number, pageSize: number) => {
+export interface UserListFilters {
+  search?: string;
+  role?: string;
+  status?: string;
+}
+
+const buildUserWhere = (filters: UserListFilters) => {
+  const where: any = {};
+  const search = filters.search?.trim();
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+  if (filters.role) where.role = { name: filters.role as any };
+  if (filters.status === 'active') where.isActive = true;
+  if (filters.status === 'inactive') where.isActive = false;
+  return where;
+};
+
+// Paged and filtered in the database. The admin console used to download the
+// entire directory and slice it in the browser, which both capped how many
+// accounts could ever be seen and grew the page's cost with the company.
+export const listUsers = async (page: number, pageSize: number, filters: UserListFilters = {}) => {
+  const where = buildUserWhere(filters);
   const [items, total] = await Promise.all([
     prisma.user.findMany({
+      where,
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: { role: true },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.user.count(),
+    prisma.user.count({ where }),
   ]);
-  return { items: items.map(toSafeUser), total, page, pageSize };
+  return {
+    items: items.map(toSafeUser),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+};
+
+const MONTH_BUCKETS = 8;
+
+const startOfMonthMs = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+
+const buildCumulativeSeries = (
+  rows: { createdAt: Date }[],
+  predicate?: (r: any) => boolean
+): number[] => {
+  const now = new Date();
+  const months = Array.from({ length: MONTH_BUCKETS }, (_, i) =>
+    startOfMonthMs(new Date(now.getFullYear(), now.getMonth() - (MONTH_BUCKETS - 1 - i), 1))
+  );
+  const buckets = Array(MONTH_BUCKETS).fill(0);
+  rows.forEach((r) => {
+    if (predicate && !predicate(r)) return;
+    if (!r.createdAt) return;
+    const ms = startOfMonthMs(new Date(r.createdAt));
+    // Accounts older than the window existed throughout it, so they belong in
+    // every bucket — the browser version silently dropped them, which made
+    // the totals on the chart disagree with the totals on the cards.
+    if (ms < months[0]) {
+      for (let j = 0; j < buckets.length; j += 1) buckets[j] += 1;
+      return;
+    }
+    for (let i = months.length - 1; i >= 0; i -= 1) {
+      if (ms >= months[i]) {
+        for (let j = i; j < buckets.length; j += 1) buckets[j] += 1;
+        break;
+      }
+    }
+  });
+  return buckets;
+};
+
+// Headline figures, the role split, the trend lines and the newest accounts —
+// all computed in the database rather than by measuring a fully downloaded
+// user table.
+export const getUserStats = async () => {
+  const [total, active, roleGroups, roles, timeline, recent] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { isActive: true } }),
+    prisma.user.groupBy({ by: ['roleId'], _count: { _all: true } }),
+    prisma.role.findMany({ select: { id: true, name: true } }),
+    // Two columns only, so this stays small even with a very large directory.
+    prisma.user.findMany({ select: { createdAt: true, isActive: true } }),
+    prisma.user.findMany({ orderBy: { createdAt: 'desc' }, take: 5, include: { role: true } }),
+  ]);
+
+  const roleNameById = new Map(roles.map((r) => [r.id, r.name as string]));
+
+  return {
+    total,
+    active,
+    inactive: total - active,
+    byRole: roleGroups
+      .map((g) => ({ role: roleNameById.get(g.roleId) || 'UNKNOWN', count: g._count._all }))
+      .filter((r) => r.count > 0),
+    series: {
+      total: buildCumulativeSeries(timeline),
+      active: buildCumulativeSeries(timeline, (r) => r.isActive),
+      inactive: buildCumulativeSeries(timeline, (r) => !r.isActive),
+    },
+    recent: recent.map((u) => ({
+      id: u.id,
+      name: u.name,
+      role: u.role.name,
+      createdAt: u.createdAt,
+    })),
+  };
 };
 
 export const updateUser = async (
@@ -210,7 +322,6 @@ export const createUser = async (data: {
   role: string;
   branchId?: string;
   lineManagerId?: string | null;
-  sendWelcomeEmail?: boolean;
 }, actorId: string) => {
   if (!isPasswordPolicyCompliant(data.password)) {
     throw { statusCode: 400, code: 'WEAK_PASSWORD', message: PASSWORD_POLICY_MESSAGE };
@@ -237,21 +348,16 @@ export const createUser = async (data: {
     include: { role: true },
   });
 
+  // The "send welcome email" switch has been removed rather than left on
+  // screen doing nothing: no email provider is connected, so it promised a
+  // message that was never going to arrive.
   await logAudit({
     entity: 'User',
     entityId: user.id,
     action: 'USER_CREATED',
     actorId,
-    afterState: { email: user.email, role: role.name, lineManagerId: user.lineManagerId, welcomeEmailRequested: !!data.sendWelcomeEmail },
+    afterState: { email: user.email, role: role.name, lineManagerId: user.lineManagerId },
   });
-
-  if (data.sendWelcomeEmail) {
-    // Recorded and queued through the same path every other notification
-    // uses. No email provider is wired up yet, so this is a no-op delivery
-    // today — the request is still captured in the audit trail above so
-    // nothing is silently lost once a provider is connected.
-    sendNotification({ kind: 'WELCOME', userId: user.id }).catch(() => {});
-  }
 
   return toSafeUser(user);
 };
