@@ -91,7 +91,10 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
   // Sales Coordinator handles correspondence, not commercial terms.
   const canSetRate = isLineManager || isHod;
   const canRequest = role === ROLES.KAM || canSetRate;
-  const isAccountOwner = customer.handledById === currentUser?.id;
+  // Whoever raised this re-quote sees it through. That is not always the
+  // person holding the account — a Line Manager or the Head of Department
+  // asking for new terms themselves runs their own episode.
+  const isRequoteOwner = customer.rateProcessOwnerId === currentUser?.id;
 
   const load = useCallback(() => {
     listRateRequests(customer.id)
@@ -202,11 +205,11 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
     // The rate is on the table and nothing has reached the customer — the
     // person holding the account decides what happens to it.
     if (stage === RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW) {
-      if (!isAccountOwner && role !== ROLES.SUPER_ADMIN) {
+      if (!isRequoteOwner && role !== ROLES.SUPER_ADMIN) {
         return (
           <Locked>
-            Waiting for {customer.handledBy?.name || 'the account holder'} to decide whether this rate goes to the
-            customer.
+            Waiting for {customer.rateProcessOwnerName || 'the person who asked for it'} to decide whether this rate
+            goes to the customer.
           </Locked>
         );
       }
@@ -279,7 +282,9 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
     if (stage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK) {
       return (
         <Locked>
-          The customer is considering this rate. Another rate can be raised once they have answered.
+          The customer is considering this rate
+          {customer.rateProcessOwnerName ? `, and ${customer.rateProcessOwnerName} will record their answer` : ''}.
+          Another rate can be raised once they have answered.
         </Locked>
       );
     }

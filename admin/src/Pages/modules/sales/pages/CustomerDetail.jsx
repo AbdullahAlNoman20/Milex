@@ -205,11 +205,19 @@ const CustomerDetail = () => {
         return <Waiting>Waiting for the Sales Coordinator to send the offer letter</Waiting>;
       }
       if (stage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK) {
-        const owner = customer.handledById === currentUser?.id;
-        if ((owner || isSuperAdmin) && !customer.offerAccepted && !customer.offerRejected) {
+        // Whoever raised the re-quote runs it end to end, so the answer is
+        // theirs to record — not the account holder's, who may have had
+        // nothing to do with it.
+        const isRequoteOwner = customer.rateProcessOwnerId === currentUser?.id;
+        if ((isRequoteOwner || isSuperAdmin) && !customer.offerAccepted && !customer.offerRejected) {
           return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
         }
-        return <Waiting>Awaiting the customer's answer on the new rate</Waiting>;
+        return (
+          <Waiting>
+            Awaiting the customer's answer on the new rate
+            {customer.rateProcessOwnerName ? `, via ${customer.rateProcessOwnerName}` : ''}
+          </Waiting>
+        );
       }
       return null;
     }
