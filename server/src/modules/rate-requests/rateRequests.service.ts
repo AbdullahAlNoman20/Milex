@@ -112,6 +112,19 @@ export const createRateRequest = async (
   await assertCanTouch(customerId, requester);
   const customer = await loadLiveCustomer(customerId);
 
+  // One re-quote at a time, start to finish. A customer may come back for
+  // different terms as often as they like, but not while the last set is
+  // still travelling — a second rate raised mid-flight would replace an offer
+  // letter already with the customer, or an agreement already being drawn up,
+  // and nobody would know which figure they had actually been quoted.
+  if (customer.rateProcessActive) {
+    throw {
+      statusCode: 409,
+      code: 'RATE_PROCESS_IN_PROGRESS',
+      message:
+        'A new rate is already going through for this customer. Once it has been offered and answered, another can be raised.',
+    };
+  }
   const open = await prisma.rateRequest.findFirst({ where: { customerId, approved: null } });
   if (open) {
     throw {
@@ -182,6 +195,19 @@ export const escalateRateRequestToHod = async (
   await assertCanTouch(customerId, requester);
   const customer = await loadLiveCustomer(customerId);
   const clean = sanitizeAndEscape({ reason });
+
+  if (
+    customer.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW ||
+    customer.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OFFER ||
+    customer.rateProcessStage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK
+  ) {
+    throw {
+      statusCode: 409,
+      code: 'RATE_IN_FLIGHT',
+      message:
+        'This rate has already moved on. Wait for the customer to answer it before asking for another one.',
+    };
+  }
 
   const open = await prisma.rateRequest.findFirst({
     where: { customerId, approved: null },
@@ -267,6 +293,22 @@ export const setNewRate = async (
         statusCode: 409,
         code: 'AWAITING_HOD',
         message: 'This has been passed to the Head of Department, so only they can set the rate now.',
+      };
+    }
+    // Once a rate has left this desk it is out of reach until it comes back.
+    // Replacing it while the offer letter is being prepared, or while the
+    // customer is considering it, would quote them one figure and record
+    // another.
+    if (
+      current.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW ||
+      current.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OFFER ||
+      current.rateProcessStage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK
+    ) {
+      throw {
+        statusCode: 409,
+        code: 'RATE_IN_FLIGHT',
+        message:
+          'This rate has already moved on. Wait for the customer to answer it before setting another one.',
       };
     }
 

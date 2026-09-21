@@ -8,7 +8,7 @@ import { useSales } from '../hooks/useSales';
 import { usePagedCustomers } from '../hooks/usePagedCustomers';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { hasPermission, PERMISSIONS } from '../../../../Components/constants/permissions';
-import StatusBadge from '../components/StatusBadge';
+import StatusBadge, { RateProcessBadge } from '../components/StatusBadge';
 import Loader from '../../../../Components/Shared/Loader';
 import Pagination from '../../../../Components/Shared/Pagination';
 
@@ -175,6 +175,7 @@ const SalesDashboard = () => {
                   <div className="flex items-center mt-1 gap-3 flex-wrap">
                     <span className="font-mono text-xs text-slate-500 border rounded px-1.5">{task.barcode}</span>
                     <StatusBadge status={task.status} size="sm" />
+                    <RateProcessBadge customer={task} />
                   </div>
                 </button>
                 <button

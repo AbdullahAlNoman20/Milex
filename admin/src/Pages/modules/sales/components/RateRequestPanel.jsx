@@ -1,6 +1,6 @@
 // admin/src/Pages/modules/sales/components/RateRequestPanel.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Send, CheckCircle, XCircle, Loader2, History, ArrowUpCircle } from 'lucide-react';
+import { Send, CheckCircle, XCircle, Loader2, History, ArrowUpCircle, Lock } from 'lucide-react';
 import {
   listRateRequests,
   createRateRequest,
@@ -15,18 +15,66 @@ import { rateSourceLabel, humanizeStatus } from '../../../../Components/utils/fo
 import { RATE_PROCESS_STAGE } from '../constants/salesStatus';
 import RateHistoryModal from './RateHistoryModal';
 
+// Declared at module scope. Defining a component inside the render body
+// recreates it on every pass, which resets any state it holds and is exactly
+// what the hooks lint forbids.
+const CurrentRate = ({ customer }) => (
+  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Current Rate</p>
+    <p className="text-sm font-bold text-slate-800 break-words">
+      {customer.approvedRate || customer.proposedRate || '—'}
+    </p>
+    <p className="text-[11px] text-slate-500 mt-1">
+      Given by: <strong>{rateSourceLabel(customer.rateSource)}</strong>
+    </p>
+  </div>
+);
+
+const OpenRequestNote = ({ request }) =>
+  request ? (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+        Asked for by {humanizeStatus(request.requestedByRole)}
+      </p>
+      <p className="text-xs text-slate-700 break-words">{request.reason}</p>
+      <p className="text-[10px] text-slate-400">{new Date(request.createdAt).toLocaleString()}</p>
+    </div>
+  ) : null;
+
+const Locked = ({ children }) => (
+  <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 flex items-start gap-2">
+    <Lock size={12} className="shrink-0 mt-0.5 text-slate-400" />
+    <span>{children}</span>
+  </p>
+);
+
 // A live customer asking for new terms runs the same desks as the original
 // recommendation — Line Manager, Head of Department, the account's holder,
-// the Sales Coordinator, the customer — without the account's own standing
-// changing at any point. This panel is the rate half of that; the offer and
-// feedback halves appear in the action panel above.
+// the Sales Coordinator, the customer — one step at a time, without the
+// account's own standing changing at any point. This panel is the rate half
+// of that; the offer and feedback halves appear in the action panel above.
+//
+// Nothing new can be started while a rate is still travelling. Once the
+// customer has answered, the account is idle again and the next request can
+// be raised.
 const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
   const { showToast } = useToast();
   const confirm = useConfirm();
   const { currentUser } = useAuth();
   const [items, setItems] = useState([]);
   const [reason, setReason] = useState('');
-  const [newRate, setNewRate] = useState(customer.approvedRate || customer.proposedRate || '');
+  // The field opens on the rate in force, because the answer is almost always
+  // an adjustment of it rather than a number pulled from nowhere. Whatever has
+  // been typed is kept while the record is unchanged, and re-seeded the moment
+  // the rate itself moves — React's own way of adjusting state to a prop,
+  // which needs a second piece of state rather than a ref or an effect.
+  const currentRate = customer.approvedRate || customer.proposedRate || '';
+  const [newRate, setNewRate] = useState(currentRate);
+  const [seededRate, setSeededRate] = useState(currentRate);
+  if (seededRate !== currentRate) {
+    setSeededRate(currentRate);
+    setNewRate(currentRate);
+  }
   const [escalateMode, setEscalateMode] = useState(false);
   const [escalateReason, setEscalateReason] = useState('');
   const [reviewMode, setReviewMode] = useState('send');
@@ -56,10 +104,6 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
   useEffect(() => {
     load();
   }, [load, reloadToken, customer.revision, customer.approvedRate, stage]);
-
-  useEffect(() => {
-    setNewRate(customer.approvedRate || customer.proposedRate || '');
-  }, [customer.approvedRate, customer.proposedRate]);
 
   const open = items.find((r) => r.approved === null) || null;
   const answered = items.filter((r) => r.approved !== null);
@@ -154,38 +198,16 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
     );
   };
 
-  const CurrentRate = () => (
-    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Current Rate</p>
-      <p className="text-sm font-bold text-slate-800 break-words">
-        {customer.approvedRate || customer.proposedRate || '—'}
-      </p>
-      <p className="text-[11px] text-slate-500 mt-1">
-        Given by: <strong>{rateSourceLabel(customer.rateSource)}</strong>
-      </p>
-    </div>
-  );
-
-  const OpenRequestNote = () =>
-    open ? (
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
-          Asked for by {humanizeStatus(open.requestedByRole)}
-        </p>
-        <p className="text-xs text-slate-700 break-words">{open.reason}</p>
-        <p className="text-[10px] text-slate-400">{new Date(open.createdAt).toLocaleString()}</p>
-      </div>
-    ) : null;
-
   const renderBody = () => {
     // The rate is on the table and nothing has reached the customer — the
     // person holding the account decides what happens to it.
     if (stage === RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW) {
       if (!isAccountOwner && role !== ROLES.SUPER_ADMIN) {
         return (
-          <p className="text-[11px] text-slate-400">
-            Waiting for {customer.handledBy?.name || 'the account holder'} to decide whether this rate goes to the customer.
-          </p>
+          <Locked>
+            Waiting for {customer.handledBy?.name || 'the account holder'} to decide whether this rate goes to the
+            customer.
+          </Locked>
         );
       }
       return (
@@ -234,7 +256,8 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
                 onClick={ownerAskAgain}
                 className="w-full bg-indigo-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
-                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />} Ask for a Better Rate
+                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />} Ask for a Better
+                Rate
               </button>
             </>
           )}
@@ -242,20 +265,28 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
       );
     }
 
+    // The rate has left the desks and is on its way to the customer. Nothing
+    // may be changed or started until they have answered — a second figure
+    // raised now would replace the one they are being quoted.
     if (stage === RATE_PROCESS_STAGE.PENDING_OFFER) {
-      return <p className="text-[11px] text-slate-400">Waiting for the Sales Coordinator to send the offer letter.</p>;
+      return (
+        <Locked>
+          The Sales Coordinator is sending the offer letter for this rate. Another rate can be raised once the customer
+          has answered it.
+        </Locked>
+      );
     }
     if (stage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK) {
-      return <p className="text-[11px] text-slate-400">Waiting for the customer's answer on the new rate.</p>;
+      return (
+        <Locked>
+          The customer is considering this rate. Another rate can be raised once they have answered.
+        </Locked>
+      );
     }
 
     const awaitingHod = stage === RATE_PROCESS_STAGE.PENDING_HOD_RATE;
     if (awaitingHod && !isHod) {
-      return (
-        <p className="text-[11px] text-slate-400">
-          Passed to the Head of Department — waiting for them to set the best rate.
-        </p>
-      );
+      return <Locked>Passed to the Head of Department — waiting for them to set the best rate.</Locked>;
     }
 
     // Idle, or sitting on this person's own desk. Either way a Line Manager
@@ -291,7 +322,8 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
                 onClick={escalate}
                 className="w-full bg-indigo-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
-                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />} Send to Head of Department
+                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />} Send to Head of
+                Department
               </button>
             </>
           ) : (
@@ -339,9 +371,7 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
 
     if (open) {
       return (
-        <p className="text-[11px] text-slate-400">
-          Waiting for the Line Manager to set a new rate or pass it to the Head of Department.
-        </p>
+        <Locked>Waiting for the Line Manager to set a new rate or pass it to the Head of Department.</Locked>
       );
     }
 
@@ -390,8 +420,8 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
           </button>
         </div>
 
-        <CurrentRate />
-        <OpenRequestNote />
+        <CurrentRate customer={customer} />
+        <OpenRequestNote request={open} />
         {renderBody()}
 
         {answered.length > 0 && (

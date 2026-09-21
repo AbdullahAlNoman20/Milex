@@ -25,4 +25,16 @@ const StatusBadge = ({ status, size = 'md' }) => {
   );
 };
 
+// A live customer being re-quoted keeps its own standing, so the status badge
+// correctly reads "Active Account" — which on a task list gave no clue why the
+// record was sitting in the queue at all. This says what is actually pending.
+export const RateProcessBadge = ({ customer }) => {
+  if (!customer?.rateProcessActive) return null;
+  return (
+    <span className="inline-block mt-1 text-[9px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5">
+      New rate in progress
+    </span>
+  );
+};
+
 export default StatusBadge;

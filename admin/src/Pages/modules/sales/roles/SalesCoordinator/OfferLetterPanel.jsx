@@ -3,7 +3,6 @@ import { useState, useRef, useLayoutEffect } from 'react';
 import { Printer, PenTool, Send, Loader2 } from 'lucide-react';
 import { useSales } from '../../hooks/useSales';
 
-import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { SIGNATURE_LIBRARY } from '../../constants/formOptions';
 import { buildRateRefs } from '../../../../../Components/utils/format';
@@ -14,7 +13,6 @@ import { OfferLetter } from '../../components/PrintTemplate';
 
 const OfferLetterPanel = ({ customer }) => {
   const { updateStatus, setPrintData } = useSales();
-  const { showToast } = useToast();
   const confirm = useConfirm();
   // The letter's wording is generated from the record rather than typed, so
   // this is read once and kept — the copy that goes out and the copy stored

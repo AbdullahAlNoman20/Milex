@@ -14,7 +14,12 @@ import {
 import { useSales } from "../hooks/useSales";
 import { useAuth } from "../../../../Components/hooks/useAuth";
 import { ROLES } from "../../../../Components/constants/roles";
-import { STATUS, RATE_PROCESS_STAGE, getWorkflowStageLabel } from "../constants/salesStatus";
+import {
+  STATUS,
+  RATE_PROCESS_STAGE,
+  getWorkflowStageLabel,
+  getRateProcessStageLabel,
+} from "../constants/salesStatus";
 import { buildRateRefs, rateSourceLabel } from "../../../../Components/utils/format";
 
 // The stored values are IB / OB / BOTH, which is what was being printed on
@@ -189,8 +194,9 @@ const CustomerDetail = () => {
     // running, in which case the offer and feedback steps apply again.
     if (customer.status === STATUS.ACTIVE) {
       const stage = customer.rateProcessStage;
-      // The rate desks are handled by the Rate panel in the sidebar; only the
-      // offer and the customer's answer belong here.
+      // The rate desks are handled by the Rate panel in the sidebar, which
+      // stays open at every stage; only the offer and the customer's answer
+      // belong here.
       if (!stage) return null;
       if (stage === RATE_PROCESS_STAGE.PENDING_OFFER) {
         if (role === ROLES.SALES_COORDINATOR || role === ROLES.SUPER_ADMIN) {
@@ -914,6 +920,7 @@ const CustomerDetail = () => {
               <AuditTrail
                 title="New Rate Process Audit Trail"
                 history={customer.rateProcessHistory}
+                activeStepLabel={getRateProcessStageLabel(customer)}
               />
             )}
           <AuditTrail

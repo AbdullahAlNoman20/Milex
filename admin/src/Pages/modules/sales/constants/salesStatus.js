@@ -62,6 +62,36 @@ const ownerLabel = (customer) => {
   return 'KAM';
 };
 
+// The re-quote runs its own desks while the account itself stays ACTIVE, so
+// the workflow label above says nothing about it. Its trail was the only
+// place with no "waiting for" line at the top, which left it reading as a
+// finished list rather than something still in motion.
+export const getRateProcessStageLabel = (customer) => {
+  if (!customer?.rateProcessActive) return '';
+  const owner =
+    customer.createdByRole === 'HEAD_OF_DEPARTMENT'
+      ? 'Head of Department'
+      : customer.createdByRole === 'LINE_MANAGER'
+        ? 'Line Manager'
+        : 'KAM';
+  switch (customer.rateProcessStage) {
+    case RATE_PROCESS_STAGE.PENDING_LM_RATE:
+      return 'Waiting for Line Manager to Set the New Rate or Escalate to HOD';
+    case RATE_PROCESS_STAGE.PENDING_HOD_RATE:
+      return customer.pendingApproverName
+        ? `Waiting for ${customer.pendingApproverName} (Head of Department) to set the best rate`
+        : 'Waiting for the Head of Department to Set the Best Rate';
+    case RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW:
+      return `Waiting for ${owner} to Accept the New Rate or Ask Again`;
+    case RATE_PROCESS_STAGE.PENDING_OFFER:
+      return 'Waiting for Sales Coordinator to Send the Revised Offer Letter';
+    case RATE_PROCESS_STAGE.AWAITING_FEEDBACK:
+      return `Waiting for Customer's Feedback on the New Rate (via ${owner})`;
+    default:
+      return 'New Rate Process In Progress';
+  }
+};
+
 export const getWorkflowStageLabel = (customer) => {
   if (!customer) return '';
   switch (customer.status) {
