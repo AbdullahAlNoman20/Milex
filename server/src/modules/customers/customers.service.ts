@@ -123,7 +123,15 @@ const requoteAt = (...stages: string[]) => ({
   rateProcessStage: { in: stages },
 });
 
-const roleQueueFilter = (role: string): any | null => {
+// The two steps that belong to whoever raised the re-quote rather than to a
+// role: deciding on the rate that came back, and recording the customer's
+// answer to it.
+const myRequoteSteps = (userId: string) => ({
+  ...requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW, RATE_PROCESS_STAGE.AWAITING_FEEDBACK),
+  rateProcessOwnerId: userId,
+});
+
+const roleQueueFilter = (role: string, userId: string): any | null => {
   switch (role) {
     case 'SALES_COORDINATOR':
       return {
@@ -148,10 +156,10 @@ const roleQueueFilter = (role: string): any | null => {
               ],
             },
           },
-          // Rates asked of them, and — on an account they hold themselves —
-          // the decision on what comes back.
+          // Rates asked of them, and — on a re-quote they raised themselves —
+          // the decision on what came back and the customer's answer to it.
           requoteAt(RATE_PROCESS_STAGE.PENDING_LM_RATE),
-          { ...requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW), createdByRole: 'LINE_MANAGER' as any },
+          myRequoteSteps(userId),
         ],
       };
     // Only escalations reach the Head of Department's queue. Everything else
@@ -171,7 +179,7 @@ const roleQueueFilter = (role: string): any | null => {
             },
           },
           requoteAt(RATE_PROCESS_STAGE.PENDING_HOD_RATE),
-          { ...requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW), createdByRole: 'HEAD_OF_DEPARTMENT' as any },
+          myRequoteSteps(userId),
         ],
       };
     case 'KAM':
@@ -180,9 +188,7 @@ const roleQueueFilter = (role: string): any | null => {
           { status: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW },
           { status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK },
           { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerSent: true, offerAccepted: false },
-          // The list is already narrowed to the customers this KAM holds, so
-          // these are only ever the re-quotes waiting on them personally.
-          requoteAt(RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW, RATE_PROCESS_STAGE.AWAITING_FEEDBACK),
+          myRequoteSteps(userId),
         ],
       };
     default:
@@ -237,7 +243,7 @@ export const listCustomers = async (
 
   const scopedAnd = [...baseAnd];
   if (filters.group === 'queue') {
-    const queue = roleQueueFilter(requester.role);
+    const queue = roleQueueFilter(requester.role, requester.id);
     // A role with no queue of its own (Super Admin) gets an empty result
     // rather than everything — same behaviour the dashboard always had.
     scopedAnd.push(queue ?? { id: { in: [] } });
@@ -273,7 +279,7 @@ export const listCustomers = async (
         // A live account can still have work outstanding on it. Without these
         // the lists showed a plain "Active Account" badge and no sign that a
         // re-quote was running.
-        rateProcessActive: true, rateProcessStage: true,
+        rateProcessActive: true, rateProcessStage: true, rateProcessOwnerId: true,
         revision: true, status: true, accountProfileType: true,
         provisionalCreatedAt: true, provisionalExpiryDate: true, provisionalExtensionDays: true,
         followUpDate: true, followUpNote: true,
@@ -295,7 +301,7 @@ export const listCustomers = async (
   if (filters.withCounts) {
     const countFor = (extra?: any) =>
       prisma.customer.count({ where: { AND: extra ? [...baseAnd, extra] : baseAnd } });
-    const queue = roleQueueFilter(requester.role);
+    const queue = roleQueueFilter(requester.role, requester.id);
     const [all, customer, provisional, pending, pipeline, queueCount] = await Promise.all([
       countFor(),
       countFor(GROUP_FILTERS.customer),
@@ -353,6 +359,17 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
 
   // An account waiting to be activated is waiting on a specific person, and
   // the audit trail should say who rather than leaving people to work it out.
+  // Named rather than left as a role, so people know exactly who is holding
+  // the re-quote up.
+  let rateProcessOwnerName: string | null = null;
+  if (customer.rateProcessOwnerId) {
+    const owner = await prisma.user.findUnique({
+      where: { id: customer.rateProcessOwnerId },
+      select: { name: true },
+    });
+    rateProcessOwnerName = owner?.name || null;
+  }
+
   let pendingApproverName: string | null = null;
   if (
     customer.status === CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING ||
@@ -386,6 +403,7 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   return {
     ...customer,
     pendingApproverName,
+    rateProcessOwnerName,
     pendingRateRequest: pendingRateRequest
       ? { ...pendingRateRequest, requestedByName: pendingRateRequestBy }
       : null,
@@ -1050,6 +1068,29 @@ export const submitClientFeedback = async (
   actorRole = 'KAM'
 ) => {
   await assertKamOwnsCustomerIfKam(customerId, kamId, actorRole);
+
+  // A re-quote on a live account is run end to end by whoever raised it, so
+  // the customer's answer to it is theirs to record. Leaving this with the
+  // account holder meant a Line Manager or Head of Department who had asked
+  // for the new terms themselves could not close their own episode.
+  const requote = await prisma.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    select: { status: true, rateProcessActive: true, rateProcessOwnerId: true },
+  });
+  if (
+    requote.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT &&
+    requote.rateProcessActive &&
+    requote.rateProcessOwnerId &&
+    requote.rateProcessOwnerId !== kamId &&
+    actorRole !== 'SUPER_ADMIN'
+  ) {
+    throw {
+      statusCode: 403,
+      code: 'FORBIDDEN',
+      message: 'The customer\'s answer on this rate is recorded by the person who asked for it.',
+    };
+  }
+
   if (data.accepted) {
     const updated = await prisma.$transaction(async (tx) => {
       const current = await tx.customer.findUnique({
@@ -1094,7 +1135,7 @@ export const submitClientFeedback = async (
           // already a live customer being re-quoted, in which case nothing
           // about their standing changes at all.
           ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
-            ? { rateProcessActive: false, rateProcessStage: null }
+            ? { rateProcessActive: false, rateProcessStage: null, rateProcessOwnerId: null }
             : {
                 status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any,
                 accountProfileType: 'PROVISIONAL' as any,
@@ -1118,7 +1159,7 @@ export const submitClientFeedback = async (
         );
         await tx.customer.update({
           where: { id: customerId },
-          data: { rateProcessActive: false, rateProcessStage: null },
+          data: { rateProcessActive: false, rateProcessStage: null, rateProcessOwnerId: null },
         });
       } else {
         await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
@@ -1163,8 +1204,21 @@ export const submitClientFeedback = async (
         accountProfileType: true,
         createdByRole: true,
         rateProcessActive: true,
+        rateProcessOwnerId: true,
       },
     });
+    // The re-quote's own owner decides where a refusal goes back to: a Line
+    // Manager or the Head of Department running one themselves has nobody
+    // below them, so it returns to the Head of Department rather than to a
+    // Line Manager who was never part of it.
+    const requoteOwnerRole = current.rateProcessOwnerId
+      ? (
+          await tx.user.findUnique({
+            where: { id: current.rateProcessOwnerId },
+            select: { role: { select: { name: true } } },
+          })
+        )?.role?.name
+      : null;
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
     }
@@ -1203,7 +1257,9 @@ export const submitClientFeedback = async (
           ? {
               rateProcessActive: true,
               rateProcessStage:
-                current.createdByRole === 'HEAD_OF_DEPARTMENT' || current.createdByRole === 'SUPER_ADMIN'
+                requoteOwnerRole === 'LINE_MANAGER' ||
+                requoteOwnerRole === 'HEAD_OF_DEPARTMENT' ||
+                requoteOwnerRole === 'SUPER_ADMIN'
                   ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
                   : RATE_PROCESS_STAGE.PENDING_LM_RATE,
             }

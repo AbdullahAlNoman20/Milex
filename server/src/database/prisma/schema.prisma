@@ -252,6 +252,12 @@ model Customer {
   // account's own status ever moving off ACTIVE_ACCOUNT.
   // See RATE_PROCESS_STAGE in common/constants/status.constant.ts.
   rateProcessStage   String?
+  // Who is running this re-quote. Whoever raised it sees it through: they
+  // decide whether the rate that comes back goes to the customer, and they
+  // are the one who records the customer's answer. That is not always the
+  // person holding the account — a Line Manager or the Head of Department
+  // who asks for new terms themselves collects the answer themselves.
+  rateProcessOwnerId String?
 
   pendingInfoUpdateField String?
   pendingInfoUpdateValue String?
@@ -293,6 +299,7 @@ model Customer {
   @@index([accountProfileType, status])
   @@index([handledById, status])
   @@index([rateProcessStage])
+  @@index([rateProcessOwnerId])
 }
 
 // Who has held this customer, and who handed them over. The Customer row

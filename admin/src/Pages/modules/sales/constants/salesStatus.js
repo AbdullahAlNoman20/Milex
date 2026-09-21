@@ -68,12 +68,9 @@ const ownerLabel = (customer) => {
 // finished list rather than something still in motion.
 export const getRateProcessStageLabel = (customer) => {
   if (!customer?.rateProcessActive) return '';
-  const owner =
-    customer.createdByRole === 'HEAD_OF_DEPARTMENT'
-      ? 'Head of Department'
-      : customer.createdByRole === 'LINE_MANAGER'
-        ? 'Line Manager'
-        : 'KAM';
+  // The person who raised this re-quote, not whoever holds the account —
+  // those are different people whenever a manager asks for new terms.
+  const owner = customer.rateProcessOwnerName || 'the person who asked for it';
   switch (customer.rateProcessStage) {
     case RATE_PROCESS_STAGE.PENDING_LM_RATE:
       return 'Waiting for Line Manager to Set the New Rate or Escalate to HOD';
@@ -86,7 +83,7 @@ export const getRateProcessStageLabel = (customer) => {
     case RATE_PROCESS_STAGE.PENDING_OFFER:
       return 'Waiting for Sales Coordinator to Send the Revised Offer Letter';
     case RATE_PROCESS_STAGE.AWAITING_FEEDBACK:
-      return `Waiting for Customer's Feedback on the New Rate (via ${owner})`;
+      return `Waiting for Customer's Feedback on the New Rate (collected by ${owner})`;
     default:
       return 'New Rate Process In Progress';
   }

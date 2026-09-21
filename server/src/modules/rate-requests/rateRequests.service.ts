@@ -21,25 +21,23 @@ const toRateSource = (role: string) =>
 
 const CAN_SET_RATE = ['LINE_MANAGER', 'HEAD_OF_DEPARTMENT', 'SUPER_ADMIN'];
 
-// A re-quote runs the same desks as the original recommendation. Where a
-// freshly set rate goes next depends on who holds the account: back to the
-// KAM who owns the relationship, or — when a manager holds it themselves and
-// has nobody to hand it to — straight out for an offer letter.
-const stageAfterRate = (createdByRole: string | null | undefined, setByRole: string) => {
-  const owner = createdByRole || 'KAM';
-  if (owner === 'KAM' || owner === 'SALES_COORDINATOR') return RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW;
-  if (owner === 'LINE_MANAGER') {
-    return setByRole === 'HEAD_OF_DEPARTMENT'
-      ? RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW
-      : RATE_PROCESS_STAGE.PENDING_OFFER;
-  }
-  return RATE_PROCESS_STAGE.PENDING_OFFER;
-};
+// Where a freshly set rate goes next. It goes back to whoever raised the
+// re-quote, so they can decide whether it is good enough to put to the
+// customer — unless they set it themselves, in which case pausing for their
+// own approval of their own decision is a step that means nothing.
+const stageAfterRate = (processOwnerId: string | null | undefined, setById: string) =>
+  processOwnerId && processOwnerId !== setById
+    ? RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW
+    : RATE_PROCESS_STAGE.PENDING_OFFER;
 
-// Which desk a request starts at. The Head of Department is the only one with
-// nobody above them, so an account they hold goes straight to them.
-export const rateDeskStageFor = (createdByRole: string | null | undefined) =>
-  createdByRole === 'HEAD_OF_DEPARTMENT' || createdByRole === 'SUPER_ADMIN'
+// Which desk a request starts at. A Line Manager has nobody below them to
+// ask, and the Head of Department has nobody above them, so both of those go
+// straight to the Head of Department's desk; everyone else stops at their own
+// Line Manager first.
+export const rateDeskStageFor = (requesterRole: string) =>
+  requesterRole === 'LINE_MANAGER' ||
+  requesterRole === 'HEAD_OF_DEPARTMENT' ||
+  requesterRole === 'SUPER_ADMIN'
     ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
     : RATE_PROCESS_STAGE.PENDING_LM_RATE;
 
@@ -135,12 +133,7 @@ export const createRateRequest = async (
   }
 
   const clean = sanitizeAndEscape({ reason });
-  // A Line Manager raising one has nobody below them to ask, so theirs goes
-  // straight up; everyone else's stops at the Line Manager's desk first.
-  const stage =
-    requester.role === 'LINE_MANAGER'
-      ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
-      : rateDeskStageFor(customer.createdByRole);
+  const stage = rateDeskStageFor(requester.role);
 
   const request = await prisma.rateRequest.create({
     data: {
@@ -154,7 +147,9 @@ export const createRateRequest = async (
 
   await prisma.customer.update({
     where: { id: customerId },
-    data: { rateProcessActive: true, rateProcessStage: stage },
+    // Whoever raises it runs it: the rate comes back to them, and they are the
+    // one who records what the customer says about it.
+    data: { rateProcessActive: true, rateProcessStage: stage, rateProcessOwnerId: requester.id },
   });
 
   // This opens the re-quote episode; every step from here to the customer's
@@ -231,6 +226,9 @@ export const escalateRateRequestToHod = async (
     data: {
       rateProcessActive: true,
       rateProcessStage: RATE_PROCESS_STAGE.PENDING_HOD_RATE,
+      // A Line Manager passing an existing ask up leaves it with whoever
+      // raised it; one they start here is their own to see through.
+      ...(customer.rateProcessOwnerId ? {} : { rateProcessOwnerId: requester.id }),
       lmNote: clean.reason || null,
     },
     include: { handledBy: { select: { name: true } } },
@@ -353,7 +351,9 @@ export const setNewRate = async (
       reason: open?.reason || 'Replaced by a new rate',
     };
 
-    const stage = stageAfterRate(current.createdByRole, source);
+    // A rate set with no request behind it is the setter's own episode.
+    const processOwnerId = current.rateProcessOwnerId || requester.id;
+    const stage = stageAfterRate(processOwnerId, requester.id);
 
     const result = await tx.customer.update({
       where: { id: customerId },
@@ -378,6 +378,7 @@ export const setNewRate = async (
         rejectReason: null,
         rateProcessActive: true,
         rateProcessStage: stage,
+        rateProcessOwnerId: processOwnerId,
       },
       include: { handledBy: { select: { name: true } } },
     });
@@ -411,6 +412,19 @@ export const setNewRate = async (
   notifyCustomerWorkflowUsers(updated.handledById, { label, link }, requester.id, {
     includeSalesCoordinators: updated.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OFFER,
   }).catch(() => {});
+
+  // The person who raised it is the one now being asked to decide, and they
+  // are not always in the workflow group above.
+  if (
+    updated.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW &&
+    updated.rateProcessOwnerId &&
+    updated.rateProcessOwnerId !== requester.id
+  ) {
+    createNotificationsForUsers([updated.rateProcessOwnerId], {
+      label: `${updated.accountName} — A new rate is ready for your decision: ${clean.rate}`,
+      link,
+    }).catch(() => {});
+  }
 
   return updated;
 };
@@ -457,7 +471,7 @@ export const declineRateRequest = async (
     );
     return tx.customer.update({
       where: { id: customerId },
-      data: { rateProcessActive: false, rateProcessStage: null },
+      data: { rateProcessActive: false, rateProcessStage: null, rateProcessOwnerId: null },
       include: { handledBy: { select: { name: true } } },
     });
   });
@@ -497,8 +511,15 @@ export const ownerDecideNewRate = async (
       message: 'There is no new rate waiting for your decision right now. Please refresh the page.',
     };
   }
-  if (customer.handledById !== requester.id && requester.role !== 'SUPER_ADMIN') {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'Only the person holding this account can make that decision.' };
+  // Whoever raised the re-quote decides what happens to the rate that came
+  // back — not whoever happens to hold the account, which is a different
+  // person whenever a manager asks for new terms themselves.
+  if (customer.rateProcessOwnerId !== requester.id && requester.role !== 'SUPER_ADMIN') {
+    throw {
+      statusCode: 403,
+      code: 'FORBIDDEN',
+      message: 'This decision belongs to the person who asked for the new rate.',
+    };
   }
 
   if (accept) {
@@ -530,7 +551,7 @@ export const ownerDecideNewRate = async (
     throw { statusCode: 400, code: 'MISSING_REASON', message: 'Please say why a better rate is needed.' };
   }
 
-  const stage = rateDeskStageFor(customer.createdByRole);
+  const stage = rateDeskStageFor(requester.role);
   const updated = await prisma.$transaction(async (tx) => {
     await tx.rateRequest.create({
       data: {
