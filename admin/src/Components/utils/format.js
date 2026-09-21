@@ -4,6 +4,12 @@ export const formatRevision = (revision) => (revision > 0 ? `R-${revision}` : 'N
 const RATE_SOURCE_LABELS = {
   LINE_MANAGER: 'Line Manager',
   HEAD_OF_DEPARTMENT: 'Head of Department',
+  // The opening entry in every account's rate history is the figure whoever
+  // raised the recommendation proposed. It was falling through to the
+  // default and being attributed to the Line Manager.
+  KAM: 'Key Account Manager (proposed)',
+  SALES_COORDINATOR: 'Sales Coordinator (proposed)',
+  SUPER_ADMIN: 'Super Admin',
 };
 
 export const rateSourceLabel = (source) => RATE_SOURCE_LABELS[source] || 'Line Manager';

@@ -42,7 +42,7 @@ const AgreementPanel = ({ customer, onSent }) => {
     const ok = await confirm({
       title: 'Send the agreement?',
       message:
-        'This records the agreement as sent and unlocks the document upload. Use Print Only first if you need a copy to send.',
+        '',
       confirmLabel: 'Record as sent',
     });
     if (!ok) return;

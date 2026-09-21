@@ -1,7 +1,7 @@
 // admin/src/Pages/modules/sales/components/FinalAccountProfileView.jsx
 
 import { ClipboardCheck } from 'lucide-react';
-import { GAIN_TYPE_OPTIONS, FINANCE_MODE_OPTIONS } from '../constants/formOptions';
+import { GAIN_TYPE_OPTIONS } from '../constants/formOptions';
 
 const findLabel = (options, value) => options.find((o) => o.value === value)?.label || value || '—';
 
@@ -23,12 +23,6 @@ const FinalAccountProfileView = ({ customer }) => {
     ['Preferred Carrier', customer.preferredCarrier, 'Nature of Business', customer.natureOfBusiness],
     ['Area', customer.area, 'Zone', customer.zone],
     ['Type', findLabel(GAIN_TYPE_OPTIONS, customer.gainType), 'Account Mode', customer.accountMode],
-    [
-      'Mode (Ex / FR)',
-      customer.financeMode ? findLabel(FINANCE_MODE_OPTIONS, customer.financeMode) : '—',
-      'Special Instructions',
-      customer.specialInstructions ? 'See below' : '—',
-    ],
     // On a cash account the amount reads "Cash" and the term is left blank,
     // because there is no period to state rather than one nobody filled in.
     [

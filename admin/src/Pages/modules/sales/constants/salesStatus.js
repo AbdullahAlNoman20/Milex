@@ -22,6 +22,16 @@ export const STATUS = Object.freeze({
   ACTIVE: 'ACTIVE_ACCOUNT',
 });
 
+// Where a live customer's re-quote currently sits. The account itself never
+// leaves ACTIVE_ACCOUNT while this runs — only the rate is in question.
+export const RATE_PROCESS_STAGE = Object.freeze({
+  PENDING_LM_RATE: 'PENDING_LM_RATE',
+  PENDING_HOD_RATE: 'PENDING_HOD_RATE',
+  PENDING_OWNER_REVIEW: 'PENDING_OWNER_REVIEW',
+  PENDING_OFFER: 'PENDING_OFFER',
+  AWAITING_FEEDBACK: 'AWAITING_FEEDBACK',
+});
+
 export const TERMINAL_STATUSES = Object.freeze([STATUS.ACTIVE, STATUS.PROVISIONAL_EXPIRED]);
 
 export const isPipelineStatus = (status) => !TERMINAL_STATUSES.includes(status) || status === STATUS.PROVISIONAL_ACTIVE;

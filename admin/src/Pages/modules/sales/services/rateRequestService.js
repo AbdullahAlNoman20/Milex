@@ -14,10 +14,21 @@ export const createRateRequest = async (customerId, reason, followsRejection = f
   return data.request;
 };
 
-export const decideRateRequest = async (requestId, { approve, grantedRate, grantedNote }) => {
-  const { data } = await request(`/rate-requests/${encodeURIComponent(requestId)}/decision`, {
+// One call for every answer a Line Manager or the Head of Department gives:
+// set the rate, pass it up, or decline it.
+export const decideNewRate = async (customerId, { action, approvedRate, reason }) => {
+  const { data } = await request(`/rate-requests/customer/${encodeURIComponent(customerId)}/decision`, {
     method: 'POST',
-    body: { approve, grantedRate, grantedNote },
+    body: { action, approvedRate, reason },
+  });
+  return data.customer;
+};
+
+// The account's own holder decides whether the new rate goes to the customer.
+export const ownerDecideNewRate = async (customerId, { accept, reason }) => {
+  const { data } = await request(`/rate-requests/customer/${encodeURIComponent(customerId)}/owner-decision`, {
+    method: 'POST',
+    body: { accept, reason },
   });
   return data.customer;
 };

@@ -1,11 +1,11 @@
 // admin/src/Pages/modules/sales/roles/HOD/HodRatePanel.jsx
 import { useState, useRef } from 'react';
-import { CheckCircle, Loader2 } from 'lucide-react';
-import { grantHodRate } from '../../services/customerService';
+import { CheckCircle, Loader2, FileOutput } from 'lucide-react';
+import { grantHodRate, getDocumentSignedUrl } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../../Components/hooks/useConfirm';
 import { isRequired } from '../../../../../Components/utils/validators';
-import { rateSourceLabel } from '../../../../../Components/utils/format';
+import { rateSourceLabel, humanizeStatus } from '../../../../../Components/utils/format';
 
 // The field opens pre-filled with the rate currently in force, because the
 // answer is almost always an adjustment of it rather than a number pulled
@@ -15,9 +15,34 @@ const HodRatePanel = ({ customer, onUpdated }) => {
   const { showToast } = useToast();
   const confirm = useConfirm();
   const [newRate, setNewRate] = useState(customer.approvedRate || customer.proposedRate || '');
-  const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOpeningRateDoc, setIsOpeningRateDoc] = useState(false);
   const lockRef = useRef(false);
+
+  // The same supporting document the Line Manager sees. It is the only thing
+  // on the record that shows where the KAM's figure came from, so it has to
+  // travel with the request all the way up.
+  const rateDocument = (customer.documents || []).find(
+    (d) => d.documentType === 'RECOMMENDATION_ATTACHMENT'
+  );
+
+  const handleOpenRateDocument = async () => {
+    if (!rateDocument) {
+      return showToast('The KAM did not attach a rate document to this recommendation.', 'warning');
+    }
+    if (rateDocument.scanStatus !== 'CLEAN') {
+      return showToast('This file is still being checked — try again shortly', 'warning');
+    }
+    setIsOpeningRateDoc(true);
+    try {
+      const url = await getDocumentSignedUrl(rateDocument.storageKey);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      showToast(err?.message || 'Could not open the rate document', 'error');
+    } finally {
+      setIsOpeningRateDoc(false);
+    }
+  };
 
   // Newest first — the rate just superseded is the one that matters most.
   const history = [...(customer.rateHistory || [])].sort((a, b) => {
@@ -40,9 +65,8 @@ const HodRatePanel = ({ customer, onUpdated }) => {
     lockRef.current = true;
     setIsSubmitting(true);
     try {
-      await grantHodRate(customer.id, newRate.trim(), note.trim() || undefined);
+      await grantHodRate(customer.id, newRate.trim());
       showToast('Best rate set', 'success');
-      setNote('');
       onUpdated?.();
     } catch (err) {
       showToast(err?.message || 'Could not set the rate', 'error');
@@ -56,11 +80,35 @@ const HodRatePanel = ({ customer, onUpdated }) => {
     <div className="bg-white rounded-xl shadow-sm border border-indigo-400 p-6 space-y-4">
       <h3 className="font-bold text-slate-900 text-base">Best Rate Requested</h3>
 
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+          KAM'S PROPOSED RATE
+        </p>
+        <p className="font-bold text-sm text-slate-800 mb-2 break-words">
+          {customer.proposedRate || '—'}
+        </p>
+        <button
+          type="button"
+          onClick={handleOpenRateDocument}
+          disabled={isOpeningRateDoc}
+          className="text-xs text-blue-600 font-bold flex items-center justify-center w-full hover:underline disabled:opacity-50"
+        >
+          {isOpeningRateDoc ? (
+            <Loader2 size={14} className="mr-1 animate-spin" />
+          ) : (
+            <FileOutput size={14} className="mr-1" />
+          )}
+          {rateDocument ? 'Open Attached Rate Document' : 'No Rate Document Attached'}
+        </button>
+      </div>
+
       <div className="space-y-2">
         {history.map((h, i) => (
           <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">
-              Replaced {h.changedAt ? new Date(h.changedAt).toLocaleDateString() : ''} ·{' '}
+              {/* The time matters as much as the day once a rate has gone round
+                  two or three times in the same afternoon. */}
+              Replaced {h.changedAt ? new Date(h.changedAt).toLocaleString() : ''} ·{' '}
               {rateSourceLabel(h.source)}
             </p>
             <p className="text-xs text-slate-600 break-words line-through decoration-slate-300">
@@ -89,6 +137,18 @@ const HodRatePanel = ({ customer, onUpdated }) => {
         </div>
       )}
 
+      {customer.pendingRateRequest?.reason && customer.pendingRateRequest.reason !== customer.lmNote && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 mb-1">
+            {customer.pendingRateRequest.requestedByName || 'Requested'}
+            {customer.pendingRateRequest.requestedByRole
+              ? ` (${humanizeStatus(customer.pendingRateRequest.requestedByRole)})`
+              : ''}
+          </p>
+          <p className="text-xs text-slate-700 break-words">{customer.pendingRateRequest.reason}</p>
+        </div>
+      )}
+
       <div>
         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
           Best Rate
@@ -105,13 +165,8 @@ const HodRatePanel = ({ customer, onUpdated }) => {
         </p>
       </div>
 
-      <textarea
-        className="w-full text-xs border border-slate-300 p-3 rounded-lg outline-none focus:border-indigo-500 min-h-[60px]"
-        placeholder="Message for the KAM and Line Manager (optional)"
-        value={note}
-        maxLength={1000}
-        onChange={(e) => setNote(e.target.value)}
-      />
+      {/* The message field has been removed: the rate itself is the decision,
+          and everyone involved is already told who set it. */}
 
       <button
         type="button"
@@ -124,7 +179,7 @@ const HodRatePanel = ({ customer, onUpdated }) => {
         ) : (
           <CheckCircle size={16} className="mr-1.5" />
         )}
-        Set Best Rate 
+        Set Best Rate
       </button>
     </div>
   );

@@ -21,7 +21,7 @@ const KamRateDecisionPanel = ({ customer, onUpdated }) => {
     if (lockRef.current) return;
     const ok = await confirm({
       title: 'Send this rate for an offer letter?',
-      message: `The Sales Coordinator will prepare and send the offer letter to ${customer.accountName} at this rate.`,
+      message: ``,
       confirmLabel: 'Send to Sales Coordinator',
     });
     if (!ok) return;
@@ -45,7 +45,7 @@ const KamRateDecisionPanel = ({ customer, onUpdated }) => {
     if (!isRequired(reason)) return showToast('Explain why a better rate is needed', 'warning');
     const ok = await confirm({
       title: 'Ask for a better rate?',
-      message: 'This goes back to your Line Manager, who will either set a new rate or take it up to the Head of Department.',
+      message: '',
       confirmLabel: 'Send request',
     });
     if (!ok) return;

@@ -177,10 +177,11 @@ export const escalateRateSchema = z
   .object({ reason: z.string().min(1, 'Please say why a better rate is needed.').max(1000) })
   .strict();
 
+// No accompanying message: the rate is the decision, and everyone involved is
+// already told who set it.
 export const grantHodRateSchema = z
   .object({
     approvedRate: z.string().min(1, 'Please enter the rate you are setting.').max(300),
-    lmNote: z.string().max(1000).optional(),
   })
   .strict();
 

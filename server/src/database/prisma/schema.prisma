@@ -246,6 +246,12 @@ model Customer {
   // True while such a re-quote is running. Nothing about the account's
   // onboarding changes during it — only the rate is in question.
   rateProcessActive  Boolean            @default(false)
+  // Where inside that re-quote the account currently sits. It runs the same
+  // desks as the original recommendation — Line Manager, Head of Department,
+  // the account's owner, the Sales Coordinator, the customer — without the
+  // account's own status ever moving off ACTIVE_ACCOUNT.
+  // See RATE_PROCESS_STAGE in common/constants/status.constant.ts.
+  rateProcessStage   String?
 
   pendingInfoUpdateField String?
   pendingInfoUpdateValue String?
@@ -286,6 +292,7 @@ model Customer {
   @@index([status, offerRejected])
   @@index([accountProfileType, status])
   @@index([handledById, status])
+  @@index([rateProcessStage])
 }
 
 // Who has held this customer, and who handed them over. The Customer row

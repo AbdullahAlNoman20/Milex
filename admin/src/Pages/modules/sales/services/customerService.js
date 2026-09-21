@@ -50,8 +50,10 @@ export const escalateRateToHod = async (id, reason) => {
   return data.customer;
 };
 
-export const grantHodRate = async (id, approvedRate, lmNote) => {
-  const { data } = await request(`/customers/${id}/grant-hod-rate`, { method: 'POST', body: { approvedRate, lmNote } });
+// No note is sent any more — the rate is the whole decision, and the
+// notification already names who set it.
+export const grantHodRate = async (id, approvedRate) => {
+  const { data } = await request(`/customers/${id}/grant-hod-rate`, { method: 'POST', body: { approvedRate } });
   return data.customer;
 };
 
