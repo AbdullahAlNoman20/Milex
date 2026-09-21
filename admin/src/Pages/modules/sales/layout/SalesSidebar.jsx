@@ -2,6 +2,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, FileBox, FileText, Users, ShieldCheck, CalendarDays, ClipboardList, BellRing, Eye, History, Users2, Menu, X } from 'lucide-react';
+// BellRing is used by the follow-up reminders entry below.
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { ROLES } from '../../../../Components/constants/roles';
 import { hasAnyPermission, PERMISSIONS } from '../../../../Components/constants/permissions';
@@ -39,6 +40,15 @@ const NAV_ITEMS = [
     permissions: null,
   },
    { to: '/app/my-team', label: 'My Team', icon: Users, roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN] },
+  {
+    // The page existed and was routed, but nothing ever linked to it — the
+    // only way in was to type the address.
+    to: '/app/follow-ups',
+    label: 'Follow-up Reminders',
+    icon: BellRing,
+    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN],
+    permissions: null,
+  },
   {
     to: '/app/team-reports',
     label: 'Team Reports',

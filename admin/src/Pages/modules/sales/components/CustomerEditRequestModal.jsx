@@ -58,6 +58,7 @@ const buildContactFieldDefs = (contacts) =>
 const CustomerEditRequestModal = ({
   customer,
   isLineManager,
+  canApproveDocuments = false,
   restrictToRecommendationFields = false,
   onClose,
   onDone,
@@ -172,7 +173,7 @@ const CustomerEditRequestModal = ({
       for (const d of docTargets) {
         try {
           const req = await requestDocumentChange(customer.id, d.key, reason.trim(), docFiles[d.key]);
-          if (isLineManager) await decideFieldChangeRequest(req.id, true);
+          if (canApproveDocuments) await decideFieldChangeRequest(req.id, true);
           succeeded += 1;
         } catch (err) {
           failed.push(`${d.label}: ${err?.message || 'could not be uploaded'}`);
@@ -365,7 +366,7 @@ const CustomerEditRequestModal = ({
                       />
                     </label>
                     <p className="text-[10px] text-slate-400 mt-1.5">
-                      {isLineManager
+                      {canApproveDocuments
                         ? "Uploads and replaces the file immediately."
                         : "Uploads now; your Line Manager's approval swaps it into the customer's file the moment they approve."}
                     </p>

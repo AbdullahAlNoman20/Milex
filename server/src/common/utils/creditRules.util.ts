@@ -1,5 +1,8 @@
 // server/src/common/utils/creditRules.util.ts
 export const MAX_CREDIT_PERIOD_DAYS = 90;
+// Mirrors CREDIT_RULES.DEFAULT_PERIOD_DAYS in the client. Anything above it
+// is an extended term and is flagged as such on the customer record.
+export const DEFAULT_CREDIT_PERIOD_DAYS = 15;
 
 export const isCreditPeriodField = (fieldKey: string): boolean => {
   const k = (fieldKey || "").toLowerCase();

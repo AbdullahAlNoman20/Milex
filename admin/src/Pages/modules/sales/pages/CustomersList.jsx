@@ -12,6 +12,10 @@ import Pagination from '../../../../Components/Shared/Pagination';
 import { formatRevision } from '../../../../Components/utils/format';
 
 const TABS = [
+  // Every record the person is allowed to see, with no status filter at all.
+  // The three views below are ways of reading this set, never a substitute
+  // for it — an account can no longer fall between them and disappear.
+  { key: 'all', label: 'All' },
   { key: 'customer', label: 'Active Customer' },
   { key: 'provisional', label: 'Provisional Customer' },
   // Everything still being quoted. An account becomes provisional the moment

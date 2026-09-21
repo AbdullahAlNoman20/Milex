@@ -37,6 +37,8 @@ export const logger = pino({
     'req.body.newPassword',
     'req.body.currentPassword',
     'req.body.token',
+    // A failed login wrote the attempted address straight into the log file.
+    'req.body.email',
   ],
 });
 

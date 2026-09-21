@@ -9,7 +9,10 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '30s',
       restart_delay: 3000,
-      max_memory_restart: '400M',
+      // A full backup (database rows plus embedded files) is the single
+      // largest thing this process ever holds. 400M cut it off part-way
+      // through and restarted the server mid-download.
+      max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
       },

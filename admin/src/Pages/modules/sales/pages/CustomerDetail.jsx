@@ -16,6 +16,10 @@ import { useAuth } from "../../../../Components/hooks/useAuth";
 import { ROLES } from "../../../../Components/constants/roles";
 import { STATUS, getWorkflowStageLabel } from "../constants/salesStatus";
 import { buildRateRefs, rateSourceLabel } from "../../../../Components/utils/format";
+
+// The stored values are IB / OB / BOTH, which is what was being printed on
+// screen. This is the wording used everywhere else in the application.
+const SERVICE_LABELS = { IB: "Inbound (IB)", OB: "Outbound (OB)", BOTH: "IB & OB" };
 import StatusBadge from "../components/StatusBadge";
 import BarcodeBadge from "../../../../Components/Shared/BarcodeBadge";
 import ScannableBarcode from "../../../../Components/Shared/ScannableBarcode";
@@ -606,7 +610,9 @@ const CustomerDetail = () => {
                     ],
                     [
                       "Service",
-                      customer.serviceRequired,
+                      SERVICE_LABELS[customer.serviceRequired] ||
+                        customer.serviceRequired ||
+                        "—",
                       "Mode",
                       customer.accountMode,
                     ],
@@ -908,13 +914,14 @@ const CustomerDetail = () => {
         </div>
       </div>
 
-      {!canUploadDocs && (
-        <DocumentsList
-          customer={customer}
-          documents={customer.documents}
-          reloadToken={refreshTick}
-        />
-      )}
+      {/* Every document on file, at every stage. Hiding this during the
+          upload window meant the Head of Department was asked to activate an
+          account without being able to see a single one of its documents. */}
+      <DocumentsList
+        customer={customer}
+        documents={customer.documents}
+        reloadToken={refreshTick}
+      />
 
 
 
@@ -922,6 +929,10 @@ const CustomerDetail = () => {
         <CustomerEditRequestModal
           customer={customer}
           isLineManager={canDirectEdit}
+          // Only a Line Manager or above may approve a document replacement.
+          // The modal used to reuse the direct-edit flag for that, so a KAM's
+          // upload was followed by an approve call the API refused with 403.
+          canApproveDocuments={isLmOrAdmin}
           restrictToRecommendationFields={restrictToRecommendationFields}
           onClose={() => setIsEditModalOpen(false)}
           onDone={refreshCustomer}

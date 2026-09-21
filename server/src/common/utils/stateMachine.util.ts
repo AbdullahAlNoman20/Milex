@@ -33,15 +33,18 @@ export const notifyCustomerWorkflowUsers = async (
 
     const handler = await prisma.user.findUnique({
       where: { id: handledById },
-      select: { lineManagerId: true },
+      select: { lineManagerId: true, role: { select: { name: true } } },
     });
 
     if (handler?.lineManagerId) {
       // Scoped: only the Line Manager this KAM/SC is actually assigned to.
       notifyIds.add(handler.lineManagerId);
-    } else {
-      // No LM assigned yet — fall back to every active LM so nothing
-      // silently falls through the cracks.
+    } else if (handler?.role?.name === 'KAM' || handler?.role?.name === 'SALES_COORDINATOR') {
+      // An unassigned KAM/SC has no manager yet — every active Line Manager
+      // is told so the record can't silently stall. A manager holding an
+      // account themselves is deliberately NOT treated this way: they have
+      // no line manager by definition, and broadcasting their customers to
+      // every other Line Manager leaked names across teams.
       const allLms = await prisma.user.findMany({
         where: { role: { name: 'LINE_MANAGER' }, isActive: true },
         select: { id: true },

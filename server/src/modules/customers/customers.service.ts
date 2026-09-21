@@ -9,8 +9,8 @@ import { runFileScan } from '../../jobs/file-scan.job';
 import { humanizeStatus } from '../../common/utils/humanize.util';
 // Used by the creator-skip path to name the role in history entries.
 import { ensureServiceProvidersExist } from '../service-providers/serviceProviders.service';
-import { assertLineManagerOwnsCustomer, assertKamOwnsCustomerIfKam } from '../../common/utils/scopeGuard.util';
-import { assertValidCreditPeriodValue, isCreditPeriodField } from '../../common/utils/creditRules.util';
+import { assertLineManagerOwnsCustomer, assertKamOwnsCustomerIfKam, isUnassignedSubordinate } from '../../common/utils/scopeGuard.util';
+import { assertValidCreditPeriodValue, isCreditPeriodField, DEFAULT_CREDIT_PERIOD_DAYS } from '../../common/utils/creditRules.util';
 import { createNotificationsForUsers } from '../notifications/notifications.service';
 import { ensureCustomerAccount } from './customerAccount.service';
 import { appendRateProcessStep } from '../../common/utils/rateProcess.util';
@@ -42,10 +42,29 @@ const generateUniqueBarcode = async (): Promise<string> => {
 // hold one page at a time no matter how large the database grows — while
 // still reaching every record through search and paging.
 const GROUP_FILTERS: Record<string, any> = {
+  // Nothing is ever hidden: "all" is the complete, unfiltered set the
+  // requester is allowed to see, and every other group is a view onto it.
+  all: {},
   customer: { status: CUSTOMER_STATUS.ACTIVE_ACCOUNT },
   provisional: {
-    accountProfileType: 'PROVISIONAL',
-    status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT },
+    // A regular-mode account submitted for final onboarding is set to
+    // accountProfileType REGULAR while still sitting in a PROVISIONAL_*
+    // status, so matching on the profile type alone made it disappear from
+    // every tab. The status clause catches those as well.
+    OR: [
+      { accountProfileType: 'PROVISIONAL', status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT } },
+      {
+        status: {
+          in: [
+            CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
+            CUSTOMER_STATUS.PROVISIONAL_DOCS_PENDING,
+            CUSTOMER_STATUS.PROVISIONAL_EXTENSION_REQUESTED,
+            CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
+            CUSTOMER_STATUS.PROVISIONAL_EXPIRED,
+          ],
+        },
+      },
+    ],
   },
   // Everything before the customer has actually said yes. The account only
   // stops being a prospect at the moment they accept the offer — up to then
@@ -62,11 +81,31 @@ const GROUP_FILTERS: Record<string, any> = {
         CUSTOMER_STATUS.DRAFTING_OFFER_LETTER,
         CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK,
         CUSTOMER_STATUS.OFFER_REJECTED_REVISE_RATE,
+        // Legacy/in-between statuses that belonged to no tab at all, which
+        // made those records unreachable from the Customers page.
+        CUSTOMER_STATUS.OFFER_ACCEPTED_PENDING_AGREEMENT,
+        CUSTOMER_STATUS.DRAFTING_AGREEMENT,
+        CUSTOMER_STATUS.AGREEMENT_SENT_AWAITING_SIGNATURE,
+        CUSTOMER_STATUS.AGREEMENT_SIGNED_PENDING_PROFILE,
+        CUSTOMER_STATUS.INFO_UPDATE_PENDING_LM_APPROVAL,
       ],
     },
   },
   pipeline: { status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT } },
 };
+
+// What a Line Manager is allowed to see: accounts they hold themselves,
+// accounts held by staff reporting to them, and accounts held by a KAM/SC
+// who has no Line Manager assigned yet. A manager's own lineManagerId is
+// also null, which is why the role has to be checked as well — without it
+// every Line Manager could read every other manager's book.
+const lineManagerScope = (lmId: string) => ({
+  OR: [
+    { handledById: lmId },
+    { handledBy: { lineManagerId: lmId } },
+    { handledBy: { lineManagerId: null, role: { name: { in: ['KAM', 'SALES_COORDINATOR'] as any } } } },
+  ],
+});
 
 // Mirrors exactly what the dashboard's "Action Required Queue" used to
 // compute in the browser, so the numbers and rows are identical.
@@ -138,10 +177,7 @@ const buildCustomerWhere = (
   if (requester.role === 'KAM') {
     and.push({ handledById: requester.id });
   } else if (requester.role === 'LINE_MANAGER') {
-    // Staff with no Line Manager assigned yet are visible to every Line
-    // Manager — the same fallback the notification layer uses, so a record
-    // can never become invisible (and therefore unactionable) to everyone.
-    and.push({ handledBy: { OR: [{ lineManagerId: requester.id }, { lineManagerId: null }] } });
+    and.push(lineManagerScope(requester.id));
   }
 
   if (filters.status) and.push({ status: filters.status });
@@ -203,6 +239,9 @@ export const listCustomers = async (
         managingPartnerName: true, managingPartnerDesignation: true,
         binNumber: true, tinNumber: true, preferredCarrier: true, natureOfBusiness: true,
         gainType: true, financeMode: true, area: true, zone: true,
+        // Needed by the ownership card and the workflow-stage label; without
+        // it a list-sourced record fell back to the wrong role.
+        createdByRole: true, rateSource: true,
         revision: true, status: true, accountProfileType: true,
         provisionalCreatedAt: true, provisionalExpiryDate: true, provisionalExtensionDays: true,
         followUpDate: true, followUpNote: true,
@@ -255,7 +294,7 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       history: { orderBy: { createdAt: 'desc' } },
       documents: { orderBy: { createdAt: 'desc' } },
       extensionRequests: true,
-      handledBy: { select: { id: true, name: true, lineManagerId: true } },
+      handledBy: { select: { id: true, name: true, lineManagerId: true, role: { select: { name: true } } } },
       // Who raised the recommendation in the first place. It survives every
       // later handover, which is exactly why it is worth showing.
       recommendedBy: { select: { id: true, name: true } },
@@ -281,12 +320,16 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
-  if (
-    requester.role === 'LINE_MANAGER' &&
-    customer.handledBy?.lineManagerId != null &&
-    customer.handledBy.lineManagerId !== requester.id
-  ) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
+  if (requester.role === 'LINE_MANAGER') {
+    const isOwn = customer.handledById === requester.id;
+    const isMyTeam = customer.handledBy?.lineManagerId === requester.id;
+    const isUnassigned = isUnassignedSubordinate(
+      customer.handledBy?.lineManagerId,
+      customer.handledBy?.role?.name,
+    );
+    if (!isOwn && !isMyTeam && !isUnassigned) {
+      throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
+    }
   }
   return { ...customer, pendingApproverName };
 };
@@ -305,6 +348,16 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
     assertValidCreditPeriodValue(clean.creditPeriodDays);
   }
   const barcode = await generateUniqueBarcode();
+  // The wizard's "extended credit period" request was accepted by the schema
+  // and then silently dropped, so a Line Manager never saw that the KAM had
+  // asked for longer terms. It is recorded the same way the approval panel
+  // records it: any term beyond the default is an extended one.
+  const requestedPeriodDays = Number(clean.creditPeriodDays || DEFAULT_CREDIT_PERIOD_DAYS);
+  const isExtendedPeriod =
+    !isCash && Number.isFinite(requestedPeriodDays) && requestedPeriodDays > DEFAULT_CREDIT_PERIOD_DAYS;
+  // Nested rows were never sanitised — only the top-level fields were.
+  const cleanContacts = (data.contacts || []).map((c: any) => sanitizeAndEscape(c));
+  const cleanShipping = (data.shippingDetails || []).map((s: any) => sanitizeAndEscape(s));
   const selfApproves = SELF_APPROVING_ROLES.includes(creatorRole);
   const rateSource = creatorRole === 'LINE_MANAGER' ? 'LINE_MANAGER' : 'HEAD_OF_DEPARTMENT';
   // Whoever set the rate at creation still does not push it at the customer:
@@ -350,15 +403,15 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
       accountMode: clean.accountMode,
       accountType: clean.accountType,
       creditLimitTk: isCash ? null : clean.creditLimitTk,
-      creditPeriodDays: isCash ? null : clean.creditPeriodDays || '15',
-      creditPeriodExtendedByLM: false,
+      creditPeriodDays: isCash ? null : clean.creditPeriodDays || String(DEFAULT_CREDIT_PERIOD_DAYS),
+      creditPeriodExtendedByLM: isExtendedPeriod,
       proposedRate: clean.proposedRate,
       recNote: clean.recNote,
       ...(selfApproves ? {} : { status: CUSTOMER_STATUS.PENDING_RATE_APPROVAL as any }),
       recommendedById: kamId,
       handledById: kamId,
-      contacts: { create: data.contacts },
-      shippingDetails: { create: data.shippingDetails },
+      contacts: { create: cleanContacts },
+      shippingDetails: { create: cleanShipping },
       history: {
         create: selfApproves
           ? {
@@ -1377,7 +1430,7 @@ export const deriveFollowUps = async (requester: { id: string; role: string }) =
   if (requester.role === 'KAM') {
     where.handledById = requester.id;
   } else if (requester.role === 'LINE_MANAGER') {
-    where.handledBy = { OR: [{ lineManagerId: requester.id }, { lineManagerId: null }] };
+    where.AND = [lineManagerScope(requester.id)];
   }
   // HEAD_OF_DEPARTMENT and SUPER_ADMIN see the whole department, unfiltered.
 
@@ -1413,10 +1466,14 @@ export const deriveFollowUps = async (requester: { id: string; role: string }) =
 
 export const updateFinalProfile = async (customerId: string, data: any, actorId: string, actorRole: string) => {
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
-  const clean = sanitizeAndEscape(data);
+  // Every blur-autosave used to mark the whole profile complete, so a single
+  // typed character made the read-only "Final Account Profile Data" view
+  // start showing a half-filled record. Only an explicit submit does that.
+  const { markComplete, ...fields } = data || {};
+  const clean = sanitizeAndEscape(fields);
   const updated = await prisma.customer.update({
     where: { id: customerId },
-    data: { ...clean, finalProfileCompleted: true },
+    data: { ...clean, ...(markComplete ? { finalProfileCompleted: true } : {}) },
     include: CUSTOMER_WITH_HANDLER,
   });
   await logAudit({
@@ -2228,17 +2285,21 @@ export const listCorrespondence = async (customerId: string, requester: { id: st
 export const listCustomerEditHistory = async (customerId: string, requester: { id: string; role: string }) => {
   const customer = await prisma.customer.findUniqueOrThrow({
     where: { id: customerId },
-    include: { handledBy: { select: { lineManagerId: true } } },
+    include: { handledBy: { select: { lineManagerId: true, role: { select: { name: true } } } } },
   });
   if (requester.role === 'KAM' && customer.handledById !== requester.id) {
     throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer isn\'t assigned to you, so you can\'t view this record.' };
   }
-  if (
-    requester.role === 'LINE_MANAGER' &&
-    customer.handledBy?.lineManagerId != null &&
-    customer.handledBy.lineManagerId !== requester.id
-  ) {
-    throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
+  if (requester.role === 'LINE_MANAGER') {
+    const isOwn = customer.handledById === requester.id;
+    const isMyTeam = customer.handledBy?.lineManagerId === requester.id;
+    const isUnassigned = isUnassignedSubordinate(
+      customer.handledBy?.lineManagerId,
+      (customer.handledBy as any)?.role?.name,
+    );
+    if (!isOwn && !isMyTeam && !isUnassigned) {
+      throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
+    }
   }
   // AuditLog is never purged, so this is the complete, permanent edit
   // record for the customer — not a recent-only window.

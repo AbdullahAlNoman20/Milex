@@ -36,3 +36,23 @@ body {
 body {
   overflow-wrap: break-word;
 }
+
+/* Every page is built inside one of these fixed measurements, which on a 4K
+   display left two thirds of the screen as empty margin. Widening them here
+   keeps each page's own layout untouched while letting it use the room it
+   has been given. */
+@media (min-width: 1921px) {
+  .max-w-\[1440px\] { max-width: 1800px; }
+  .max-w-\[1400px\] { max-width: 1760px; }
+  .max-w-7xl { max-width: 1680px; }
+  .max-w-5xl { max-width: 1280px; }
+  .max-w-\[1100px\] { max-width: 1400px; }
+}
+
+@media (min-width: 2560px) {
+  .max-w-\[1440px\] { max-width: 2200px; }
+  .max-w-\[1400px\] { max-width: 2160px; }
+  .max-w-7xl { max-width: 2040px; }
+  .max-w-5xl { max-width: 1520px; }
+  .max-w-\[1100px\] { max-width: 1680px; }
+}

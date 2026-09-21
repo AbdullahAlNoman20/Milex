@@ -5,7 +5,6 @@ import { useToast } from "../../../../Components/hooks/useToast";
 import { listKams } from "../services/teamService";
 import { listPlansForKamId } from "../services/weeklyPlanService";
 import { listReportsForKam } from "../services/dailyReportService";
-import { humanizeStatus } from "../../../../Components/utils/format";
 import Loader from "../../../../Components/Shared/Loader";
 import Pagination from "../../../../Components/Shared/Pagination";
 import { downloadCsv } from "../../../../Components/utils/csv";
@@ -600,15 +599,9 @@ const TeamReportsPage = () => {
                                   <p className="text-[10px] text-slate-400">{totalVisits} visit(s)</p>
                                 </div>
                               </div>
-                              <StatusPill status={humanizeStatus(p.status)} />
                             </button>
                             {isExpanded && (
                               <div className="p-4 border-t border-slate-100 space-y-2">
-                                {p.lmComments && (
-                                  <p className="text-xs text-red-600">
-                                    <strong>Feedback:</strong> {p.lmComments}
-                                  </p>
-                                )}
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left border-collapse min-w-[560px]">
                                     <thead>

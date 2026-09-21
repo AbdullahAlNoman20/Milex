@@ -48,6 +48,11 @@ router.get(
   requirePermission(PERMISSIONS.MANAGE_USERS, PERMISSIONS.FULL_SYSTEM_CONTROL),
   controller.listLineManagersHandler,
 );
+router.get(
+  "/stats",
+  requirePermission(PERMISSIONS.MANAGE_USERS, PERMISSIONS.FULL_SYSTEM_CONTROL),
+  controller.getUserStatsHandler,
+);
 
 // IMPORTANT: /me/activity must be registered before /:id/activity, otherwise
 // Express matches "me" as an :id param on the wildcard route below.

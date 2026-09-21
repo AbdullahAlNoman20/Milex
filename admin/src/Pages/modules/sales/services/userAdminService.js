@@ -1,8 +1,32 @@
 // admin/src/Pages/modules/sales/services/userAdminService.js
 import { request } from '../../../../Components/services/api';
 
-export const listAllUsers = async (page = 1, pageSize = 5000) => {
-  const { data } = await request(`/users?page=${page}&pageSize=${pageSize}`);
+// Server-side paged, searched and filtered. The console used to pull the
+// whole directory in one request, which put a hard ceiling on how many
+// accounts could ever be seen.
+export const listAllUsers = async ({
+  page = 1,
+  pageSize = 10,
+  search = '',
+  role = '',
+  status = '',
+} = {}) => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (search.trim()) params.set('search', search.trim().slice(0, 150));
+  if (role) params.set('role', role);
+  if (status) params.set('status', status);
+  const { data } = await request(`/users?${params.toString()}`);
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    total: data.total || 0,
+    page: data.page || page,
+    pageSize: data.pageSize || pageSize,
+    totalPages: Math.max(1, data.totalPages || 1),
+  };
+};
+
+export const getUserStats = async () => {
+  const { data } = await request('/users/stats');
   return data;
 };
 

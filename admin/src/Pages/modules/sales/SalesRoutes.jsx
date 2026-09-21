@@ -11,7 +11,6 @@ import CustomerDetail from './pages/CustomerDetail';
 import NewRecommendationWizard from './roles/KAM/NewRecommendationWizard';
 import WeeklySalesPlan from './roles/KAM/WeeklySalesPlan';
 import DailyVisitingReport from './roles/KAM/DailyVisitingReport';
-import WeeklyPlanReviewList from './roles/LineManager/WeeklyPlanReviewList';
 import FollowUpReminderPanel from './roles/LineManager/FollowUpReminderPanel';
 import TeamReportsPage from './pages/TeamReportsPage';
 import MyActivityPage from './pages/MyActivityPage';
@@ -47,14 +46,9 @@ const SalesRoutes = [
     ),
   },
   {
-    path: 'weekly-plans/review',
-    element: (
-      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT]}>
-        <WeeklyPlanReviewList />
-      </RoleRoute>
-    ),
-  },
-  {
+    // Weekly plans are no longer reviewed or approved — a Line Manager reads
+    // them through Team Reports instead, so the review screen has been
+    // withdrawn rather than left routed and permanently empty.
     path: 'daily-reports',
     element: (
       <RoleRoute allowedRoles={[ROLES.KAM]}>

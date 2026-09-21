@@ -15,41 +15,35 @@ const ACTIVITY_KEEP_PER_USER = 100;
 // Edit-history actions are deliberately excluded from the trim: the customer
 // Edit History view reads those same AuditLog rows, and that record must stay
 // complete for as long as the customer exists.
+// Two statements instead of four per user. The previous version issued a
+// select and a delete for every person in the system on both tables, so the
+// nightly sweep's cost grew with headcount rather than with the amount of
+// data actually being removed.
 const trimActivityLogs = async () => {
-  let removedLogins = 0;
-  let removedActions = 0;
+  const removedLogins = await prisma.$executeRaw`
+    DELETE FROM "LoginLog" l
+    USING (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY "userId" ORDER BY "createdAt" DESC) AS rn
+      FROM "LoginLog"
+      WHERE "userId" IS NOT NULL
+    ) ranked
+    WHERE l.id = ranked.id AND ranked.rn > ${ACTIVITY_KEEP_PER_USER}
+  `;
 
-  const users = await prisma.user.findMany({ select: { id: true } });
+  // Edit-history actions are deliberately excluded: the customer Edit History
+  // view reads those same rows and must stay complete for as long as the
+  // customer exists.
+  const removedActions = await prisma.$executeRaw`
+    DELETE FROM "AuditLog" a
+    USING (
+      SELECT id, ROW_NUMBER() OVER (PARTITION BY "actorId" ORDER BY "createdAt" DESC) AS rn
+      FROM "AuditLog"
+      WHERE "actorId" IS NOT NULL AND NOT ("action" = ANY(${EDIT_HISTORY_ACTIONS}))
+    ) ranked
+    WHERE a.id = ranked.id AND ranked.rn > ${ACTIVITY_KEEP_PER_USER}
+  `;
 
-  for (const { id } of users) {
-    // eslint-disable-next-line no-await-in-loop
-    const staleLogins = await prisma.loginLog.findMany({
-      where: { userId: id },
-      orderBy: { createdAt: "desc" },
-      skip: ACTIVITY_KEEP_PER_USER,
-      select: { id: true },
-    });
-    if (staleLogins.length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const r = await prisma.loginLog.deleteMany({ where: { id: { in: staleLogins.map((x) => x.id) } } });
-      removedLogins += r.count;
-    }
-
-    // eslint-disable-next-line no-await-in-loop
-    const staleActions = await prisma.auditLog.findMany({
-      where: { actorId: id, action: { notIn: EDIT_HISTORY_ACTIONS } },
-      orderBy: { createdAt: "desc" },
-      skip: ACTIVITY_KEEP_PER_USER,
-      select: { id: true },
-    });
-    if (staleActions.length > 0) {
-      // eslint-disable-next-line no-await-in-loop
-      const r = await prisma.auditLog.deleteMany({ where: { id: { in: staleActions.map((x) => x.id) } } });
-      removedActions += r.count;
-    }
-  }
-
-  return { removedLogins, removedActions };
+  return { removedLogins: Number(removedLogins), removedActions: Number(removedActions) };
 };
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -122,9 +116,21 @@ export const runRetentionCleanup = async () => {
     const dir = path.resolve(env.UPLOAD_DIR);
     const names = await fs.readdir(dir);
 
-    const stats = await Promise.all(
-      names.map(async (name) => ({ name, stat: await fs.stat(path.join(dir, name)).catch(() => null) }))
-    );
+    // Batched rather than one enormous Promise.all: a directory with tens of
+    // thousands of files would otherwise open that many file handles at once
+    // and exhaust the process limit.
+    const stats: { name: string; stat: import('fs').Stats | null }[] = [];
+    const STAT_BATCH = 200;
+    for (let i = 0; i < names.length; i += STAT_BATCH) {
+      // eslint-disable-next-line no-await-in-loop
+      const chunk = await Promise.all(
+        names.slice(i, i + STAT_BATCH).map(async (name) => ({
+          name,
+          stat: await fs.stat(path.join(dir, name)).catch(() => null),
+        }))
+      );
+      stats.push(...chunk);
+    }
     // Only files older than a day, so an in-flight upload is never deleted
     // out from under the request that is creating it.
     const candidates = stats

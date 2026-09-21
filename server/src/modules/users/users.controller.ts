@@ -2,8 +2,17 @@
 import { Request, Response, NextFunction } from 'express';
 import * as usersService from './users.service';
 import { sendSuccess, sendError } from '../../common/utils/apiResponse.util';
-import { asString } from '../../common/utils/requestParams.util';
+import { asString, asOptionalString } from '../../common/utils/requestParams.util';
 import { assertLineManagerOwnsKam } from '../../common/utils/scopeGuard.util';
+
+const ASSIGNABLE_ROLE_NAMES = [
+  'KAM',
+  'SALES_COORDINATOR',
+  'LINE_MANAGER',
+  'HEAD_OF_DEPARTMENT',
+  'SUPER_ADMIN',
+  'CUSTOMER',
+];
 
 export const listMyTeamHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -56,11 +65,27 @@ export const setUserPasswordHandler = async (req: Request, res: Response, next: 
 export const listUsersHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    // The admin console pages client-side over the whole directory, so a
-    // hard 100 cap here silently hid every user past the first hundred.
-    const pageSize = Math.min(5000, Math.max(1, Number(req.query.pageSize) || 1000));
-    const result = await usersService.listUsers(page, pageSize);
+    // Paged in the database now, so there is no ceiling on how many accounts
+    // the console can reach — only on how many travel per request.
+    const pageSize = Math.min(500, Math.max(1, Number(req.query.pageSize) || 10));
+    const roleFilter = asOptionalString(req.query.role);
+    const statusFilter = asOptionalString(req.query.status);
+    const result = await usersService.listUsers(page, pageSize, {
+      search: asOptionalString(req.query.search),
+      role: roleFilter && ASSIGNABLE_ROLE_NAMES.includes(roleFilter) ? roleFilter : undefined,
+      status: statusFilter === 'active' || statusFilter === 'inactive' ? statusFilter : undefined,
+    });
     return sendSuccess(res, result);
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const getUserStatsHandler = async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stats = await usersService.getUserStats();
+    return sendSuccess(res, stats);
   } catch (err: any) {
     if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
     next(err);

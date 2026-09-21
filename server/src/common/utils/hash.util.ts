@@ -12,6 +12,8 @@ export const verifyPassword = (plain: string, hash: string): Promise<boolean> =>
 export const hashOpaqueToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
 
+// Kept for the password-reset flow, which is switched off until an email
+// provider is connected. Nothing calls it today.
 export const generateOpaqueToken = (): string => crypto.randomBytes(48).toString('hex');
 
 const PASSWORD_POLICY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;

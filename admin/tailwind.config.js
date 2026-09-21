@@ -17,6 +17,11 @@ export default {
       lg: '1024px',
       xl: '1280px',
       '2xl': '1536px',
+      // Above this the fixed max-widths below leave most of the screen empty,
+      // so the page containers widen instead of staying pinned to a laptop
+      // measurement.
+      '3xl': '1921px',
+      '4xl': '2560px',
     },
     extend: {
       colors: {

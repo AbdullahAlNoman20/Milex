@@ -208,7 +208,15 @@ export const deleteCustomerHandler = async (req: Request, res: Response, next: N
 };
 
 export const reassignCustomerHandler = wrap((req) =>
-  customersService.reassignCustomer(asString(req.params.id), req.body.newKamId, req.user!.id, req.user!.role)
+  // The handover note was validated and then never passed on, so every
+  // CustomerAssignment row was stored with note = null.
+  customersService.reassignCustomer(
+    asString(req.params.id),
+    req.body.newKamId,
+    req.user!.id,
+    req.user!.role,
+    req.body.note
+  )
 );
 export const reapproveRateHandler = wrap((req) =>
   customersService.reapproveRateAfterRejection(asString(req.params.id), req.body.approvedRate, req.body.lmNote, req.user!.id, req.user!.role)

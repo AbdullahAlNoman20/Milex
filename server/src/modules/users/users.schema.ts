@@ -17,7 +17,6 @@ export const createUserSchema = z
     }),
     branchId: z.string().max(100).optional(),
     lineManagerId: z.string().max(100).optional().nullable(),
-    sendWelcomeEmail: z.boolean().optional(),
   })
   .strict();
 

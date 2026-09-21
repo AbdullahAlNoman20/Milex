@@ -9,7 +9,13 @@ const BACKUP_VERSION = 1;
 // Guard so a backup can never exhaust server memory: past this, the files
 // are listed but not embedded, and the admin is told to copy the upload
 // directory separately.
-const MAX_EMBEDDED_FILES_BYTES = 200 * 1024 * 1024;
+// Base64 inflates by roughly a third, and JSON.stringify then holds a second
+// copy of the whole document. At 200MB that peaked well past the process's
+// own memory ceiling and PM2 restarted the server mid-backup. Anything beyond
+// this is listed in the manifest but not embedded, and the admin is told to
+// copy the upload directory separately.
+const MAX_EMBEDDED_FILES_BYTES = 80 * 1024 * 1024;
+const STAT_BATCH = 200;
 
 export interface BackupFile {
   storageKey: string;
@@ -24,19 +30,23 @@ export const getStorageStats = async () => {
   let totalBytes = 0;
   try {
     const names = await fs.readdir(uploadDir());
-    for (const name of names) {
+    for (let i = 0; i < names.length; i += STAT_BATCH) {
       // eslint-disable-next-line no-await-in-loop
-      const stat = await fs.stat(path.join(uploadDir(), name)).catch(() => null);
-      if (stat?.isFile()) {
-        fileCount += 1;
-        totalBytes += stat.size;
-      }
+      const chunk = await Promise.all(
+        names.slice(i, i + STAT_BATCH).map((name) => fs.stat(path.join(uploadDir(), name)).catch(() => null))
+      );
+      chunk.forEach((stat) => {
+        if (stat?.isFile()) {
+          fileCount += 1;
+          totalBytes += stat.size;
+        }
+      });
     }
   } catch {
     /* directory not created yet */
   }
 
-  const [customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications, rateRequests, correspondence] = await Promise.all([
+  const [customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications, rateRequests, correspondence, assignments] = await Promise.all([
     prisma.customer.count(),
     prisma.user.count(),
     prisma.onboardingDocument.count(),
@@ -46,11 +56,12 @@ export const getStorageStats = async () => {
     prisma.notification.count(),
     prisma.rateRequest.count(),
     prisma.customerCorrespondence.count(),
+    prisma.customerAssignment.count(),
   ]);
 
   return {
     files: { count: fileCount, totalBytes },
-    records: { customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications, rateRequests, correspondence },
+    records: { customers, users, documents, weeklyPlans, dailyReports, auditLogs, notifications, rateRequests, correspondence, assignments },
     generatedAt: new Date().toISOString(),
   };
 };
@@ -64,7 +75,7 @@ export const createBackup = async (includeFiles: boolean, actorId: string) => {
     roles, permissions, rolePermissions, users, customers, contacts, shippingDetails,
     serviceProviders, onboardingDocuments, timeExtensionRequests, fieldChangeRequests,
     customerHistory, weeklyPlans, visits, dailyReports, reportVisits, notifications, auditLogs, loginLogs,
-    rateRequests, correspondence,
+    rateRequests, correspondence, assignments,
   ] = await Promise.all([
     prisma.role.findMany(),
     prisma.permission.findMany(),
@@ -90,6 +101,9 @@ export const createBackup = async (includeFiles: boolean, actorId: string) => {
     prisma.loginLog.findMany({ orderBy: { createdAt: 'desc' } }),
     prisma.rateRequest.findMany(),
     prisma.customerCorrespondence.findMany(),
+    // The chain of custody was missing from the snapshot entirely, so a
+    // restore permanently erased every handover the business had recorded.
+    prisma.customerAssignment.findMany(),
   ]);
 
   const files: BackupFile[] = [];
@@ -128,7 +142,7 @@ export const createBackup = async (includeFiles: boolean, actorId: string) => {
       roles, permissions, rolePermissions, users, customers, contacts, shippingDetails,
       serviceProviders, onboardingDocuments, timeExtensionRequests, fieldChangeRequests,
       customerHistory, weeklyPlans, visits, dailyReports, reportVisits, notifications, auditLogs, loginLogs,
-      rateRequests, correspondence,
+      rateRequests, correspondence, assignments,
     },
     files,
   };
@@ -164,6 +178,7 @@ export const restoreBackup = async (payload: any, confirm: string, actorId: stri
       await tx.weeklyPlan.deleteMany({});
       await tx.customerHistoryEntry.deleteMany({});
       await tx.customerCorrespondence.deleteMany({});
+      await tx.customerAssignment.deleteMany({});
       await tx.rateRequest.deleteMany({});
       await tx.fieldChangeRequest.deleteMany({});
       await tx.timeExtensionRequest.deleteMany({});
@@ -208,6 +223,8 @@ export const restoreBackup = async (payload: any, confirm: string, actorId: stri
       await tx.customerHistoryEntry.createMany({ data: d.customerHistory || [], skipDuplicates: true });
       await tx.rateRequest.createMany({ data: d.rateRequests || [], skipDuplicates: true });
       await tx.customerCorrespondence.createMany({ data: d.correspondence || [], skipDuplicates: true });
+      await tx.customerAssignment.createMany({ data: d.assignments || [], skipDuplicates: true });
+      await tx.customerAssignment.createMany({ data: d.assignments || [], skipDuplicates: true });
       await tx.weeklyPlan.createMany({ data: d.weeklyPlans || [], skipDuplicates: true });
       await tx.visit.createMany({ data: d.visits || [], skipDuplicates: true });
       await tx.dailyReport.createMany({ data: d.dailyReports || [], skipDuplicates: true });
