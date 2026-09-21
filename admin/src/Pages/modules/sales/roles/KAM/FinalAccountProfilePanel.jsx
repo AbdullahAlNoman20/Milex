@@ -3,7 +3,7 @@ import { useState, useCallback, useRef } from 'react';
 import { ClipboardEdit, FileCheck, Loader2 } from 'lucide-react';
 import { updateFinalProfile, setAccountConfigMode, submitFinalOnboardingRegular, submitFinalOnboarding } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
-import { GAIN_TYPE_OPTIONS, DESIGNATION_OPTIONS, FINANCE_MODE_OPTIONS } from '../../constants/formOptions';
+import { GAIN_TYPE_OPTIONS, DESIGNATION_OPTIONS } from '../../constants/formOptions';
 import DocumentUploadPanel from './DocumentUploadPanel';
 
 // Four of these answers were already given on the recommendation, across
@@ -76,9 +76,6 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
     binNumber: customer.binNumber || '',
     tinNumber: customer.tinNumber || '',
     gainType: customer.gainType || '',
-    // The printed Account Profile has always had an Ex / FR row, but nothing
-    // ever sent a value for it, so it printed blank on every form.
-    financeMode: customer.financeMode || '',
     area: customer.area || '',
     zone: customer.zone || '',
     specialInstructions: customer.specialInstructions || '',
@@ -233,21 +230,15 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
       {/* "Mode" used to sit here as a second, separate answer, which only
           invited the question of how it related to Account Mode above. There
           is one mode on an account, and it comes from the recommendation. */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">Type</label>
-          <select className="w-full border border-slate-300 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-purple-500" value={form.gainType} onChange={(e) => setField('gainType', e.target.value)} onBlur={() => handleFieldBlur('gainType')}>
-            <option value="">Select...</option>
-            {GAIN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1.5">Mode (Ex / FR)</label>
-          <select className="w-full border border-slate-300 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-purple-500" value={form.financeMode} onChange={(e) => setField('financeMode', e.target.value)} onBlur={() => handleFieldBlur('financeMode')}>
-            <option value="">Select...</option>
-            {FINANCE_MODE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
+      {/* There is one mode on an account and it comes from the recommendation
+          (Account Mode above). A second Ex / FR answer only ever invited the
+          question of how the two related. */}
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1.5">Type</label>
+        <select className="w-full border border-slate-300 p-2.5 rounded-lg text-sm bg-white outline-none focus:border-purple-500" value={form.gainType} onChange={(e) => setField('gainType', e.target.value)} onBlur={() => handleFieldBlur('gainType')}>
+          <option value="">Select...</option>
+          {GAIN_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
       <div>
         <label className="block text-xs font-bold text-slate-700 mb-1.5">Special Instructions (if any)</label>

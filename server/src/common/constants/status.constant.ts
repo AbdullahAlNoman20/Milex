@@ -24,6 +24,19 @@ export const CUSTOMER_STATUS = Object.freeze({
 
 export type CustomerStatusKey = keyof typeof CUSTOMER_STATUS;
 
+// A live customer asking for new terms runs the same desks as the original
+// recommendation, but the account itself never leaves ACTIVE_ACCOUNT — only
+// the rate is in question. This says which desk it is sitting on.
+export const RATE_PROCESS_STAGE = Object.freeze({
+  PENDING_LM_RATE: 'PENDING_LM_RATE',
+  PENDING_HOD_RATE: 'PENDING_HOD_RATE',
+  // The person who holds the account decides whether the new rate goes to
+  // the customer or goes back for a better one.
+  PENDING_OWNER_REVIEW: 'PENDING_OWNER_REVIEW',
+  PENDING_OFFER: 'PENDING_OFFER',
+  AWAITING_FEEDBACK: 'AWAITING_FEEDBACK',
+} as const);
+
 // Allowed transitions: fromStatus -> [toStatus...]. Enforced centrally so no
 // service ever does a raw `status = x` write.
 export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {

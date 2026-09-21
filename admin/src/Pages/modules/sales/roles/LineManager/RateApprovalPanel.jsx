@@ -10,6 +10,7 @@ import { getDocumentSignedUrl, escalateRateToHod } from '../../services/customer
 import { STATUS, CREDIT_RULES } from '../../constants/salesStatus';
 import { isRequired, isValidCreditPeriod } from '../../../../../Components/utils/validators';
 import { sanitizeText } from '../../../../../Components/utils/sanitize';
+import { humanizeStatus } from '../../../../../Components/utils/format';
 
 // Two ways forward, and only two: set the rate here, or hand the decision to
 // the Head of Department. They are tabs rather than two buttons on one form
@@ -64,7 +65,7 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
     }
     const ok = await confirm({
       title: 'Set this rate?',
-      message: `${customer.accountName} will be quoted ${approvedRate.trim()}. It goes to the KAM, who decides whether to take it to the customer or ask for a better one.`,
+      message: ``,
       confirmLabel: 'Set rate',
     });
     if (!ok) return;
@@ -122,27 +123,47 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
     <div className="bg-white rounded-xl shadow-sm border border-emerald-600 p-6 space-y-4">
       <h3 className="font-bold text-slate-900 text-base">Rate Decision</h3>
 
-      {customer.rateRef && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-            KAM'S PROPOSED RATE
+      {/* Shown unconditionally. It used to be hidden behind `customer.rateRef`,
+          which is only written once a rate has been approved — so on the very
+          request this panel exists to answer, the proposed figure and the
+          supporting document the KAM attached were both invisible. */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+          KAM'S PROPOSED RATE
+        </p>
+        <p className="font-bold text-sm text-slate-800 mb-2 break-words">
+          {customer.proposedRate || '—'}
+        </p>
+        <button
+          type="button"
+          onClick={handleOpenRateDocument}
+          disabled={isOpeningRateDoc}
+          className="text-xs text-blue-600 font-bold flex items-center justify-center w-full hover:underline disabled:opacity-50"
+        >
+          {isOpeningRateDoc ? (
+            <Loader2 size={14} className="mr-1 animate-spin" />
+          ) : (
+            <FileOutput size={14} className="mr-1" />
+          )}
+          {rateDocument ? 'Open Attached Rate Document' : 'No Rate Document Attached'}
+        </button>
+      </div>
+
+      {/* Why it came back. Written only into the history trail before, so the
+          person being asked to set a new rate could not see what was asked. */}
+      {customer.pendingRateRequest?.reason && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 mb-1">
+            {customer.pendingRateRequest.requestedByName || 'The account holder'}
+            {customer.pendingRateRequest.requestedByRole
+              ? ` (${humanizeStatus(customer.pendingRateRequest.requestedByRole)})`
+              : ''}{' '}
+            asked for a better rate
           </p>
-          <p className="font-bold text-sm text-slate-800 mb-2 break-words">
-            {customer.proposedRate || '—'}
+          <p className="text-xs text-slate-700 break-words">{customer.pendingRateRequest.reason}</p>
+          <p className="text-[10px] text-slate-400 mt-1">
+            {new Date(customer.pendingRateRequest.createdAt).toLocaleString()}
           </p>
-          <button
-            type="button"
-            onClick={handleOpenRateDocument}
-            disabled={isOpeningRateDoc}
-            className="text-xs text-blue-600 font-bold flex items-center justify-center w-full hover:underline disabled:opacity-50"
-          >
-            {isOpeningRateDoc ? (
-              <Loader2 size={14} className="mr-1 animate-spin" />
-            ) : (
-              <FileOutput size={14} className="mr-1" />
-            )}
-            {rateDocument ? 'Open Attached Rate Document' : 'No Rate Document Attached'}
-          </button>
         </div>
       )}
 

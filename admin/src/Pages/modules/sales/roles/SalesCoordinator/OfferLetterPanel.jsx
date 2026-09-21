@@ -50,7 +50,7 @@ const OfferLetterPanel = ({ customer }) => {
     const ok = await confirm({
       title: isResend ? 'Send the revised offer letter?' : 'Send the offer letter?',
       message:
-        'This records the letter as sent and moves the customer on to their feedback. Use Print Only first if you need a copy to send.',
+        '',
       confirmLabel: 'Record as sent',
     });
     if (!ok) return;

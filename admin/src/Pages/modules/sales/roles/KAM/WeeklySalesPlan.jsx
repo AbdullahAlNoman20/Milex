@@ -325,8 +325,20 @@ const WeeklySalesPlan = () => {
   // limited to rows that had not been written yet, so a visit added by mistake
   // stayed on the plan for good. A saved row is confirmed first because
   // removing it also detaches whatever the Daily Report recorded against it.
+  // A visit that has already been reported on is a record of what happened,
+  // not a plan — the server refuses to change it either way, so the controls
+  // are withheld rather than offering an action that silently does nothing.
+  const isReported = (v) => v.completed === true || v.completed === false;
+
   const removeVisit = async (section, visit) => {
     const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
+    if (isReported(visit)) {
+      return showToast(
+        "This visit has already been completed or skipped in a Daily Visiting Report, so it can't be removed.",
+        "warning",
+        6000
+      );
+    }
     if (!isNewRow(visit.id)) {
       const ok = await confirm({
         title: "Remove this visit?",
@@ -572,7 +584,8 @@ const sanitizeVisit = (v) => ({
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB]">
                   {activeVisits.map((v) => {
-                    const locked = isReadOnly || (!isNewRow(v.id) && !editingRowIds.has(v.id));
+                    const reported = isReported(v);
+                    const locked = isReadOnly || reported || (!isNewRow(v.id) && !editingRowIds.has(v.id));
                     return (
                       <tr key={v.id} className="align-top">
                         <td className="py-2.5 px-4">
@@ -632,7 +645,7 @@ const sanitizeVisit = (v) => ({
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          {!isReadOnly && locked && (
+                          {!isReadOnly && !reported && locked && (
                             <button
                               type="button"
                               onClick={() => unlockRow(v.id)}
@@ -642,7 +655,7 @@ const sanitizeVisit = (v) => ({
                               <Pencil size={13} />
                             </button>
                           )}
-                          {!isReadOnly && (
+                          {!isReadOnly && !reported && (
                             <button
                               type="button"
                               onClick={() => removeVisit(activeTab, v)}
@@ -652,7 +665,11 @@ const sanitizeVisit = (v) => ({
                               <Trash2 size={13} />
                             </button>
                           )}
-                          {isReadOnly && <span className="text-slate-300 text-xs">—</span>}
+                          {(isReadOnly || reported) && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                              <Lock size={11} /> {reported ? 'Reported' : '—'}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -667,8 +684,8 @@ const sanitizeVisit = (v) => ({
                 <VisitRowCard
                   key={v.id}
                   v={v}
-                  readOnly={isReadOnly}
-                  locked={isReadOnly || (!isNewRow(v.id) && !editingRowIds.has(v.id))}
+                  readOnly={isReadOnly || isReported(v)}
+                  locked={isReadOnly || isReported(v) || (!isNewRow(v.id) && !editingRowIds.has(v.id))}
                   onChange={(updated) => updateVisit(activeTab, v.id, updated)}
                   onRemove={(visit) => removeVisit(activeTab, visit)}
                   onUnlock={unlockRow}

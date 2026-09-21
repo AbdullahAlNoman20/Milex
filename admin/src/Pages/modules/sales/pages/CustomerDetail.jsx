@@ -14,7 +14,7 @@ import {
 import { useSales } from "../hooks/useSales";
 import { useAuth } from "../../../../Components/hooks/useAuth";
 import { ROLES } from "../../../../Components/constants/roles";
-import { STATUS, getWorkflowStageLabel } from "../constants/salesStatus";
+import { STATUS, RATE_PROCESS_STAGE, getWorkflowStageLabel } from "../constants/salesStatus";
 import { buildRateRefs, rateSourceLabel } from "../../../../Components/utils/format";
 
 // The stored values are IB / OB / BOTH, which is what was being printed on
@@ -172,12 +172,12 @@ const CustomerDetail = () => {
   const restrictToRecommendationFields = !isLmOrAdmin && canDirectEdit;
   const canEditProfile =
     role === ROLES.SALES_COORDINATOR || role === ROLES.KAM || isLmOrAdmin;
-  const isProvisionalActive =
-    customer.accountProfileType === "PROVISIONAL" &&
-    customer.status === STATUS.PROVISIONAL_ACTIVE;
-  const isProvisionalExpired =
-    customer.accountProfileType === "PROVISIONAL" &&
-    customer.status === STATUS.PROVISIONAL_EXPIRED;
+  // The document window is a status, not a profile type. Pairing the two
+  // meant a returned regular-mode onboarding — which sits in a provisional
+  // status but carries a regular profile type — matched neither, and the
+  // whole correction form disappeared with no way to submit again.
+  const isProvisionalActive = customer.status === STATUS.PROVISIONAL_ACTIVE;
+  const isProvisionalExpired = customer.status === STATUS.PROVISIONAL_EXPIRED;
   const canUploadDocs =
     isProvisionalActive && customer.offerAccepted && customer.agreementSent;
   // Only the Sales Coordinator files documents now; the KAM still sees the
@@ -188,15 +188,24 @@ const CustomerDetail = () => {
     // A live account normally has no pending step — unless a re-quote is
     // running, in which case the offer and feedback steps apply again.
     if (customer.status === STATUS.ACTIVE) {
-      if (!customer.rateProcessActive) return null;
-      if (role === ROLES.SALES_COORDINATOR || role === ROLES.SUPER_ADMIN) {
-        if (!customer.offerSent) return <OfferLetterPanel customer={customer} />;
+      const stage = customer.rateProcessStage;
+      // The rate desks are handled by the Rate panel in the sidebar; only the
+      // offer and the customer's answer belong here.
+      if (!stage) return null;
+      if (stage === RATE_PROCESS_STAGE.PENDING_OFFER) {
+        if (role === ROLES.SALES_COORDINATOR || role === ROLES.SUPER_ADMIN) {
+          return <OfferLetterPanel customer={customer} />;
+        }
+        return <Waiting>Waiting for the Sales Coordinator to send the offer letter</Waiting>;
+      }
+      if (stage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK) {
+        const owner = customer.handledById === currentUser?.id;
+        if ((owner || isSuperAdmin) && !customer.offerAccepted && !customer.offerRejected) {
+          return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
+        }
         return <Waiting>Awaiting the customer's answer on the new rate</Waiting>;
       }
-      if (customer.offerSent && !customer.offerAccepted && !customer.offerRejected) {
-        return <InfoUpdateRequestPanel customer={customer} mode="offer-feedback" />;
-      }
-      return <Waiting>Waiting for the offer letter to be sent</Waiting>;
+      return null;
     }
 
     // The Head of Department carries every approval the Line Manager does,
@@ -1020,9 +1029,12 @@ const CustomerDetail = () => {
                         <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
                           {rateSourceLabel(h.source)}
                         </td>
+                        {/* Time as well as date: a rate can be replaced twice
+                            in one afternoon, and a column of identical dates
+                            gives no order at all. */}
                         <td className="px-4 py-2.5 text-slate-400 whitespace-nowrap">
                           {h.changedAt
-                            ? new Date(h.changedAt).toLocaleDateString()
+                            ? new Date(h.changedAt).toLocaleString()
                             : "—"}
                         </td>
                       </tr>

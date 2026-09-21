@@ -20,6 +20,32 @@ export const notifyLineManagerOfPlanChange = async (kamId: string, label?: strin
   }
 };
 
+// Taking a planned visit off the week is the one change to a plan that
+// destroys something rather than adding to it, so both the Line Manager and
+// the Head of Department are told — not only the manager directly above.
+const notifyPlanVisitsRemoved = async (kamId: string, removedCount: number) => {
+  try {
+    const [kam, hods] = await Promise.all([
+      prisma.user.findUnique({ where: { id: kamId }, select: { lineManagerId: true, name: true } }),
+      prisma.user.findMany({
+        where: { role: { name: 'HEAD_OF_DEPARTMENT' }, isActive: true },
+        select: { id: true },
+      }),
+    ]);
+    const recipients = [...new Set([
+      ...(kam?.lineManagerId ? [kam.lineManagerId] : []),
+      ...hods.map((h) => h.id),
+    ])];
+    if (recipients.length === 0) return;
+    await createNotificationsForUsers(recipients, {
+      label: `${kam?.name || 'A Key Account Manager'} removed ${removedCount} planned visit${removedCount === 1 ? '' : 's'} from their weekly plan`,
+      link: '/app/team-reports',
+    });
+  } catch (err) {
+    console.warn('[notifications] notifyPlanVisitsRemoved failed (non-fatal):', (err as Error)?.message);
+  }
+};
+
 // Weekly Plan visits carry no completion/outcome data of their own — that
 // only exists once a KAM logs the corresponding Daily Visiting Report entry
 // (linked back via ReportVisit.sourceVisitId). This merges that real
@@ -80,6 +106,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // The whole diff runs in one transaction: a failure half way through can
 // no longer leave the week's plan partially or fully wiped.
 export const upsertDraft = async (kamId: string, data: any) => {
+  let removedCount = 0;
   const saved = await prisma.$transaction(
     async (tx) => {
       const plan = await tx.weeklyPlan.upsert({
@@ -98,6 +125,17 @@ export const upsertDraft = async (kamId: string, data: any) => {
         select: { id: true, createdAt: true },
       });
       const currentIds = new Set(current.map((r) => r.id));
+
+      // A visit the KAM has already reported on — completed or skipped — is a
+      // record of something that happened, not a plan any more. Editing or
+      // removing it would quietly rewrite what the Daily Visiting Report and
+      // Team Reports already show, so it is frozen here regardless of what
+      // the page sends.
+      const reported = await tx.reportVisit.findMany({
+        where: { sourceVisitId: { in: [...currentIds] }, NOT: { completed: null } },
+        select: { sourceVisitId: true },
+      });
+      const lockedIds = new Set(reported.map((r) => r.sourceVisitId as string));
 
       const keepIds = new Set<string>(
         incoming
@@ -121,10 +159,11 @@ export const upsertDraft = async (kamId: string, data: any) => {
         ? current.filter((r) => r.createdAt.getTime() <= knownSince.getTime()).map((r) => r.id)
         : [];
 
-      const removedIds = removable.filter((id) => !keepIds.has(id));
+      const removedIds = removable.filter((id) => !keepIds.has(id) && !lockedIds.has(id));
       if (removedIds.length > 0) {
         await tx.visit.deleteMany({ where: { id: { in: removedIds } } });
       }
+      removedCount = removedIds.length;
 
       const toUpdate: { id: string; fields: any }[] = [];
       const toCreate: any[] = [];
@@ -139,6 +178,8 @@ export const upsertDraft = async (kamId: string, data: any) => {
           existingPlanId: section === 'existing' ? plan.id : null,
           prospectPlanId: section === 'prospect' ? plan.id : null,
         };
+        // A reported visit is left exactly as it is.
+        if (typeof v.id === 'string' && lockedIds.has(v.id)) continue;
         if (typeof v.id === 'string' && keepIds.has(v.id)) toUpdate.push({ id: v.id, fields });
         else toCreate.push(fields);
       }
@@ -164,7 +205,8 @@ export const upsertDraft = async (kamId: string, data: any) => {
 
   // Fire-and-forget: notifying the Line Manager must never delay the save
   // response, and must never fail the save.
-  notifyLineManagerOfPlanChange(kamId).catch(() => {});
+  if (removedCount > 0) notifyPlanVisitsRemoved(kamId, removedCount).catch(() => {});
+  else notifyLineManagerOfPlanChange(kamId).catch(() => {});
   const [withOutcomes] = await attachVisitOutcomes([saved]);
   return withOutcomes;
 };

@@ -22,7 +22,7 @@ const LmRateReviewPanel = ({ customer, onUpdated }) => {
     if (lockRef.current) return;
     const ok = await confirm({
       title: 'Send this rate for an offer letter?',
-      message: `The Sales Coordinator will prepare and send the offer letter to ${customer.accountName} at this rate.`,
+      message: ``,
       confirmLabel: 'Send to Sales Coordinator',
     });
     if (!ok) return;
@@ -46,7 +46,7 @@ const LmRateReviewPanel = ({ customer, onUpdated }) => {
     if (!isRequired(reason)) return showToast('Explain what you still need', 'warning');
     const ok = await confirm({
       title: 'Ask the Head of Department again?',
-      message: 'The request goes back to them. Nothing reaches the customer until they answer.',
+      message: '',
       confirmLabel: 'Send request',
     });
     if (!ok) return;

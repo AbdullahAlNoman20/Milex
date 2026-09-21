@@ -1,35 +1,49 @@
 // admin/src/Pages/modules/sales/components/RateRequestPanel.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TrendingDown, Send, CheckCircle, XCircle, Loader2, History } from 'lucide-react';
-import { listRateRequests, createRateRequest, decideRateRequest } from '../services/rateRequestService';
+import { Send, CheckCircle, XCircle, Loader2, History, ArrowUpCircle } from 'lucide-react';
+import {
+  listRateRequests,
+  createRateRequest,
+  decideNewRate,
+  ownerDecideNewRate,
+} from '../services/rateRequestService';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../Components/hooks/useConfirm';
 import { useAuth } from '../../../../Components/hooks/useAuth';
 import { ROLES } from '../../../../Components/constants/roles';
-import { rateSourceLabel } from '../../../../Components/utils/format';
+import { rateSourceLabel, humanizeStatus } from '../../../../Components/utils/format';
+import { RATE_PROCESS_STAGE } from '../constants/salesStatus';
 import RateHistoryModal from './RateHistoryModal';
 
-// Deliberately available at every stage, including on a long-since-active
-// account: a customer can ask for a better rate whenever they like, and the
-// request has to have somewhere to go when they do.
+// A live customer asking for new terms runs the same desks as the original
+// recommendation — Line Manager, Head of Department, the account's holder,
+// the Sales Coordinator, the customer — without the account's own standing
+// changing at any point. This panel is the rate half of that; the offer and
+// feedback halves appear in the action panel above.
 const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
   const { showToast } = useToast();
   const confirm = useConfirm();
   const { currentUser } = useAuth();
   const [items, setItems] = useState([]);
   const [reason, setReason] = useState('');
-  const [grantedRate, setGrantedRate] = useState('');
-  const [grantedNote, setGrantedNote] = useState('');
+  const [newRate, setNewRate] = useState(customer.approvedRate || customer.proposedRate || '');
+  const [escalateMode, setEscalateMode] = useState(false);
+  const [escalateReason, setEscalateReason] = useState('');
+  const [reviewMode, setReviewMode] = useState('send');
+  const [reviewReason, setReviewReason] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const lockRef = useRef(false);
 
   const role = currentUser?.role;
-  // The Sales Coordinator handles correspondence, not commercial terms — a
-  // rate request comes from whoever owns the customer relationship.
-  const canRequest = [ROLES.KAM, ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN].includes(role);
-  const canGrant = [ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN].includes(role);
-  const isReadOnlyViewer = !canRequest && !canGrant;
+  const stage = customer.rateProcessStage || null;
+  const isLineManager = role === ROLES.LINE_MANAGER;
+  const isHod = role === ROLES.HEAD_OF_DEPARTMENT || role === ROLES.SUPER_ADMIN;
+  // A Line Manager and the Head of Department both set rates outright; the
+  // Sales Coordinator handles correspondence, not commercial terms.
+  const canSetRate = isLineManager || isHod;
+  const canRequest = role === ROLES.KAM || canSetRate;
+  const isAccountOwner = customer.handledById === currentUser?.id;
 
   const load = useCallback(() => {
     listRateRequests(customer.id)
@@ -38,80 +52,334 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
   }, [customer.id]);
 
   // The customer's own revision counter moves every time a rate changes, so
-  // it doubles as the signal that this list is out of date — without it the
-  // panel kept showing a request that had already been answered elsewhere.
+  // it doubles as the signal that this list is out of date.
   useEffect(() => {
     load();
-  }, [load, reloadToken, customer.revision, customer.approvedRate]);
+  }, [load, reloadToken, customer.revision, customer.approvedRate, stage]);
+
+  useEffect(() => {
+    setNewRate(customer.approvedRate || customer.proposedRate || '');
+  }, [customer.approvedRate, customer.proposedRate]);
 
   const open = items.find((r) => r.approved === null) || null;
   const answered = items.filter((r) => r.approved !== null);
 
-  const submitRequest = async () => {
+  const run = async (fn, successMessage) => {
     if (lockRef.current) return;
-    if (!reason.trim()) return showToast('Please say why a different rate is needed', 'warning');
-    const ok = await confirm({
-      title: 'Send this rate request?',
-      message: 'The Head of Department will be asked to set a new best rate for this customer.',
-      confirmLabel: 'Send request',
-    });
-    if (!ok) return;
     lockRef.current = true;
     setIsBusy(true);
     try {
-      await createRateRequest(customer.id, reason.trim(), !!customer.offerRejected);
-      showToast('Rate request sent to the Head of Department', 'success');
+      await fn();
+      showToast(successMessage, 'success');
       setReason('');
+      setEscalateReason('');
+      setReviewReason('');
+      setEscalateMode(false);
       load();
       onUpdated?.();
     } catch (err) {
-      showToast(err?.message || 'Could not send the request', 'error');
+      showToast(err?.message || 'That could not be completed', 'error');
     } finally {
       lockRef.current = false;
       setIsBusy(false);
     }
   };
 
-  const decide = async (approve) => {
-    if (lockRef.current) return;
-    if (approve && !grantedRate.trim()) return showToast('Enter the rate you are granting', 'warning');
+  const submitRequest = async () => {
+    if (!reason.trim()) return showToast('Please say why a different rate is needed', 'warning');
     const ok = await confirm({
-      title: approve ? 'Grant this rate?' : 'Decline this request?',
-      message: approve
-        ? 'This replaces the rate currently in force and everyone involved will be told it came from you.'
-        : 'The existing rate will stand and the person who asked will be notified.',
-      confirmLabel: approve ? 'Grant rate' : 'Decline',
-      tone: approve ? 'default' : 'danger',
+      title: 'Send this rate request?',
+      message: 'Your Line Manager will either set a new rate or take it up to the Head of Department.',
+      confirmLabel: 'Send request',
     });
     if (!ok) return;
-    lockRef.current = true;
-    setIsBusy(true);
-    try {
-      await decideRateRequest(open.id, {
-        approve,
-        grantedRate: approve ? grantedRate.trim() : undefined,
-        grantedNote: grantedNote.trim() || undefined,
-      });
-      showToast(approve ? 'New rate set' : 'Request declined', 'success');
-      setGrantedRate('');
-      setGrantedNote('');
-      load();
-      onUpdated?.();
-    } catch (err) {
-      showToast(err?.message || 'Could not record the decision', 'error');
-    } finally {
-      lockRef.current = false;
-      setIsBusy(false);
+    run(
+      () => createRateRequest(customer.id, reason.trim(), !!customer.offerRejected),
+      'Rate request sent to your Line Manager'
+    );
+  };
+
+  const setRate = async () => {
+    if (!newRate.trim()) return showToast('Enter the rate you are setting', 'warning');
+    const ok = await confirm({
+      title: 'Set this as the new rate?',
+      message: `${customer.accountName} will be quoted ${newRate.trim()}. This replaces the rate currently in force and everyone involved is told it came from you.`,
+      confirmLabel: 'Yes, set this rate',
+      cancelLabel: 'No, go back',
+    });
+    if (!ok) return;
+    run(() => decideNewRate(customer.id, { action: 'SET', approvedRate: newRate.trim() }), 'New rate set');
+  };
+
+  const escalate = async () => {
+    if (!escalateReason.trim()) return showToast('Say what you need from the Head of Department', 'warning');
+    const ok = await confirm({
+      title: 'Ask the Head of Department for a best rate?',
+      message: 'The decision passes to them. Nothing reaches the customer until they answer.',
+      confirmLabel: 'Send request',
+    });
+    if (!ok) return;
+    run(
+      () => decideNewRate(customer.id, { action: 'ESCALATE', reason: escalateReason.trim() }),
+      'Sent to the Head of Department'
+    );
+  };
+
+  const decline = async () => {
+    const ok = await confirm({
+      title: 'Decline this request?',
+      message: 'The existing rate will stand and the person who asked will be notified.',
+      confirmLabel: 'Decline',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    run(() => decideNewRate(customer.id, { action: 'DECLINE' }), 'Request declined');
+  };
+
+  const ownerAccept = async () => {
+    const ok = await confirm({
+      title: 'Send this rate for an offer letter?',
+      message: `The Sales Coordinator will prepare and send the offer letter to ${customer.accountName} at this rate.`,
+      confirmLabel: 'Send to Sales Coordinator',
+    });
+    if (!ok) return;
+    run(() => ownerDecideNewRate(customer.id, { accept: true }), 'Sent to the Sales Coordinator');
+  };
+
+  const ownerAskAgain = async () => {
+    if (!reviewReason.trim()) return showToast('Explain why a better rate is needed', 'warning');
+    run(
+      () => ownerDecideNewRate(customer.id, { accept: false, reason: reviewReason.trim() }),
+      'Sent back for a better rate'
+    );
+  };
+
+  const CurrentRate = () => (
+    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Current Rate</p>
+      <p className="text-sm font-bold text-slate-800 break-words">
+        {customer.approvedRate || customer.proposedRate || '—'}
+      </p>
+      <p className="text-[11px] text-slate-500 mt-1">
+        Given by: <strong>{rateSourceLabel(customer.rateSource)}</strong>
+      </p>
+    </div>
+  );
+
+  const OpenRequestNote = () =>
+    open ? (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+          Asked for by {humanizeStatus(open.requestedByRole)}
+        </p>
+        <p className="text-xs text-slate-700 break-words">{open.reason}</p>
+        <p className="text-[10px] text-slate-400">{new Date(open.createdAt).toLocaleString()}</p>
+      </div>
+    ) : null;
+
+  const renderBody = () => {
+    // The rate is on the table and nothing has reached the customer — the
+    // person holding the account decides what happens to it.
+    if (stage === RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW) {
+      if (!isAccountOwner && role !== ROLES.SUPER_ADMIN) {
+        return (
+          <p className="text-[11px] text-slate-400">
+            Waiting for {customer.handledBy?.name || 'the account holder'} to decide whether this rate goes to the customer.
+          </p>
+        );
+      }
+      return (
+        <div className="space-y-3">
+          <div className="flex gap-1 border-b border-slate-200">
+            <button
+              type="button"
+              onClick={() => setReviewMode('send')}
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 -mb-px transition ${
+                reviewMode === 'send' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-400'
+              }`}
+            >
+              Send for Offer Letter
+            </button>
+            <button
+              type="button"
+              onClick={() => setReviewMode('again')}
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 -mb-px transition ${
+                reviewMode === 'again' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400'
+              }`}
+            >
+              Ask Again
+            </button>
+          </div>
+          {reviewMode === 'send' ? (
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={ownerAccept}
+              className="w-full bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Send to Sales Coordinator
+            </button>
+          ) : (
+            <>
+              <textarea
+                className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-indigo-500 min-h-[60px]"
+                placeholder="Why is a better rate needed?"
+                value={reviewReason}
+                maxLength={1000}
+                onChange={(e) => setReviewReason(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={ownerAskAgain}
+                className="w-full bg-indigo-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />} Ask for a Better Rate
+              </button>
+            </>
+          )}
+        </div>
+      );
     }
+
+    if (stage === RATE_PROCESS_STAGE.PENDING_OFFER) {
+      return <p className="text-[11px] text-slate-400">Waiting for the Sales Coordinator to send the offer letter.</p>;
+    }
+    if (stage === RATE_PROCESS_STAGE.AWAITING_FEEDBACK) {
+      return <p className="text-[11px] text-slate-400">Waiting for the customer's answer on the new rate.</p>;
+    }
+
+    const awaitingHod = stage === RATE_PROCESS_STAGE.PENDING_HOD_RATE;
+    if (awaitingHod && !isHod) {
+      return (
+        <p className="text-[11px] text-slate-400">
+          Passed to the Head of Department — waiting for them to set the best rate.
+        </p>
+      );
+    }
+
+    // Idle, or sitting on this person's own desk. Either way a Line Manager
+    // and the Head of Department set the rate here rather than asking anyone
+    // for it; only a KAM raises a request.
+    if (canSetRate) {
+      return (
+        <div className="space-y-3">
+          {isLineManager && !awaitingHod && (
+            <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={escalateMode}
+                onChange={(e) => setEscalateMode(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Request the best rate from the Head of Department instead
+            </label>
+          )}
+
+          {escalateMode ? (
+            <>
+              <textarea
+                className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-indigo-500 min-h-[60px]"
+                placeholder="What do you need from the Head of Department?"
+                value={escalateReason}
+                maxLength={1000}
+                onChange={(e) => setEscalateReason(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={escalate}
+                className="w-full bg-indigo-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />} Send to Head of Department
+              </button>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  New Rate
+                </label>
+                <textarea
+                  className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500 min-h-[60px]"
+                  placeholder="e.g. 28 USD/Kg + 10 USD Custom"
+                  value={newRate}
+                  maxLength={300}
+                  onChange={(e) => setNewRate(e.target.value)}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Pre-filled with the rate currently in force — edit it to whatever you are setting.
+                </p>
+              </div>
+              <div className={open ? 'grid grid-cols-2 gap-2' : ''}>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={setRate}
+                  className="w-full bg-emerald-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle size={13} />} Set New Rate
+                </button>
+                {open && (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={decline}
+                    className="w-full bg-white border border-red-300 text-red-500 text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <XCircle size={13} /> Decline
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (open) {
+      return (
+        <p className="text-[11px] text-slate-400">
+          Waiting for the Line Manager to set a new rate or pass it to the Head of Department.
+        </p>
+      );
+    }
+
+    if (canRequest) {
+      return (
+        <div className="space-y-2">
+          <textarea
+            className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500 min-h-[60px]"
+            placeholder="Why does this customer need a different rate?"
+            value={reason}
+            maxLength={1000}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={submitRequest}
+            className="w-full bg-indigo-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 hover:bg-indigo-700 transition disabled:opacity-50"
+          >
+            {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+            Request a New Best Rate
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <p className="text-[11px] text-slate-400">
+        Rate changes are raised by the customer's Key Account Manager or their Line Manager.
+      </p>
+    );
   };
 
   return (
     <>
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-bold text-slate-900 text-sm flex items-center">
-            Rate
-          </h3>
+          <h3 className="font-bold text-slate-900 text-sm">Rate</h3>
           <button
             type="button"
             onClick={() => setIsHistoryOpen(true)}
@@ -122,98 +390,13 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
           </button>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
-            Current Rate
-          </p>
-          <p className="text-sm font-bold text-slate-800 break-words">
-            {customer.approvedRate || customer.proposedRate || '—'}
-          </p>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Given by: <strong>{rateSourceLabel(customer.rateSource)}</strong>
-          </p>
-        </div>
-
-        {open ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
-              Awaiting a new best rate
-            </p>
-            <p className="text-xs text-slate-700 break-words">{open.reason}</p>
-            <p className="text-[10px] text-slate-400">
-              Requested {new Date(open.createdAt).toLocaleString()}
-            </p>
-
-            {canGrant && (
-              <div className="pt-2 space-y-2 border-t border-amber-200">
-                <textarea
-                  className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500 min-h-[60px]"
-                  placeholder="New rate to grant"
-                  value={grantedRate}
-                  maxLength={300}
-                  onChange={(e) => setGrantedRate(e.target.value)}
-                />
-                <input
-                  className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500"
-                  placeholder="Note (optional)"
-                  value={grantedNote}
-                  maxLength={1000}
-                  onChange={(e) => setGrantedNote(e.target.value)}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => decide(true)}
-                    className="bg-emerald-600 text-white text-xs font-bold py-2 rounded flex items-center justify-center gap-1 disabled:opacity-50"
-                  >
-                    {isBusy ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />} Grant
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => decide(false)}
-                    className="bg-white border border-red-300 text-red-500 text-xs font-bold py-2 rounded flex items-center justify-center gap-1 disabled:opacity-50"
-                  >
-                    <XCircle size={12} /> Decline
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          canRequest && (
-            <div className="space-y-2">
-              <textarea
-                className="w-full border border-slate-300 p-2 rounded text-xs outline-none focus:border-emerald-500 min-h-[60px]"
-                value={reason}
-                maxLength={1000}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={submitRequest}
-                className="w-full bg-indigo-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 hover:bg-indigo-700 transition disabled:opacity-50"
-              >
-                {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                Request a New Best Rate
-              </button>
-            </div>
-          )
-        )}
-
-        {isReadOnlyViewer && !open && (
-          <p className="text-[11px] text-slate-400">
-            Rate changes are raised by the customer's Key Account Manager or their Line Manager.
-          </p>
-        )}
+        <CurrentRate />
+        <OpenRequestNote />
+        {renderBody()}
 
         {answered.length > 0 && (
           <div className="pt-2 border-t border-slate-100 space-y-1.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              Past Requests
-            </p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Past Requests</p>
             {answered.slice(0, 4).map((r) => (
               <div key={r.id} className="text-[11px] flex items-start justify-between gap-2">
                 <span className={r.approved ? 'text-emerald-700' : 'text-red-600'}>
@@ -223,7 +406,7 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
                   )}
                 </span>
                 <span className="text-slate-400 shrink-0">
-                  {r.grantedAt ? new Date(r.grantedAt).toLocaleDateString() : ''}
+                  {r.grantedAt ? new Date(r.grantedAt).toLocaleString() : ''}
                 </span>
               </div>
             ))}

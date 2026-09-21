@@ -317,6 +317,12 @@ export const decideFinalOnboarding = async (
       // correct what was flagged and submit again, with nothing lost in
       // between and the customer still live throughout.
       finalProfileCompleted: false,
+      // A regular-mode submission sets the profile type to REGULAR on its way
+      // in. Returning it without putting that back left the account in a
+      // provisional status with a regular profile type, which every panel
+      // read as "not in the document window" — so the form, the uploads and
+      // the submit button all vanished and there was no way to resubmit.
+      accountProfileType: 'PROVISIONAL',
     },
     historyAction: 'FINAL ONBOARDING RETURNED FOR CORRECTION',
     historySubText: comments || "",

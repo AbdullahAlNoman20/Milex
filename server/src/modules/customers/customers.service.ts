@@ -1,6 +1,6 @@
 // src/modules/customers/customers.service.ts
 import { prisma } from '../../config/db';
-import { CUSTOMER_STATUS } from '../../common/constants/status.constant';
+import { CUSTOMER_STATUS, RATE_PROCESS_STAGE } from '../../common/constants/status.constant';
 import { transitionCustomerStatus, notifyCustomerWorkflowUsers } from '../../common/utils/stateMachine.util';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { sanitizeAndEscape } from './sanitize.helper';
@@ -302,6 +302,23 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
   });
   if (!customer || customer.isDeleted) throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
 
+  // Whatever is still waiting for an answer. The reason the KAM gave when
+  // they sent a rate back was written only into the history trail, so the
+  // Line Manager being asked to act on it never actually saw it.
+  const pendingRateRequest = await prisma.rateRequest.findFirst({
+    where: { customerId: customer.id, approved: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, reason: true, requestedByRole: true, createdAt: true, requestedById: true },
+  });
+  let pendingRateRequestBy: string | null = null;
+  if (pendingRateRequest) {
+    const asker = await prisma.user.findUnique({
+      where: { id: pendingRateRequest.requestedById },
+      select: { name: true },
+    });
+    pendingRateRequestBy = asker?.name || null;
+  }
+
   // An account waiting to be activated is waiting on a specific person, and
   // the audit trail should say who rather than leaving people to work it out.
   let pendingApproverName: string | null = null;
@@ -331,7 +348,13 @@ export const getCustomerByBarcode = async (barcode: string, requester: { id: str
       throw { statusCode: 403, code: 'FORBIDDEN', message: 'This customer belongs to a different team, so you can\'t view this record.' };
     }
   }
-  return { ...customer, pendingApproverName };
+  return {
+    ...customer,
+    pendingApproverName,
+    pendingRateRequest: pendingRateRequest
+      ? { ...pendingRateRequest, requestedByName: pendingRateRequestBy }
+      : null,
+  };
 };
 
 // Whoever creates a recommendation has already made their own decision on it
@@ -378,7 +401,10 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
         {
           rate: clean.proposedRate || '',
           rateRef: barcode,
-          source: selfApproves ? rateSource : null,
+          // The role that actually put this figure forward. Storing null
+          // here made the history read "Line Manager" for a rate a KAM had
+          // proposed, because that is what the label falls back to.
+          source: selfApproves ? rateSource : creatorRole,
           changedAt: new Date().toISOString(),
           reason: `Proposed on the recommendation by ${humanizeStatus(creatorRole)}`,
         },
@@ -577,10 +603,14 @@ export const approveRate = async (customerId: string, data: any, actorId: string
       rejectReason: null,
     },
     historyAction: `RATE SET BY ${source === 'HEAD_OF_DEPARTMENT' ? 'HEAD OF DEPARTMENT' : 'LINE MANAGER'}`,
-    historySubText:
+    // The figure itself belongs in the trail. Reading back through an account
+    // that went round three or four times, "rate set" on its own says nothing
+    // about which rate was set at that point.
+    historySubText: `${clean.rate} — ${
       nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER
         ? 'Awaiting the Sales Coordinator to send the offer letter'
-        : 'Awaiting review before it goes to the customer',
+        : 'Awaiting review before it goes to the customer'
+    }`,
     skipWorkflowNotification: true,
     // Straight to the Sales Coordinator means it is their turn now.
     notifySalesCoordinators: nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
@@ -633,7 +663,7 @@ export const escalateRateToHod = async (customerId: string, reason: string, lmId
 // The Head of Department answers. One field, one decision: the rate.
 export const grantHodRate = async (
   customerId: string,
-  data: { approvedRate: string; lmNote?: string },
+  data: { approvedRate: string },
   hodId: string,
   actorRole = 'HEAD_OF_DEPARTMENT'
 ) => {
@@ -645,7 +675,7 @@ export const grantHodRate = async (
     };
   }
   const existing = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
-  const clean = sanitizeAndEscape({ rate: data.approvedRate, note: data.lmNote || '' });
+  const clean = sanitizeAndEscape({ rate: data.approvedRate });
   const isRevision = !!existing.approvedRate;
   const nextStatus = nextStopAfterRate(existing.createdByRole, 'HEAD_OF_DEPARTMENT');
 
@@ -657,7 +687,9 @@ export const grantHodRate = async (
       approvedRate: clean.rate,
       rateSource: 'HEAD_OF_DEPARTMENT',
       rateSetById: hodId,
-      lmNote: clean.note || null,
+      // The escalation reason has been answered, so it is cleared rather than
+      // left sitting on the record as though it were still outstanding.
+      lmNote: null,
       rateRef: existing.rateRef || existing.barcode,
       ...(isRevision ? { rateHistory: { push: buildRateHistoryEntry(existing) } } : {}),
       offerSent: false,
@@ -666,10 +698,11 @@ export const grantHodRate = async (
       rejectReason: null,
     },
     historyAction: 'BEST RATE SET BY HEAD OF DEPARTMENT',
-    historySubText:
+    historySubText: `${clean.rate} — ${
       nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER
         ? 'Awaiting the Sales Coordinator to send the offer letter'
-        : 'Awaiting review before it goes to the customer',
+        : 'Awaiting review before it goes to the customer'
+    }`,
     // The notification below names the rate and who set it, which is what
     // people actually need — the generic one would only repeat the heading.
     skipWorkflowNotification: true,
@@ -682,7 +715,6 @@ export const grantHodRate = async (
     data: {
       approved: true,
       grantedRate: clean.rate,
-      grantedNote: clean.note || null,
       grantedById: hodId,
       grantedByRole: 'HEAD_OF_DEPARTMENT',
       grantedAt: new Date(),
@@ -808,7 +840,7 @@ export const finalizeOffer = async (
   const updated = await prisma.$transaction(async (tx) => {
     const current = await tx.customer.findUnique({
       where: { id: customerId },
-      select: { status: true, isDeleted: true, offerRejected: true, rateProcessActive: true },
+      select: { status: true, isDeleted: true, offerRejected: true, rateProcessActive: true, rateProcessStage: true },
     });
     if (!current || current.isDeleted) {
       throw { statusCode: 404, code: 'NOT_FOUND', message: 'We couldn\'t find that customer. It may have been removed.' };
@@ -820,7 +852,9 @@ export const finalizeOffer = async (
       current.status === CUSTOMER_STATUS.PROVISIONAL_ACTIVE ||
       // A long-active customer being re-quoted: the account does not move
       // backwards, only the new rate goes out to them.
-      (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT && current.rateProcessActive);
+      (current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT &&
+        current.rateProcessActive &&
+        current.rateProcessStage === RATE_PROCESS_STAGE.PENDING_OFFER);
     if (!canSendOffer) {
       throw {
         statusCode: 409,
@@ -845,7 +879,7 @@ export const finalizeOffer = async (
         // An active customer being re-quoted keeps their standing — the
         // account is not un-made by asking them about a new rate.
         ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
-          ? {}
+          ? { rateProcessStage: RATE_PROCESS_STAGE.AWAITING_FEEDBACK }
           : { status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK as any }),
       },
       include: CUSTOMER_WITH_HANDLER,
@@ -1025,7 +1059,7 @@ export const submitClientFeedback = async (
           // already a live customer being re-quoted, in which case nothing
           // about their standing changes at all.
           ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
-            ? { rateProcessActive: false }
+            ? { rateProcessActive: false, rateProcessStage: null }
             : {
                 status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE as any,
                 accountProfileType: 'PROVISIONAL' as any,
@@ -1049,7 +1083,7 @@ export const submitClientFeedback = async (
         );
         await tx.customer.update({
           where: { id: customerId },
-          data: { rateProcessActive: false },
+          data: { rateProcessActive: false, rateProcessStage: null },
         });
       } else {
         await tx.customerHistoryEntry.updateMany({ where: { customerId, status: 'active' }, data: { status: 'completed' } });
@@ -1128,6 +1162,17 @@ export const submitClientFeedback = async (
         // and turned it down, so whatever goes out next is the next
         // revision — REF-…-R1, then -R2, and so on.
         revision: current.revision + 1,
+        // On a live customer the rate goes back to the desk it came from, and
+        // the re-quote carries on rather than the account moving anywhere.
+        ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
+          ? {
+              rateProcessActive: true,
+              rateProcessStage:
+                current.createdByRole === 'HEAD_OF_DEPARTMENT' || current.createdByRole === 'SUPER_ADMIN'
+                  ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
+                  : RATE_PROCESS_STAGE.PENDING_LM_RATE,
+            }
+          : {}),
         // Back to whoever owns the rate decision. An account that is already
         // provisional keeps that standing and the countdown running against
         // it, and a live customer keeps theirs entirely — in both cases the
@@ -1258,7 +1303,7 @@ export const reapproveRateAfterRejection = async (
       data: {
         customerId,
         action: `NEW RATE APPROVED BY ${source === 'HEAD_OF_DEPARTMENT' ? 'HOD' : 'LM'}`,
-        subText: 'Awaiting Sales Coordinator to send the revised offer letter',
+        subText: `${clean.approvedRate} — Awaiting Sales Coordinator to send the revised offer letter`,
         status: 'active',
       },
     });

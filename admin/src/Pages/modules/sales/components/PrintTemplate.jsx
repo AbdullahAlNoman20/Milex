@@ -995,14 +995,12 @@ const PrintTemplate = ({ data, onClose }) => {
                       />
                     }
                   />
+                  {/* One mode on the account, taken from the recommendation.
+                      The Ex / FR boxes were never filled in anywhere, so they
+                      printed empty on every form. */}
                   <PfRow
-                    l1="Mode"
-                    v1={
-                      <PfChecks
-                        options={[{ value: 'EX', label: 'Ex' }, { value: 'FR', label: 'FR' }]}
-                        isSelected={(v) => c.financeMode === v}
-                      />
-                    }
+                    l1="Account Mode"
+                    v1={c.accountMode}
                     l2="Type of Account"
                     v2={
                       <PfChecks
