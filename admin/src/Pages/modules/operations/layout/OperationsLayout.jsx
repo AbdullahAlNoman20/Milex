@@ -32,13 +32,9 @@ const OperationsLayoutInner = () => {
               type="button"
               onClick={() => setIsProfileOpen(true)}
               aria-label="My Profile"
-              className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center shrink-0 hover:ring-2 hover:ring-emerald-300 transition"
+              className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 hover:ring-2 hover:ring-emerald-300 transition"
             >
-              {currentUser?.avatarDataUrl ? (
-                <img src={currentUser.avatarDataUrl} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs font-black text-slate-400">{currentUser?.name?.charAt(0) || '?'}</span>
-              )}
+              <span className="text-xs font-black">{currentUser?.name?.charAt(0) || '?'}</span>
             </button>
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-800">{currentUser?.name}</p>

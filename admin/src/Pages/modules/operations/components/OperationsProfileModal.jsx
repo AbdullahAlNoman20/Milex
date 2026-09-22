@@ -5,16 +5,13 @@ import { useOperationsAuth } from '../hooks/useOperationsAuth';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { isRequired } from '../../../../Components/utils/validators';
 
-const MAX_AVATAR_SIZE = 1.5 * 1024 * 1024;
-
 const OperationsProfileModal = ({ onClose }) => {
-  const { currentUser, changePassword, updateAvatar } = useOperationsAuth();
+  const { currentUser, changePassword } = useOperationsAuth();
   const { showToast } = useToast();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -36,30 +33,6 @@ const OperationsProfileModal = ({ onClose }) => {
     }
   };
 
-  const handleAvatarChange = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > MAX_AVATAR_SIZE) return showToast('Image must be under 1.5MB', 'warning');
-    if (!['image/jpeg', 'image/png'].includes(file.type)) return showToast('Only JPG or PNG allowed', 'warning');
-
-    setIsUploadingAvatar(true);
-    try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('Could not read image'));
-        reader.readAsDataURL(file);
-      });
-      await updateAvatar(dataUrl);
-      showToast('Profile picture updated');
-    } catch (err) {
-      showToast(err?.message || 'Failed to update profile picture', 'error');
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
@@ -69,17 +42,13 @@ const OperationsProfileModal = ({ onClose }) => {
         <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide mb-4">My Profile</h2>
 
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
-            {currentUser?.avatarDataUrl ? (
-              <img src={currentUser.avatarDataUrl} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-lg font-black text-slate-400">{currentUser?.name?.charAt(0) || '?'}</span>
-            )}
+          <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <span className="text-lg font-black">{currentUser?.name?.charAt(0) || '?'}</span>
           </div>
-          <label className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer">
-            {isUploadingAvatar ? 'Uploading...' : 'Change Picture'}
-            <input type="file" accept=".jpg,.jpeg,.png" className="hidden" disabled={isUploadingAvatar} onChange={handleAvatarChange} />
-          </label>
+          <div>
+            <p className="text-sm font-bold text-slate-800">{currentUser?.name}</p>
+            <p className="text-xs text-slate-400">{currentUser?.email}</p>
+          </div>
         </div>
 
         <form onSubmit={handleChangePassword} className="space-y-3">

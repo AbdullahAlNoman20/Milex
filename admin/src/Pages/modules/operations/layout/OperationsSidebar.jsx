@@ -379,7 +379,7 @@ const OperationsSidebar = () => {
           className="absolute inset-0 z-0 bg-center bg-cover bg-no-repeat opacity-20 pointer-events-none"
           style={{ backgroundImage: "url('/bg.jpg')" }}
         />
-        <div className="absolute inset-0 z-0 bg-white/40 pointer-events-none" />
+        <div className="absolute inset-0 z-0 bg-white/60 pointer-events-none" />
 
         <div className="relative z-10 h-20 flex items-center justify-between px-3 lg:px-3 border-b border-slate-100 shrink-0">
           <div

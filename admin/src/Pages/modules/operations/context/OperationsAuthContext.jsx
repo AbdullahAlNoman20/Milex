@@ -1,7 +1,7 @@
 // src/Pages/modules/operations/context/OperationsAuthContext.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ALL_OPERATIONS_ROLES } from '../constants/operationsRoles';
-import { operationsLogin, changeOperationsPassword, updateOperationsAvatar } from '../services/operationsAuthService';
+import { operationsLogin, changeOperationsPassword } from '../services/operationsAuthService';
 import { OperationsAuthContext } from './OperationsAuthContextObject';
 
 const SESSION_KEY = 'milex_ops_auth_session';
@@ -92,17 +92,6 @@ export const OperationsAuthProvider = ({ children }) => {
     [currentUser]
   );
 
-  const updateAvatar = useCallback(
-    async (avatarDataUrl) => {
-      if (!currentUser?.email) throw new Error('Not logged in');
-      await updateOperationsAvatar(currentUser.email, avatarDataUrl);
-      const updatedUser = { ...currentUser, avatarDataUrl };
-      setCurrentUser(updatedUser);
-      writeSession(updatedUser);
-    },
-    [currentUser]
-  );
-
   const value = useMemo(
     () => ({
       currentUser,
@@ -111,9 +100,8 @@ export const OperationsAuthProvider = ({ children }) => {
       login,
       logout,
       changePassword,
-      updateAvatar,
     }),
-    [currentUser, isInitializing, login, logout, changePassword, updateAvatar]
+    [currentUser, isInitializing, login, logout, changePassword]
   );
 
   return <OperationsAuthContext.Provider value={value}>{children}</OperationsAuthContext.Provider>;
