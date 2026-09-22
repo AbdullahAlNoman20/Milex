@@ -175,15 +175,17 @@ const PfFull = ({ label, value, h }) => (
 );
 
 // Checkbox-style options — no background fills, so they print correctly.
+// A tick rather than a cross: on a printed form a cross is as readily read
+// as "not this one" as it is as "this one".
 const PfChecks = ({ options, isSelected }) => (
   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
     {options.map((o) => (
       <span key={o.value} className="inline-flex items-center gap-1">
         <span
           className="inline-flex items-center justify-center border border-slate-800 font-bold leading-none"
-          style={{ width: '11px', height: '11px', fontSize: '9px' }}
+          style={{ width: '11px', height: '11px', fontSize: '10px' }}
         >
-          {isSelected(o.value) ? 'X' : ''}
+          {isSelected(o.value) ? '✓' : ''}
         </span>
         {o.label}
       </span>
@@ -441,13 +443,8 @@ export const AgreementLetter = ({ c }) => {
   const signContact =
     (c.contacts || []).find((ct) => norm(ct.name) && norm(ct.name) === norm(signName)) ||
     getContactByType(c.contacts, 'SENIOR_MANAGEMENT');
-  // add your final-profile designation field name here if it isn't one of these
   const signDesignation =
-    c.managingPartnerDesignation ||
-    c.managingPartnerDesig ||
-    c.managingPartnerTitle ||
-    signContact.designation ||
-    'Managing Partner';
+    c.managingPartnerDesignation || signContact.designation || 'Managing Partner';
 
   const AR = <b>ANROOT LOGEX LTD.</b>;
   const CO = <b>{co}</b>;
@@ -737,10 +734,20 @@ const PrintTemplate = ({ data, onClose }) => {
               <RTable rows={[['Name of the Key Account Manager', c.recommendedBy?.name || c.handledBy?.name || '']]} />
 
               <RSectionTitle>Customer Account Information</RSectionTitle>
+              {/* The row is named after whatever title the customer actually
+                  gave, rather than a fixed list of four that usually named
+                  none of them correctly. */}
               <RTable
                 rows={[
                   ['Account Name', c.accountName],
-                  ['Name of MD/Chairman/CEO/ED', c.managingPartnerName],
+                  [
+                    `Name of ${
+                      c.managingPartnerDesignation ||
+                      seniorContact.designation ||
+                      'MD/Chairman/CEO/ED'
+                    }`,
+                    c.managingPartnerName || seniorContact.name,
+                  ],
                   ['Mobile', c.phone],
                   ['Phone', c.phone],
                   ['FAX', ''],
@@ -843,7 +850,7 @@ const PrintTemplate = ({ data, onClose }) => {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="border border-slate-800 px-2 py-1">{c.approvedRate || (c.proposedRate ? 'Approved as Proposed' : '')}</td>
+                    <td className="border border-slate-800 px-2 py-1">{c.approvedRate || c.proposedRate || ''}</td>
                     <td className="border border-slate-800 px-2 py-1 font-mono">{rateRefDisplay}</td>
                   </tr>
                 </tbody>
@@ -861,7 +868,15 @@ const PrintTemplate = ({ data, onClose }) => {
                   <tr>
                     <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
                     <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
-                    <td className="border border-slate-800 px-2 py-1 h-16 align-top"></td>
+                    {/* Whose authority the rate carries, which the form asked
+                        for and never filled in. */}
+                    <td className="border border-slate-800 px-2 py-1 h-16 align-top">
+                      {c.rateSource === 'HEAD_OF_DEPARTMENT'
+                        ? 'Head of Department'
+                        : c.rateSource
+                          ? 'Line Manager'
+                          : ''}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -925,7 +940,21 @@ const PrintTemplate = ({ data, onClose }) => {
               <PfBlock title="Company Information">
                 <PfTable>
                   <PfFull label="Company Name" value={c.accountName} />
-                  <PfFull label="Name of Managing Partner" value={c.managingPartnerName} />
+                  {/* The title was captured on the profile and then left off
+                      the printed page, so the form named a person without
+                      saying in what capacity they signed. */}
+                  <PfFull
+                    label={
+                      c.managingPartnerDesignation
+                        ? `Name of ${c.managingPartnerDesignation}`
+                        : 'Name of Managing Partner'
+                    }
+                    value={
+                      c.managingPartnerDesignation
+                        ? `${c.managingPartnerName || ''} (${c.managingPartnerDesignation})`
+                        : c.managingPartnerName
+                    }
+                  />
                   <PfFull label="Address" value={c.address} />
                   <PfRow l1="Phone" v1={c.phone} l2="Fax" v2="" />
                   <PfFull label="E-mail" value={c.email} />
@@ -1011,6 +1040,14 @@ const PrintTemplate = ({ data, onClose }) => {
                   />
                   <PfRow l1="Area" v1={c.area} l2="Zone" v2={c.zone} />
                   <PfRow l1="Rate Ref. No." v1={buildRateRefs(c).join(' / ')} l2="Date" v2={formatPrintDate(c.createdAt)} />
+                  {/* Both were printed as permanently empty boxes. They are
+                      on the record, so they are on the form. */}
+                  <PfRow
+                    l1="Business Type"
+                    v1={c.businessType}
+                    l2="Approved Rate"
+                    v2={c.approvedRate || c.proposedRate}
+                  />
                   {/* A cash account has no credit to limit: the amount box
                       reads "Cash" and the term box is left empty, because
                       there is no period to print. */}
@@ -1023,7 +1060,16 @@ const PrintTemplate = ({ data, onClose }) => {
                   <PfFull label="(In Word)" value={isCash ? '' : amountWords} />
                   <PfRow l1="Account Created By" v1={c.recommendedBy?.name} l2="Account Handled By" v2={c.handledBy?.name} />
                   <PfFull label="Special Instructions (If Any)" value={c.specialInstructions} h="34px" />
-                  <PfRow l1="Checked By" v1="" l2="Approved By" v2="" h="34px" />
+                  {/* Signed on paper, so these stay blank by design — but the
+                      rate's own authority is known and is printed. */}
+                  <PfRow
+                    l1="Rate Given By"
+                    v1={c.rateSource === 'HEAD_OF_DEPARTMENT' ? 'Head of Department' : c.rateSource ? 'Line Manager' : ''}
+                    l2="Approved By"
+                    v2=""
+                    h="34px"
+                  />
+                  <PfRow l1="Checked By" v1="" l2="Received By" v2="" h="34px" />
                 </PfTable>
               </PfBlock>
 

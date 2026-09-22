@@ -423,6 +423,15 @@ model ServiceProvider {
   createdAt DateTime @default(now())
 }
 
+// Titles people actually type. Free-typed designations produced a dozen
+// spellings of the same three or four titles, so whatever is entered once is
+// kept and offered on every later form.
+model Designation {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
 model FieldChangeRequest {
   id                    String    @id @default(uuid())
   customerId            String

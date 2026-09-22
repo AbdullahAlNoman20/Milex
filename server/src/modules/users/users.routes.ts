@@ -13,6 +13,7 @@ import {
   updateUserSchema,
   setPasswordSchema,
   bulkImportKamsSchema,
+  customerAccountEmailSchema,
 } from "./users.schema";
 import { PERMISSIONS } from "../../common/constants/permissions.constant";
 import { asString } from "../../common/utils/requestParams.util";
@@ -52,6 +53,21 @@ router.get(
   "/stats",
   requirePermission(PERMISSIONS.MANAGE_USERS, PERMISSIONS.FULL_SYSTEM_CONTROL),
   controller.getUserStatsHandler,
+);
+
+// Customer logins. Deliberately behind full system control rather than the
+// ordinary user-management permission: these are the customer's own
+// credentials, and only the Super Admin touches them in this release.
+router.get(
+  "/customer-accounts",
+  requirePermission(PERMISSIONS.FULL_SYSTEM_CONTROL),
+  controller.listCustomerAccountsHandler,
+);
+router.patch(
+  "/customer-accounts/:id/email",
+  requirePermission(PERMISSIONS.FULL_SYSTEM_CONTROL),
+  validateBody(customerAccountEmailSchema),
+  controller.updateCustomerAccountEmailHandler,
 );
 
 // IMPORTANT: /me/activity must be registered before /:id/activity, otherwise

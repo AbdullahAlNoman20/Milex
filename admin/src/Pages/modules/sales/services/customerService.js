@@ -152,10 +152,6 @@ export const updateFollowUp = async (id, followUpDate, followUpNote) => {
   return data.customer;
 };
 
-export const fetchFollowUps = async () => {
-  const { data } = await request('/follow-ups');
-  return data.items;
-};
 
 // --- Onboarding workflow (Section 6) ---
 

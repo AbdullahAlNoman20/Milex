@@ -78,7 +78,6 @@ router.post('/:id/activate-provisional', requirePermission(PERMISSIONS.UPLOAD_SI
 router.post('/:id/activate-direct', requirePermission(PERMISSIONS.ACTIVATE_PROFILE), controller.activateDirectHandler);
 router.post('/:id/request-info-update', requirePermission(PERMISSIONS.REQUEST_INFO_UPDATE), validateBody(requestInfoUpdateSchema), controller.requestInfoUpdateHandler);
 router.post('/:id/decide-info-update', requirePermission(PERMISSIONS.APPROVE_INFO_UPDATE), validateBody(decideInfoUpdateSchema), controller.decideInfoUpdateHandler);
-router.patch('/:id/follow-up', requirePermission(PERMISSIONS.VIEW_FOLLOWUP_REMINDERS), validateBody(followUpUpdateSchema), controller.updateFollowUpHandler);
 router.patch('/:id/final-profile', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), validateBody(finalProfileSchema), controller.updateFinalProfileHandler);
 router.post('/:id/account-config-mode', requirePermission(PERMISSIONS.UPLOAD_ONBOARDING_DOCUMENT), validateBody(accountConfigModeSchema), controller.setAccountConfigModeHandler);
 router.post('/:id/final-onboarding-regular', requirePermission(PERMISSIONS.SUBMIT_FINAL_ONBOARDING), controller.submitFinalOnboardingRegularHandler);

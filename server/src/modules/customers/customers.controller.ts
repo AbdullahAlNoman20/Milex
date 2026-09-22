@@ -176,14 +176,6 @@ export const listFieldChangeRequestsHandler = async (req: Request, res: Response
 export const decideFieldChangeRequestHandler = wrap((req) => customersService.decideFieldChangeRequest(asString(req.params.requestId), req.body.approve, req.user!.id));
 export const directFieldEditHandler = wrap((req) => customersService.directFieldEdit(asString(req.params.id), req.body.fieldKey, req.body.newValue, req.user!.id, req.user!.role));
 
-export const listFollowUpsHandler = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const items = await customersService.deriveFollowUps({ id: req.user!.id, role: req.user!.role });
-    return sendSuccess(res, { items });
-  } catch (err) {
-    next(err);
-  }
-};
 
 export const uploadRecommendationAttachmentHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {

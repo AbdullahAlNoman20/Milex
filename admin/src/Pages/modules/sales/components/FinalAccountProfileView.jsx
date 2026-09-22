@@ -13,9 +13,11 @@ const FinalAccountProfileView = ({ customer }) => {
   const rows = [
     [
       'Managing Partner',
-      [customer.managingPartnerName, customer.managingPartnerDesignation]
-        .filter(Boolean)
-        .join(' — '),
+      // Name first, the title in brackets after it. A dash between two names
+      // reads as a range or a correction rather than as a job title.
+      customer.managingPartnerDesignation && customer.managingPartnerName
+        ? `${customer.managingPartnerName} (${customer.managingPartnerDesignation})`
+        : customer.managingPartnerName || customer.managingPartnerDesignation || '',
       'BIN Number',
       customer.binNumber,
     ],

@@ -7,7 +7,7 @@ import { deleteCustomer, reassignCustomer } from "../services/customerService";
 import { useToast } from "../../../../Components/hooks/useToast";
 import { useConfirm } from "../../../../Components/hooks/useConfirm";
 import { useAuth } from "../../../../Components/hooks/useAuth";
-import { ROLES } from "../../../../Components/constants/roles";
+import { ROLES, ROLE_LABELS } from "../../../../Components/constants/roles";
 
 // Reassigning a customer is a normal management action; removing one is not,
 // so only a Super Admin ever sees that button.
@@ -110,10 +110,8 @@ const AdminCustomerActions = ({ customer, onChanged }) => {
               .map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.name}
-                  {k.id === currentUser?.id ? ' (you)' : ''}
-                  {k.role && k.role !== 'KAM'
-                    ? ` — ${k.role === 'LINE_MANAGER' ? 'Line Manager' : 'HOD'}`
-                    : ''}
+                  {k.role ? ` (${ROLE_LABELS[k.role] || k.role})` : ''}
+                  {k.id === currentUser?.id ? ' — you' : ''}
                 </option>
               ))}
           </select>

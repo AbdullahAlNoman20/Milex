@@ -8,7 +8,7 @@ import { uploadFileToSupabase, deleteFileFromSupabase } from '../file-storage/fi
 import { runFileScan } from '../../jobs/file-scan.job';
 import { humanizeStatus } from '../../common/utils/humanize.util';
 // Used by the creator-skip path to name the role in history entries.
-import { ensureServiceProvidersExist } from '../service-providers/serviceProviders.service';
+import { ensureServiceProvidersExist, ensureDesignationsExist } from '../service-providers/serviceProviders.service';
 import { assertLineManagerOwnsCustomer, assertKamOwnsCustomerIfKam, isUnassignedSubordinate } from '../../common/utils/scopeGuard.util';
 import { assertValidCreditPeriodValue, isCreditPeriodField, DEFAULT_CREDIT_PERIOD_DAYS } from '../../common/utils/creditRules.util';
 import { createNotificationsForUsers } from '../notifications/notifications.service';
@@ -564,6 +564,13 @@ export const createRecommendation = async (data: any, kamId: string, creatorRole
     .flatMap((s: any) => (s.provider || '').split(',').map((p: string) => p.trim()))
     .filter(Boolean);
   ensureServiceProvidersExist(providerNames).catch(() => {});
+
+  // Any job title typed here becomes a normal dropdown option on every
+  // future form, the same way a new carrier does.
+  const designationNames = (data.contacts || [])
+    .map((c: any) => (c.designation || '').trim())
+    .filter(Boolean);
+  ensureDesignationsExist(designationNames).catch(() => {});
 
   return customer;
 };
@@ -1303,10 +1310,13 @@ export const submitClientFeedback = async (
         ...(current.status === CUSTOMER_STATUS.ACTIVE_ACCOUNT
           ? {
               rateProcessActive: true,
+              // A refusal comes back to the Line Manager's desk, where they
+              // either set the next rate themselves or pass it up — the same
+              // two choices they have anywhere else. Sending it straight to
+              // the Head of Department took the first of those away from
+              // them on the accounts they were running themselves.
               rateProcessStage:
-                requoteOwnerRole === 'LINE_MANAGER' ||
-                requoteOwnerRole === 'HEAD_OF_DEPARTMENT' ||
-                requoteOwnerRole === 'SUPER_ADMIN'
+                requoteOwnerRole === 'HEAD_OF_DEPARTMENT' || requoteOwnerRole === 'SUPER_ADMIN'
                   ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
                   : RATE_PROCESS_STAGE.PENDING_LM_RATE,
             }
@@ -1600,53 +1610,6 @@ export const updateFollowUp = async (
   return updated;
 };
 
-// Previously this returned EVERY pipeline customer to anyone who asked,
-// with no scoping and no limit — one Line Manager could read another team's
-// customer names, rates, credit terms and client feedback. Now it applies
-// exactly the same visibility rules as the customer list, and selects only
-// the columns the follow-up view actually renders.
-export const deriveFollowUps = async (requester: { id: string; role: string }) => {
-  const where: any = {
-    isDeleted: false,
-    status: { not: CUSTOMER_STATUS.ACTIVE_ACCOUNT as any },
-  };
-  if (requester.role === 'KAM') {
-    where.handledById = requester.id;
-  } else if (requester.role === 'LINE_MANAGER') {
-    where.AND = [lineManagerScope(requester.id)];
-  }
-  // HEAD_OF_DEPARTMENT and SUPER_ADMIN see the whole department, unfiltered.
-
-  const customers = await prisma.customer.findMany({
-    where,
-    orderBy: [{ followUpDate: 'asc' }, { createdAt: 'desc' }],
-    // No cap: every pipeline account this person is allowed to see appears
-    // here. The column selection below is already narrow, so the payload
-    // stays small even with thousands of rows.
-    select: {
-      id: true, barcode: true, accountName: true, status: true,
-      recNote: true, lmNote: true, proposedRate: true, approvedRate: true,
-      rejectReason: true, followUpDate: true, followUpNote: true,
-    },
-  });
-  const now = Date.now();
-  return customers
-    .map((c) => ({
-      customerId: c.id,
-      barcode: c.barcode,
-      accountName: c.accountName,
-      status: c.status,
-      commitment: c.recNote || c.lmNote || '',
-      proposedRate: c.proposedRate || '',
-      approvedRate: c.approvedRate || '',
-      clientFeedback: c.rejectReason || '',
-      followUpDate: c.followUpDate,
-      followUpNote: c.followUpNote || '',
-      isOverdue: c.followUpDate ? c.followUpDate.getTime() < now : false,
-    }))
-    .sort((a, b) => (b.isOverdue === a.isOverdue ? 0 : b.isOverdue ? 1 : -1));
-};
-
 export const updateFinalProfile = async (customerId: string, data: any, actorId: string, actorRole: string) => {
   await assertKamOwnsCustomerIfKam(customerId, actorId, actorRole);
   // Every blur-autosave used to mark the whole profile complete, so a single
@@ -1807,7 +1770,7 @@ const resolveFieldLabelAndOldValue = async (customerId: string, fieldKey: string
     const contact = await prisma.contact.findFirst({ where: { id: contactRef.contactId, customerId } });
     if (!contact) return null;
     return {
-      label: `${humanizeStatus(contact.type)} — ${CONTACT_COLUMNS[contactRef.column]}`,
+      label: `${humanizeStatus(contact.type)} (${CONTACT_COLUMNS[contactRef.column]})`,
       oldValue: (contact as any)[contactRef.column] ?? null,
     };
   }

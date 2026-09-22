@@ -49,7 +49,7 @@ const buildContactFieldDefs = (contacts) =>
   (contacts || []).flatMap((c) =>
     ["name", "designation", "mobile", "email"].map((col) => ({
       key: `contact:${c.id}:${col}`,
-      label: `${humanizeStatus(c.type)} — ${col.charAt(0).toUpperCase() + col.slice(1)}`,
+      label: `${humanizeStatus(c.type)} (${col.charAt(0).toUpperCase() + col.slice(1)})`,
       type: "text",
       current: c[col] || "",
     })),

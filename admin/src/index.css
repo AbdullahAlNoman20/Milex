@@ -37,6 +37,23 @@ body {
   overflow-wrap: break-word;
 }
 
+/* Edge and Chrome draw their own reveal control inside a password field, so
+   every password box showed two eyes side by side — ours and the browser's.
+   The browser's is hidden; ours stays, because it is the one that matches
+   the rest of the interface and works the same way everywhere. */
+input[type='password']::-ms-reveal,
+input[type='password']::-ms-clear {
+  display: none;
+}
+input[type='password']::-webkit-credentials-auto-fill-button,
+input[type='password']::-webkit-strong-password-auto-fill-button {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
 /* Every page is built inside one of these fixed measurements, which on a 4K
    display left two thirds of the screen as empty margin. Widening them here
    keeps each page's own layout untouched while letting it use the room it

@@ -14,6 +14,7 @@ import { ROLES } from '../../../../Components/constants/roles';
 import { rateSourceLabel, humanizeStatus } from '../../../../Components/utils/format';
 import { RATE_PROCESS_STAGE } from '../constants/salesStatus';
 import RateHistoryModal from './RateHistoryModal';
+import Toggle from '../../../../Components/Shared/Toggle';
 
 // Declared at module scope. Defining a component inside the render body
 // recreates it on every pass, which resets any state it holds and is exactly
@@ -307,15 +308,13 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
       return (
         <div className="space-y-3">
           {isLineManager && !awaitingHod && (
-            <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={escalateMode}
-                onChange={(e) => setEscalateMode(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              Request the best rate from the Head of Department instead
-            </label>
+            <Toggle
+              id="requote-escalate"
+              checked={escalateMode}
+              onChange={setEscalateMode}
+              label="Request the best rate from the Head of Department"
+              hint="Leave this off to set the rate yourself."
+            />
           )}
 
           {escalateMode ? (
@@ -442,9 +441,16 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Past Requests</p>
             {answered.slice(0, 4).map((r) => (
               <div key={r.id} className="text-[11px] flex items-start justify-between gap-2">
-                <span className={r.approved ? 'text-emerald-700' : 'text-red-600'}>
-                  {r.approved ? `Granted: ${r.grantedRate}` : 'Declined'}
-                  {r.approved && r.grantedByRole && (
+                {/* A request closed out because it was passed up or replaced
+                    carries no rate of its own. It used to read "Granted: null",
+                    which said nothing and looked like a fault. */}
+                <span className={r.grantedRate ? 'text-emerald-700' : r.approved ? 'text-slate-500' : 'text-red-600'}>
+                  {r.grantedRate
+                    ? `Granted: ${r.grantedRate}`
+                    : r.approved
+                      ? r.grantedNote || 'Closed'
+                      : 'Declined'}
+                  {r.grantedRate && r.grantedByRole && (
                     <span className="text-slate-400"> · {rateSourceLabel(r.grantedByRole)}</span>
                   )}
                 </span>

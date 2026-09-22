@@ -8,6 +8,9 @@ const SelectWithOther = ({
   options = [],
   value = '',
   onChange,
+  // Called with a typed-in value so the page can offer it in every other
+  // copy of the same dropdown straight away, before anything is submitted.
+  onAddCustom,
   placeholder = 'Select...',
   disabled = false,
   id,
@@ -58,6 +61,14 @@ const SelectWithOther = ({
     [onChange]
   );
 
+  // Announced on blur rather than per keystroke, so a half-typed word never
+  // becomes an option — and so the spelling can still be corrected freely up
+  // to the moment attention leaves the field.
+  const handleOtherBlur = useCallback(() => {
+    const clean = otherText.trim();
+    if (clean) onAddCustom?.(clean);
+  }, [otherText, onAddCustom]);
+
   return (
     <div className="space-y-2">
       <select
@@ -85,6 +96,7 @@ const SelectWithOther = ({
           className="w-full border border-emerald-300 p-2.5 rounded text-sm outline-none focus:border-emerald-500 disabled:bg-slate-100"
           value={otherText}
           onChange={handleOtherInput}
+          onBlur={handleOtherBlur}
         />
       )}
     </div>

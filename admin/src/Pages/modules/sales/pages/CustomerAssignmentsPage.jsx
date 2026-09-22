@@ -7,6 +7,12 @@ import { listKams } from '../services/teamService';
 import { reassignCustomer } from '../services/customerService';
 import { useToast } from '../../../../Components/hooks/useToast';
 import { useConfirm } from '../../../../Components/hooks/useConfirm';
+import { ROLE_LABELS } from '../../../../Components/constants/roles';
+
+// "Faruk (KAM)" rather than a bare name: on a list of managers and account
+// handlers together, the name alone does not say who is who.
+const withRole = (person) =>
+  person ? `${person.name}${person.role ? ` (${ROLE_LABELS[person.role] || person.role})` : ''}` : '';
 import Loader from '../../../../Components/Shared/Loader';
 import Pagination from '../../../../Components/Shared/Pagination';
 
@@ -51,14 +57,14 @@ const CustomerAssignmentsPage = () => {
     const target = kams.find((k) => k.id === kamId);
     const ok = await confirm({
       title: 'Reassign this customer?',
-      message: `${customer.accountName} will move from ${customer.handledBy?.name || 'nobody'} to ${target?.name}. A customer only ever has one Key Account Manager, so the previous one loses access to this record.`,
+      message: `${customer.accountName} will move from ${customer.handledBy?.name || 'nobody'} to ${withRole(target)}. A customer only ever has one Key Account Manager, so the previous one loses access to this record.`,
       confirmLabel: 'Reassign',
     });
     if (!ok) return;
     setPendingId(customer.id);
     try {
       await reassignCustomer(customer.id, kamId);
-      showToast(`${customer.accountName} is now handled by ${target?.name}`, 'success');
+      showToast(`${customer.accountName} is now handled by ${withRole(target)}`, 'success');
       setReloadToken((t) => t + 1);
     } catch (err) {
       showToast(err?.message || 'Could not reassign this customer', 'error');
@@ -132,7 +138,18 @@ const CustomerAssignmentsPage = () => {
                   <td className="p-4 pl-6 font-mono text-slate-600">{c.barcode}</td>
                   <td className="p-4 font-bold text-slate-800">{c.accountName}</td>
                   <td className="p-4 text-xs font-medium text-slate-500">
-                    {c.handledBy?.name || <span className="text-amber-600">Unassigned</span>}
+                    {c.handledBy?.name ? (
+                      <>
+                        {c.handledBy.name}
+                        <span className="block text-[10px] text-slate-400">
+                          {ROLE_LABELS[
+                            kams.find((k) => k.id === c.handledById)?.role || c.createdByRole || 'KAM'
+                          ] || 'Key Account Manager (KAM)'}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-amber-600">Unassigned</span>
+                    )}
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
@@ -147,7 +164,7 @@ const CustomerAssignmentsPage = () => {
                           .filter((k) => k.id !== c.handledById)
                           .map((k) => (
                             <option key={k.id} value={k.id}>
-                              {k.name}
+                              {withRole(k)}
                             </option>
                           ))}
                       </select>

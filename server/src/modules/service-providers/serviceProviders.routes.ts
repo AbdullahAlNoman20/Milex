@@ -11,5 +11,6 @@ router.use(requireAuth);
 // company's carrier list.
 router.use(requireStaff);
 router.get('/', controller.listHandler);
+router.get('/designations', controller.listDesignationsHandler);
 
 export default router;
