@@ -128,25 +128,32 @@ const HodRatePanel = ({ customer, onUpdated }) => {
         )}
       </div>
 
-      {customer.lmNote && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 mb-1">
-            Line Manager's Reason
-          </p>
-          <p className="text-xs text-slate-700 break-words">{customer.lmNote}</p>
-        </div>
-      )}
-
-      {customer.pendingRateRequest?.reason && customer.pendingRateRequest.reason !== customer.lmNote && (
+      {/* The question actually addressed to this desk. It is the open request
+          on the record — the Line Manager's own words when they passed it up,
+          not the KAM's earlier ask, which was closed out at that moment. */}
+      {customer.pendingRateRequest?.reason ? (
         <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 mb-1">
             {customer.pendingRateRequest.requestedByName || 'Requested'}
             {customer.pendingRateRequest.requestedByRole
               ? ` (${humanizeStatus(customer.pendingRateRequest.requestedByRole)})`
-              : ''}
+              : ''}{' '}
+            asked for a best rate
           </p>
           <p className="text-xs text-slate-700 break-words">{customer.pendingRateRequest.reason}</p>
+          <p className="text-[10px] text-slate-400 mt-1">
+            {new Date(customer.pendingRateRequest.createdAt).toLocaleString()}
+          </p>
         </div>
+      ) : (
+        customer.lmNote && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 mb-1">
+              Line Manager's Reason
+            </p>
+            <p className="text-xs text-slate-700 break-words">{customer.lmNote}</p>
+          </div>
+        )
       )}
 
       <div>

@@ -721,6 +721,18 @@ export const escalateRateToHod = async (customerId: string, reason: string, lmId
     skipWorkflowNotification: true,
   });
 
+  // The Line Manager's own words are what the Head of Department is being
+  // asked to answer, so the KAM's earlier ask is closed out and this becomes
+  // the open question on the record.
+  await prisma.rateRequest.updateMany({
+    where: { customerId, approved: null },
+    data: {
+      approved: true,
+      grantedNote: 'Passed to the Head of Department',
+      grantedById: lmId,
+      grantedAt: new Date(),
+    },
+  });
   await prisma.rateRequest.create({
     data: {
       customerId,
@@ -867,6 +879,15 @@ export const kamRequestBetterRate = async (
     ).catch(() => {});
   }
 
+  await prisma.rateRequest.updateMany({
+    where: { customerId, approved: null },
+    data: {
+      approved: true,
+      grantedNote: 'Superseded by a further request',
+      grantedById: actorId,
+      grantedAt: new Date(),
+    },
+  });
   await prisma.rateRequest.create({
     data: {
       customerId,

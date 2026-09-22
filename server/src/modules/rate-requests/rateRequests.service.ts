@@ -204,22 +204,27 @@ export const escalateRateRequestToHod = async (
     };
   }
 
-  const open = await prisma.rateRequest.findFirst({
+  // What the Line Manager is asking for is its own question, in their own
+  // words. Leaving the original ask open meant the Head of Department read
+  // the KAM's reason and never saw the Line Manager's — which is the one
+  // addressed to them.
+  await prisma.rateRequest.updateMany({
     where: { customerId, approved: null },
-    orderBy: { createdAt: 'desc' },
+    data: {
+      approved: true,
+      grantedNote: 'Passed to the Head of Department',
+      grantedById: requester.id,
+      grantedAt: new Date(),
+    },
   });
-  // A Line Manager may also start one here rather than answering an existing
-  // ask, so a request row is created if there isn't one already.
-  if (!open) {
-    await prisma.rateRequest.create({
-      data: {
-        customerId,
-        requestedById: requester.id,
-        requestedByRole: requester.role as any,
-        reason: clean.reason,
-      },
-    });
-  }
+  await prisma.rateRequest.create({
+    data: {
+      customerId,
+      requestedById: requester.id,
+      requestedByRole: requester.role as any,
+      reason: clean.reason,
+    },
+  });
 
   const updated = await prisma.customer.update({
     where: { id: customerId },
@@ -361,6 +366,8 @@ export const setNewRate = async (
         approvedRate: clean.rate,
         rateSource: source as any,
         rateSetById: requester.id,
+        // The escalation reason has been answered, so it comes off the record
+        // rather than being left as though it were still outstanding.
         lmNote: null,
         // A re-quote is a new set of terms for the same customer, so it gets
         // its own reference — otherwise the invoice raised under the old rate
