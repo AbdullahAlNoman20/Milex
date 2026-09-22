@@ -23,7 +23,7 @@ import serviceProvidersRoutes from './modules/service-providers/serviceProviders
 import onboardingRoutes from './modules/onboarding/onboarding.routes';
 import weeklyPlansRoutes from './modules/weekly-plans/weeklyPlans.routes';
 import dailyReportsRoutes from './modules/daily-reports/dailyReports.routes';
-import followUpsRoutes from './modules/follow-ups/followUps.routes';
+
 import backupRoutes from './modules/backup/backup.routes';
 import rateRequestsRoutes from './modules/rate-requests/rateRequests.routes';
 
@@ -139,7 +139,6 @@ export const buildApp = () => {
   app.use('/api/v1/onboarding', onboardingRoutes);
   app.use('/api/v1/weekly-plans', weeklyPlansRoutes);
   app.use('/api/v1/daily-reports', dailyReportsRoutes);
-  app.use('/api/v1/follow-ups', followUpsRoutes);
   app.use('/api/v1/backup', backupRoutes);
   app.use('/api/v1/rate-requests', rateRequestsRoutes);
 

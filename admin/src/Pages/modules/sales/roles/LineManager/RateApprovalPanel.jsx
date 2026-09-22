@@ -11,6 +11,7 @@ import { STATUS, CREDIT_RULES } from '../../constants/salesStatus';
 import { isRequired, isValidCreditPeriod } from '../../../../../Components/utils/validators';
 import { sanitizeText } from '../../../../../Components/utils/sanitize';
 import { humanizeStatus } from '../../../../../Components/utils/format';
+import Toggle from '../../../../../Components/Shared/Toggle';
 
 // Two ways forward, and only two: set the rate here, or hand the decision to
 // the Head of Department. They are tabs rather than two buttons on one form
@@ -167,31 +168,17 @@ const RateApprovalPanel = ({ customer, onUpdated }) => {
         </div>
       )}
 
+      {/* The same switch that appears wherever this choice is offered, so it
+          reads identically on a fresh recommendation and on a live customer's
+          re-quote. */}
       {canEscalate && (
-        <div className="flex gap-1 border-b border-slate-200">
-          <button
-            type="button"
-            onClick={() => setTab('approve')}
-            className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
-              tab === 'approve'
-                ? 'border-emerald-600 text-emerald-700'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Approve Rate
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('request')}
-            className={`px-4 py-2 text-xs font-bold border-b-2 -mb-px transition ${
-              tab === 'request'
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            Request Best Rate from HOD
-          </button>
-        </div>
+        <Toggle
+          id="rate-escalate"
+          checked={tab === 'request'}
+          onChange={(on) => setTab(on ? 'request' : 'approve')}
+          label="Request the best rate from the Head of Department"
+          hint="Leave this off to set the rate yourself."
+        />
       )}
 
       {!canEscalate || tab === 'approve' ? (

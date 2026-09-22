@@ -8,7 +8,7 @@ import { useToast } from "../../../../../Components/hooks/useToast";
 import FormField from "../../../../../Components/Shared/FormField";
 import SelectWithOther from '../../../../../Components/Shared/SelectWithOther';
 import MultiSelectWithOther from '../../../../../Components/Shared/MultiSelectWithOther';
-import { listServiceProviders } from '../../services/serviceProviderService';
+import { listServiceProviders, listDesignations } from '../../services/serviceProviderService';
 import { uploadRecommendationAttachment } from '../../services/customerService';
 import {
   BUSINESS_TYPE_OPTIONS,
@@ -149,12 +149,27 @@ const NewRecommendationWizard = () => {
   const [step, setStep] = useState(1);
   const [state, setState] = useState(() => buildInitialState());
   const [carrierOptions, setCarrierOptions] = useState([]);
+  const [designationOptions, setDesignationOptions] = useState(DESIGNATION_OPTIONS);
   const [attachmentFile, setAttachmentFile] = useState(null);
 
   useEffect(() => {
     listServiceProviders()
       .then(setCarrierOptions)
       .catch(() => setCarrierOptions(['DHL', 'FedEx', 'UPS', 'Aramex', 'TNT Express']));
+    listDesignations()
+      .then((names) => setDesignationOptions([...new Set([...DESIGNATION_OPTIONS, ...names])]))
+      .catch(() => setDesignationOptions(DESIGNATION_OPTIONS));
+  }, []);
+
+  // A name typed into one "Others" box becomes an option in every other copy
+  // of the same dropdown at once — the next route added, the next contact —
+  // rather than only after the form has been submitted. It reaches the
+  // database on submit, so until then the spelling can still be corrected.
+  const addCarrierOption = useCallback((name) => {
+    setCarrierOptions((prev) => (prev.includes(name) ? prev : [...prev, name]));
+  }, []);
+  const addDesignationOption = useCallback((name) => {
+    setDesignationOptions((prev) => (prev.includes(name) ? prev : [...prev, name]));
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitLockRef = useRef(false);
@@ -345,9 +360,7 @@ const NewRecommendationWizard = () => {
       if (!isRequired(form.creditLimitTk))
         return (showToast("Credit limit is required", "warning"), false);
       const period = Number(form.creditPeriodDays);
-      const maxAllowed = form.creditPeriodExtended
-        ? CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS
-        : CREDIT_RULES.DEFAULT_PERIOD_DAYS;
+      const maxAllowed = CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS;
       if (!Number.isFinite(period) || period < 1 || period > maxAllowed) {
         showToast(
           `Credit period must be between 1 and ${maxAllowed} days`,
@@ -565,9 +578,10 @@ const NewRecommendationWizard = () => {
                     </FormField>
                     <FormField label="Designation" required>
                       <SelectWithOther
-                        options={DESIGNATION_OPTIONS}
+                        options={designationOptions}
                         value={contacts.senior.designation}
                         onChange={(v) => setContactField("senior", "designation", v)}
+                        onAddCustom={addDesignationOption}
                         placeholder="Select designation..."
                       />
                     </FormField>
@@ -612,9 +626,10 @@ const NewRecommendationWizard = () => {
                     </FormField>
                     <FormField label="Designation" optional>
                       <SelectWithOther
-                        options={DESIGNATION_OPTIONS}
+                        options={designationOptions}
                         value={contacts.key.designation}
                         onChange={(v) => setContactField("key", "designation", v)}
+                        onAddCustom={addDesignationOption}
                         placeholder="Select designation..."
                       />
                     </FormField>
@@ -746,14 +761,15 @@ const NewRecommendationWizard = () => {
                         : `Default: ${CREDIT_RULES.DEFAULT_PERIOD_DAYS} days`
                     }
                   >
+                    {/* Anything up to the ceiling may be asked for. The tick
+                        box below marks it as an extended term for the Line
+                        Manager; it never limited what could be typed, and
+                        capping the field at the default only made a longer
+                        term impossible to request at all. */}
                     <input
                       type="number"
                       min="1"
-                      max={
-                        form.creditPeriodExtended
-                          ? CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS
-                          : CREDIT_RULES.DEFAULT_PERIOD_DAYS
-                      }
+                      max={CREDIT_RULES.MAX_EXTENDED_PERIOD_DAYS}
                       className="w-full border border-slate-200 p-3 rounded text-sm focus:border-emerald-500 outline-none"
                       value={form.creditPeriodDays}
                       onChange={(e) =>
@@ -918,6 +934,7 @@ const NewRecommendationWizard = () => {
                         options={carrierOptions}
                         value={row.provider ? row.provider.split(',').map((s) => s.trim()).filter(Boolean) : []}
                         onChange={(arr) => setShipping((prev) => prev.map((r, idx) => (idx === i ? { ...r, provider: arr.join(', ') } : r)))}
+                        onAddCustom={addCarrierOption}
                       />
                     </FormField>
                   </div>

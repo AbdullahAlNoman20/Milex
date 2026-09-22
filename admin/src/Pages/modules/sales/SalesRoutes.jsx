@@ -11,7 +11,7 @@ import CustomerDetail from './pages/CustomerDetail';
 import NewRecommendationWizard from './roles/KAM/NewRecommendationWizard';
 import WeeklySalesPlan from './roles/KAM/WeeklySalesPlan';
 import DailyVisitingReport from './roles/KAM/DailyVisitingReport';
-import FollowUpReminderPanel from './roles/LineManager/FollowUpReminderPanel';
+import CustomerAccountsPage from './pages/CustomerAccountsPage';
 import TeamReportsPage from './pages/TeamReportsPage';
 import MyActivityPage from './pages/MyActivityPage';
 import TeamActivityPage from './pages/TeamActivityPage';
@@ -57,10 +57,10 @@ const SalesRoutes = [
     ),
   },
   {
-    path: 'follow-ups',
+    path: 'customer-accounts',
     element: (
-      <RoleRoute allowedRoles={[ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT]}>
-        <FollowUpReminderPanel />
+      <RoleRoute allowedRoles={[ROLES.SUPER_ADMIN]}>
+        <CustomerAccountsPage />
       </RoleRoute>
     ),
   },

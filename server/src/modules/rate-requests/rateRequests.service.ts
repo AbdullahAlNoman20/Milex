@@ -30,14 +30,20 @@ const stageAfterRate = (processOwnerId: string | null | undefined, setById: stri
     ? RATE_PROCESS_STAGE.PENDING_OWNER_REVIEW
     : RATE_PROCESS_STAGE.PENDING_OFFER;
 
-// Which desk a request starts at. A Line Manager has nobody below them to
-// ask, and the Head of Department has nobody above them, so both of those go
-// straight to the Head of Department's desk; everyone else stops at their own
-// Line Manager first.
+// Where a rate sits when the person running the re-quote wants a better one
+// than the one in front of them. Only the Head of Department has nobody above
+// to ask, so theirs stays with them; everyone else's goes up.
 export const rateDeskStageFor = (requesterRole: string) =>
-  requesterRole === 'LINE_MANAGER' ||
-  requesterRole === 'HEAD_OF_DEPARTMENT' ||
-  requesterRole === 'SUPER_ADMIN'
+  requesterRole === 'HEAD_OF_DEPARTMENT' || requesterRole === 'SUPER_ADMIN'
+    ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
+    : RATE_PROCESS_STAGE.PENDING_HOD_RATE;
+
+// Where a request starts. A Line Manager raising one is raising it at their
+// own desk — they set the rate themselves or pass it up, exactly as they do
+// on a fresh recommendation. Only the Head of Department, who has nobody
+// above them, starts at their own.
+const startStageFor = (requesterRole: string) =>
+  requesterRole === 'HEAD_OF_DEPARTMENT' || requesterRole === 'SUPER_ADMIN'
     ? RATE_PROCESS_STAGE.PENDING_HOD_RATE
     : RATE_PROCESS_STAGE.PENDING_LM_RATE;
 
@@ -133,7 +139,7 @@ export const createRateRequest = async (
   });
 
   const clean = sanitizeAndEscape({ reason });
-  const stage = rateDeskStageFor(requester.role);
+  const stage = startStageFor(requester.role);
 
   const request = await prisma.rateRequest.create({
     data: {

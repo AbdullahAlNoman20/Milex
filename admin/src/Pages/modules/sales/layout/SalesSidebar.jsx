@@ -41,12 +41,10 @@ const NAV_ITEMS = [
   },
    { to: '/app/my-team', label: 'My Team', icon: Users, roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN] },
   {
-    // The page existed and was routed, but nothing ever linked to it — the
-    // only way in was to type the address.
-    to: '/app/follow-ups',
-    label: 'Follow-up Reminders',
+    to: '/app/customer-accounts',
+    label: 'Customer Accounts',
     icon: BellRing,
-    roles: [ROLES.LINE_MANAGER, ROLES.HEAD_OF_DEPARTMENT, ROLES.SUPER_ADMIN],
+    roles: [ROLES.SUPER_ADMIN],
     permissions: null,
   },
   {

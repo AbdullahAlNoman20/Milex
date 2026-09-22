@@ -4,6 +4,26 @@ import { hashPassword, isPasswordPolicyCompliant, PASSWORD_POLICY_MESSAGE } from
 import { logAudit } from '../../common/utils/auditLog.util';
 import { invalidateUserPermissionCache } from '../../common/middlewares/auth.middleware';
 
+// There is one Head of Department in the organisation. Two would mean two
+// people answering the same escalation, and every "waiting for the Head of
+// Department" line in the system would stop naming anyone in particular.
+const assertNoOtherHeadOfDepartment = async (exceptUserId?: string) => {
+  const existing = await prisma.user.findFirst({
+    where: {
+      role: { name: 'HEAD_OF_DEPARTMENT' as any },
+      ...(exceptUserId ? { id: { not: exceptUserId } } : {}),
+    },
+    select: { name: true },
+  });
+  if (existing) {
+    throw {
+      statusCode: 409,
+      code: 'HOD_ALREADY_EXISTS',
+      message: `${existing.name} is already the Head of Department. Change their role first if someone else is taking it on.`,
+    };
+  }
+};
+
 const assertUserIsLineManager = async (userId: string) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { role: true } });
   if (!user || user.role.name !== 'LINE_MANAGER') {
@@ -76,8 +96,12 @@ export const listKams = async (lineManagerId?: string, includeManagers = false) 
   // so a Line Manager could reassign a customer to another team's KAM. The
   // scope is kept on the KAMs and only lifted for the manager roles, which
   // are never "someone else's team" to begin with.
+  // Only a Key Account Manager can hold a customer among the subordinate
+  // roles. A Sales Coordinator files paperwork across everyone's pipeline and
+  // never owns a relationship, so offering them here only invited an
+  // assignment the workflow has no place for.
   const subordinateClause: any = {
-    role: { name: { in: ['KAM', 'SALES_COORDINATOR'] as any } },
+    role: { name: 'KAM' as any },
     ...(lineManagerId ? { OR: [{ lineManagerId }, { lineManagerId: null }] } : {}),
   };
 
@@ -107,6 +131,113 @@ export const listLineManagers = async () => {
     select: { id: true, name: true, email: true },
     orderBy: { name: 'asc' },
   });
+};
+
+// A customer's login. It exists so their identity is in place; there is no
+// customer area in this release, so the only thing anyone does with these is
+// correct the address and reset the password on the customer's behalf.
+export const listCustomerAccounts = async (page: number, pageSize: number, search?: string) => {
+  const q = search?.trim();
+  const where: any = {
+    role: { name: 'CUSTOMER' as any },
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { email: { contains: q, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        mustChangePassword: true,
+        lastLoginAt: true,
+        createdAt: true,
+        customerId: true,
+      },
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  // The account id the customer has on their own paperwork, which is what
+  // they sign in with when no real address has been set.
+  const customerIds = items.map((u) => u.customerId).filter(Boolean) as string[];
+  const customers = customerIds.length
+    ? await prisma.customer.findMany({
+        where: { id: { in: customerIds } },
+        select: { id: true, barcode: true, accountName: true, email: true, status: true },
+      })
+    : [];
+  const byId = new Map(customers.map((c) => [c.id, c]));
+
+  return {
+    items: items.map((u) => ({
+      ...u,
+      customer: u.customerId ? byId.get(u.customerId) || null : null,
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+};
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const updateCustomerAccountEmail = async (userId: string, email: string, actorId: string) => {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { role: true } });
+  if (user.role.name !== 'CUSTOMER') {
+    throw {
+      statusCode: 400,
+      code: 'NOT_A_CUSTOMER_ACCOUNT',
+      message: 'This page only changes customer logins.',
+    };
+  }
+  const clean = email.trim().toLowerCase();
+  if (!EMAIL_PATTERN.test(clean) || clean.length > 254) {
+    throw { statusCode: 400, code: 'INVALID_EMAIL', message: 'Please enter a valid email address.' };
+  }
+  const taken = await prisma.user.findFirst({ where: { email: clean, id: { not: userId } }, select: { id: true } });
+  if (taken) {
+    throw { statusCode: 409, code: 'EMAIL_IN_USE', message: 'Another account already uses that email address.' };
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.user.update({
+      where: { id: userId },
+      data: { email: clean },
+      select: { id: true, name: true, email: true, customerId: true },
+    });
+    // The customer record carries the same address, and the two drifting
+    // apart is how a person ends up being written to at one address and
+    // signing in at another.
+    if (result.customerId) {
+      await tx.customer.update({ where: { id: result.customerId }, data: { email: clean } });
+    }
+    return result;
+  });
+
+  await invalidateUserPermissionCache(userId);
+  await logAudit({
+    entity: 'User',
+    entityId: userId,
+    action: 'CUSTOMER_LOGIN_EMAIL_CHANGED',
+    actorId,
+    beforeState: { email: user.email },
+    afterState: { email: clean },
+  });
+  return updated;
 };
 
 export interface UserListFilters {
@@ -256,6 +387,9 @@ export const updateUser = async (
   if (updates.lineManagerId) {
     await assertUserIsLineManager(updates.lineManagerId);
   }
+  if (updates.role === 'HEAD_OF_DEPARTMENT' && before.role.name !== 'HEAD_OF_DEPARTMENT') {
+    await assertNoOtherHeadOfDepartment(id);
+  }
 
   const data: any = {};
   if (updates.name) data.name = updates.name;
@@ -328,6 +462,9 @@ export const createUser = async (data: {
   }
   if (data.lineManagerId) {
     await assertUserIsLineManager(data.lineManagerId);
+  }
+  if (data.role === 'HEAD_OF_DEPARTMENT') {
+    await assertNoOtherHeadOfDepartment();
   }
   const role = await prisma.role.findUniqueOrThrow({ where: { name: data.role as any } });
   const passwordHash = await hashPassword(data.password);

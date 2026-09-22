@@ -897,11 +897,12 @@ const CustomerDetail = () => {
           <AssignmentHistoryCard customer={customer} reloadToken={refreshTick} />
 
           {customer.recNote && (
-            <div className="p-4 sm:p-5 bg-amber-50 rounded-xl border border-amber-200">
-              <span className="block text-amber-600 text-[11px] font-bold uppercase tracking-wide mb-1.5">
+            <div className="relative overflow-hidden p-4 sm:p-5 pl-5 bg-gradient-to-br from-violet-50 to-violet-100/40 rounded-xl border border-violet-200 shadow-sm">
+              <div className="absolute left-0 top-0 h-full w-1 bg-violet-400" />
+              <span className="block text-violet-700 text-[11px] font-bold uppercase tracking-wide mb-1.5">
                 KAM Recommendation Note
               </span>
-              <p className="italic text-amber-700 font-medium text-sm leading-relaxed break-words">
+              <p className="italic text-violet-800 font-medium text-sm leading-relaxed break-words">
                 {customer.recNote}
               </p>
             </div>

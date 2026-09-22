@@ -52,7 +52,7 @@ const buildSentEntries = (copies, customer) =>
       isVirtual: true,
       printType: isOffer ? "offer" : "agreement",
       documentType: copy.kind,
-      label: `${isOffer ? "Offer Letter" : "Agreement"} — Copy ${copy.copyNumber}`,
+      label: `${isOffer ? "Offer Letter" : "Agreement"} (Copy ${copy.copyNumber})`,
       originalName: [
         new Date(copy.createdAt).toLocaleDateString(),
         copy.sentVia ? SENT_VIA_LABEL[copy.sentVia] : null,

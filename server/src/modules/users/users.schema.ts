@@ -43,6 +43,10 @@ export const setPasswordSchema = z
   .strict();
 
 
+export const customerAccountEmailSchema = z
+  .object({ email: z.string().email('Please enter a valid email address.').max(254) })
+  .strict();
+
 export const bulkImportKamsSchema = z
   .object({
     rows: z

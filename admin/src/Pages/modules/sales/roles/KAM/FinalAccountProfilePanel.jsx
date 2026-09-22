@@ -1,9 +1,10 @@
 // admin/src/Pages/modules/sales/roles/KAM/FinalAccountProfilePanel.jsx
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ClipboardEdit, FileCheck, Loader2, AlertTriangle } from 'lucide-react';
 import { updateFinalProfile, setAccountConfigMode, submitFinalOnboardingRegular, submitFinalOnboarding } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { GAIN_TYPE_OPTIONS, DESIGNATION_OPTIONS } from '../../constants/formOptions';
+import { listDesignations } from '../../services/serviceProviderService';
 import DocumentUploadPanel from './DocumentUploadPanel';
 
 // Four of these answers were already given on the recommendation, across
@@ -80,6 +81,14 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
     zone: customer.zone || '',
     specialInstructions: customer.specialInstructions || '',
   });
+  // Every title anyone has entered, so the same four or five job titles stop
+  // being spelled four or five different ways across the system.
+  const [designationOptions, setDesignationOptions] = useState(DESIGNATION_OPTIONS);
+  useEffect(() => {
+    listDesignations()
+      .then((names) => setDesignationOptions([...new Set([...DESIGNATION_OPTIONS, ...names])]))
+      .catch(() => {});
+  }, []);
   const [isSavingField, setIsSavingField] = useState(null);
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false);
   const submitFinalLockRef = useRef(false);
@@ -212,7 +221,7 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
             onBlur={() => handleFieldBlur('managingPartnerDesignation')}
           >
             <option value="">Select...</option>
-            {DESIGNATION_OPTIONS.map((d) => (
+            {designationOptions.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>

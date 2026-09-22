@@ -82,6 +82,32 @@ export const listUsersHandler = async (req: Request, res: Response, next: NextFu
   }
 };
 
+export const listCustomerAccountsHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 10));
+    const result = await usersService.listCustomerAccounts(page, pageSize, asOptionalString(req.query.search));
+    return sendSuccess(res, result);
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
+export const updateCustomerAccountEmailHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await usersService.updateCustomerAccountEmail(
+      asString(req.params.id),
+      req.body.email,
+      req.user!.id
+    );
+    return sendSuccess(res, { user });
+  } catch (err: any) {
+    if (err?.statusCode) return sendError(res, err.statusCode, err.code, err.message);
+    next(err);
+  }
+};
+
 export const getUserStatsHandler = async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const stats = await usersService.getUserStats();
