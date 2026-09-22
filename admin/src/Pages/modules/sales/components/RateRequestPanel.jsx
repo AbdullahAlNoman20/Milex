@@ -34,6 +34,8 @@ const OpenRequestNote = ({ request }) =>
   request ? (
     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
       <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+        {/* Whoever is currently asking. When a Line Manager passes one up,
+            this becomes their own wording rather than the KAM's earlier ask. */}
         Asked for by {humanizeStatus(request.requestedByRole)}
       </p>
       <p className="text-xs text-slate-700 break-words">{request.reason}</p>
