@@ -178,14 +178,14 @@ const SalesSidebar = () => {
               onClick={handleNavClick}
               title={!isExpanded ? label : undefined}
               className={({ isActive }) =>
-                `w-full flex items-center px-6 py-3 text-left text-sm font-semibold border-l-4 transition whitespace-nowrap ${
+                `group w-full flex items-center px-6 py-3 text-left text-sm font-semibold border-l-4 transition whitespace-nowrap ${
                   isActive
                     ? 'bg-emerald-50/50 text-emerald-700 border-emerald-600'
                     : 'text-slate-500 hover:bg-slate-50 border-transparent'
                 }`
               }
             >
-              <Icon size={20} className="mr-3 shrink-0" />
+              <Icon size={20} className="mr-3 shrink-0 transition-opacity duration-200 group-hover:opacity-50" />
               <span className={`transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>{label}</span>
             </NavLink>
           ))}
