@@ -1,0 +1,86 @@
+[
+  {
+    "id": 1,
+    "awbNumber": "AWB-260763",
+    "refNo": "260763",
+    "costCarriedBy": "KENPARK BANGLADESH APPAREL PVT LIMITED K-2",
+    "bookingDate": "2026-08-28",
+    "shipmentMode": "IMPORT",
+    "clientEmail": "client@milex.local",
+    "pickup": {
+      "companyName": "Advance Denim Co Ltd",
+      "contactPerson": "Bonnie",
+      "contactPhone": "86)757-29262825",
+      "contactEmail": "salesone03@advancedenim.com",
+      "address": "#9 Chaogui Road, High-Tech Industrial Park, Ronggui Shunde, Foshan",
+      "city": "China",
+      "postCode": "",
+      "country": "China"
+    },
+    "receiver": {
+      "companyName": "KENPARK BANGLADESH APPAREL PVT LIMITED K-2",
+      "contactPerson": "Md. Rashid Abid Sadman",
+      "contactPhone": "01676633617",
+      "contactEmail": "Abid.Sadman@hirdaramani.com",
+      "address": "Karnaphuli Export Processing Zone, Chittagong",
+      "city": "Chittagong",
+      "postCode": "4209",
+      "country": "Bangladesh"
+    },
+    "parcel": {
+      "shipmentContents": "Fabric",
+      "pieces": 1,
+      "weightKg": 29.5,
+      "cartons": 1,
+      "remarks": "Please approve for SS27"
+    },
+    "documents": ["Commercial Invoice", "Packing List"],
+    "statusCode": "RECEIVED_AT_ORIGIN_WAREHOUSE",
+    "statusLabel": "Received at Origin Warehouse",
+    "exceptionCode": null,
+    "createdAt": "2026-08-28T09:00:00.000Z",
+    "updatedAt": "2026-09-01T09:05:00.000Z"
+  },
+  {
+    "id": 2,
+    "awbNumber": "AWB-260900",
+    "refNo": "260900",
+    "costCarriedBy": "Bengal Leather Traders",
+    "bookingDate": "2026-08-30",
+    "shipmentMode": "EXPORT",
+    "clientEmail": "client@milex.local",
+    "pickup": {
+      "companyName": "Bengal Leather Traders",
+      "contactPerson": "Md. Rafiqul Islam",
+      "contactPhone": "+8801711223344",
+      "contactEmail": "client@milex.local",
+      "address": "House 12, Road 5, Gulshan-1, Dhaka 1212",
+      "city": "Dhaka",
+      "postCode": "1212",
+      "country": "Bangladesh"
+    },
+    "receiver": {
+      "companyName": "Buyer UK Ltd",
+      "contactPerson": "James Carter",
+      "contactPhone": "+44 20 7946 0958",
+      "contactEmail": "james.carter@buyeruk.com",
+      "address": "12 Baker Street",
+      "city": "London",
+      "postCode": "W1U 3BW",
+      "country": "United Kingdom"
+    },
+    "parcel": {
+      "shipmentContents": "Leather Goods",
+      "pieces": 3,
+      "weightKg": 45,
+      "cartons": 3,
+      "remarks": ""
+    },
+    "documents": ["Commercial Invoice", "Packing List", "Export B/E"],
+    "statusCode": "EXPORT_CUSTOMS_CLEARANCE",
+    "statusLabel": "Export Customs Clearance",
+    "exceptionCode": null,
+    "createdAt": "2026-08-30T10:00:00.000Z",
+    "updatedAt": "2026-09-02T11:30:00.000Z"
+  }
+]

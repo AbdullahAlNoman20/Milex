@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "mode": "IMPORT",
+    "clientEmail": "client@milex.local",
+    "clientName": "Client Demo Account",
+    "party": {
+      "companyName": "Guangzhou Textile Supply Co.",
+      "contactPerson": "Li Wei",
+      "contactPhone": "+86 20 3891 2244",
+      "contactEmail": "liwei@gztextile.cn",
+      "address": "88 Yuejin Road, Baiyun District",
+      "city": "Guangzhou",
+      "postCode": "510000",
+      "country": "China"
+    },
+    "parcel": { "shipmentContents": "Cotton Fabric Rolls", "pieces": 4, "weightKg": 62, "cartons": 4, "remarks": "For SS27 sample approval" },
+    "shipmentType": "NON_DOCUMENT",
+    "packaging": "Carton",
+    "services": ["Express"],
+    "status": "PENDING_REVIEW",
+    "reviewNote": "",
+    "createdAt": "2026-09-10T08:00:00.000Z",
+    "updatedAt": "2026-09-10T08:00:00.000Z"
+  },
+  {
+    "id": 2,
+    "mode": "EXPORT",
+    "clientEmail": "client@milex.local",
+    "clientName": "Client Demo Account",
+    "party": {
+      "companyName": "Nordic Fashion Retail AB",
+      "contactPerson": "Erik Johansson",
+      "contactPhone": "+46 8 123 4567",
+      "contactEmail": "erik@nordicfashion.se",
+      "address": "Kungsgatan 12",
+      "city": "Stockholm",
+      "postCode": "111 43",
+      "country": "Sweden"
+    },
+    "parcel": { "shipmentContents": "Leather Handbags", "pieces": 10, "weightKg": 38, "cartons": 2, "remarks": "" },
+    "shipmentType": "NON_DOCUMENT",
+    "packaging": "Carton",
+    "services": ["Premium"],
+    "status": "PENDING_REVIEW",
+    "reviewNote": "",
+    "createdAt": "2026-09-11T10:30:00.000Z",
+    "updatedAt": "2026-09-11T10:30:00.000Z"
+  }
+]

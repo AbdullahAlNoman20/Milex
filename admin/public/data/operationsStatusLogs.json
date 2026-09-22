@@ -1,0 +1,6 @@
+[
+  { "id": 1, "awbNumber": "AWB-260763", "status": "Received at Origin Warehouse", "exceptionCode": null, "note": "Cargo received at China warehouse", "updatedBy": "System", "updatedAt": "2026-09-01T09:05:00.000Z" },
+  { "id": 2, "awbNumber": "AWB-260763", "status": "Shipment Picked Up / Cargo Received", "exceptionCode": null, "note": "Shipment booked / AWB generated", "updatedBy": "System", "updatedAt": "2026-08-28T09:00:00.000Z" },
+  { "id": 3, "awbNumber": "AWB-260900", "status": "Export Customs Clearance", "exceptionCode": null, "note": "B/E submitted for assessment", "updatedBy": "System", "updatedAt": "2026-09-02T11:30:00.000Z" },
+  { "id": 4, "awbNumber": "AWB-260900", "status": "Booked", "exceptionCode": null, "note": "Shipment booked / AWB generated", "updatedBy": "System", "updatedAt": "2026-08-30T10:00:00.000Z" }
+]

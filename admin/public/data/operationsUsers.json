@@ -1,0 +1,6 @@
+[
+  { "id": 1, "name": "Client Demo Account", "role": "CLIENT", "email": "client@milex.local", "password": "Test@Pass123!" },
+  { "id": 2, "name": "Operations Head", "role": "OPERATIONS_HEAD", "email": "opshead@milex.local", "password": "Test@Pass123!" },
+  { "id": 3, "name": "Domestic Administrator", "role": "DOMESTIC_ADMIN", "email": "domestic@milex.local", "password": "Test@Pass123!" },
+  { "id": 4, "name": "Foreign Administrator", "role": "FOREIGN_ADMIN", "email": "foreign@milex.local", "password": "Test@Pass123!" }
+]

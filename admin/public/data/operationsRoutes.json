@@ -1,0 +1,5 @@
+[
+  { "id": 1, "lane": "Dhaka (DAC) → London (LHR)", "mode": "Air", "carrier": "British Airways Cargo", "avgTransitDays": 3, "status": "ACTIVE" },
+  { "id": 2, "lane": "China (Guangzhou) → Dhaka (DAC)", "mode": "Air", "carrier": "Cathay Pacific Cargo", "avgTransitDays": 4, "status": "ACTIVE" },
+  { "id": 3, "lane": "Dhaka (DAC) → Dubai (DXB)", "mode": "Air", "carrier": "Emirates SkyCargo", "avgTransitDays": 2, "status": "ACTIVE" }
+]

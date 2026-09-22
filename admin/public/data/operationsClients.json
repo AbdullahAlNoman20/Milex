@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "accountName": "Bengal Leather Traders",
+    "contactPerson": "Md. Rafiqul Islam",
+    "mobile": "+8801711223344",
+    "email": "client@milex.local",
+    "businessType": "Leather",
+    "accountType": "CREDIT CUSTOMER",
+    "area": "Gulshan-1",
+    "zone": "Dhaka North",
+    "creditPeriodDays": 15,
+    "status": "ACTIVE_ACCOUNT",
+    "address": "House 12, Road 5, Gulshan-1, Dhaka 1212",
+    "createdAt": "2026-01-15T09:30:00.000Z"
+  }
+]

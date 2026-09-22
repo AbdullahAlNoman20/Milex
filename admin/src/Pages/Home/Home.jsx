@@ -11,12 +11,20 @@ const Home = () => (
       Streamlined recommendation, rate approval, and account onboarding workflow for the Sales
       department.
     </p>
-    <Link
-      to="/login"
-      className="bg-emerald-700 text-white font-bold px-6 py-3 rounded-lg shadow-md hover:bg-emerald-800 transition"
-    >
-      Enter System
-    </Link>
+    <div className="flex flex-col sm:flex-row items-center gap-4">
+      <Link
+        to="/login"
+        className="bg-emerald-700 text-white font-bold px-6 py-3 rounded-lg shadow-md hover:bg-emerald-800 transition"
+      >
+        Enter System
+      </Link>
+      <Link
+        to="/operations/login"
+        className="bg-white text-emerald-700 font-bold px-6 py-3 rounded-lg shadow-md border-2 border-emerald-700 hover:bg-emerald-50 transition"
+      >
+        Enter Operations
+      </Link>
+    </div>
   </main>
 );
 

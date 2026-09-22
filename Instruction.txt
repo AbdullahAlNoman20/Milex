@@ -1,0 +1,41 @@
+FILES NEEDED (send content of these):
+
+# Auth & Routing core (to replicate for Operations)
+src/Components/context/AuthContext.jsx
+src/Components/hooks/useAuth.js
+src/Components/services/authService.js
+src/Components/services/api.js
+src/Components/constants/roles.js
+src/Components/constants/permissions.js
+src/Components/Shared/ProtectedRoute.jsx
+src/Components/Shared/RoleRoute.jsx
+src/Components/Shared/Unauthorized.jsx
+
+# Sales module pattern reference (to mirror structure)
+src/Pages/modules/sales/SalesRoutes.jsx
+src/Pages/modules/sales/layout/SalesLayout.jsx
+src/Pages/modules/sales/layout/SalesSidebar.jsx
+src/Pages/modules/sales/context/SalesContext.jsx
+src/Pages/modules/sales/context/SalesContextObject.js
+src/Pages/modules/sales/hooks/useSales.js
+src/Pages/modules/sales/constants/salesStatus.js
+src/Pages/modules/sales/constants/formOptions.js
+
+# Shared UI (to check existing reusable components before creating new)
+src/Components/Shared/FormField.jsx
+src/Components/Shared/Loader.jsx
+src/Components/Shared/Pagination.jsx
+src/Components/Shared/Toast.jsx
+src/Components/context/ToastContext.jsx
+src/Components/hooks/useToast.js
+src/Components/utils/validators.js
+src/Components/utils/format.js
+src/Components/utils/sanitize.js
+src/Components/utils/date.js
+
+# JSON data reference (existing pattern)
+public/data/users.json
+
+# Files I will edit directly (send current content)
+src/Pages/Home/Home.jsx
+src/Router.jsx
