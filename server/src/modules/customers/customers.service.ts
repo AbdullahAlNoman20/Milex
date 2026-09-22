@@ -292,7 +292,6 @@ export const listCustomers = async (
         rateProcessActive: true, rateProcessStage: true, rateProcessOwnerId: true,
         revision: true, status: true, accountProfileType: true,
         provisionalCreatedAt: true, provisionalExpiryDate: true, provisionalExtensionDays: true,
-        followUpDate: true, followUpNote: true,
         recommendedById: true, handledById: true,
         createdAt: true, updatedAt: true,
         handledBy: { select: { name: true } },

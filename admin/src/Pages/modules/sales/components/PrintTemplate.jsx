@@ -868,15 +868,8 @@ const PrintTemplate = ({ data, onClose }) => {
                   <tr>
                     <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
                     <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
-                    {/* Whose authority the rate carries, which the form asked
-                        for and never filled in. */}
-                    <td className="border border-slate-800 px-2 py-1 h-16 align-top">
-                      {c.rateSource === 'HEAD_OF_DEPARTMENT'
-                        ? 'Head of Department'
-                        : c.rateSource
-                          ? 'Line Manager'
-                          : ''}
-                    </td>
+                    {/* Signed by hand on the printed copy. */}
+                    <td className="border border-slate-800 px-2 py-1 h-16 align-top"></td>
                   </tr>
                 </tbody>
               </table>
@@ -1060,16 +1053,10 @@ const PrintTemplate = ({ data, onClose }) => {
                   <PfFull label="(In Word)" value={isCash ? '' : amountWords} />
                   <PfRow l1="Account Created By" v1={c.recommendedBy?.name} l2="Account Handled By" v2={c.handledBy?.name} />
                   <PfFull label="Special Instructions (If Any)" value={c.specialInstructions} h="34px" />
-                  {/* Signed on paper, so these stay blank by design — but the
-                      rate's own authority is known and is printed. */}
-                  <PfRow
-                    l1="Rate Given By"
-                    v1={c.rateSource === 'HEAD_OF_DEPARTMENT' ? 'Head of Department' : c.rateSource ? 'Line Manager' : ''}
-                    l2="Approved By"
-                    v2=""
-                    h="34px"
-                  />
-                  <PfRow l1="Checked By" v1="" l2="Received By" v2="" h="34px" />
+                  {/* Signed on paper, so these stay blank by design. Who set
+                      the rate internally is not a thing the customer's copy
+                      of the form carries. */}
+                  <PfRow l1="Checked By" v1="" l2="Approved By" v2="" h="34px" />
                 </PfTable>
               </PfBlock>
 
