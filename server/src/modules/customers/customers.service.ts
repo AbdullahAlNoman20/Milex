@@ -138,6 +138,16 @@ const roleQueueFilter = (role: string, userId: string): any | null => {
         OR: [
           { status: CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER },
           { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerRejected: false, offerAccepted: true, agreementSent: false },
+          // The agreement is out and the documents and profile are theirs to
+          // complete — including an onboarding the Head of Department has
+          // sent back, which never appeared on anyone's list at all.
+          {
+            status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
+            offerRejected: false,
+            offerAccepted: true,
+            agreementSent: true,
+            finalProfileCompleted: false,
+          },
           requoteAt(RATE_PROCESS_STAGE.PENDING_OFFER),
         ],
       };
@@ -269,7 +279,7 @@ export const listCustomers = async (
         creditLimitTk: true, creditPeriodDays: true, creditPeriodExtendedByLM: true,
         proposedRate: true, approvedRate: true, lmNote: true, recNote: true, rejectReason: true,
         rateRef: true, offerSent: true, offerAccepted: true, offerRejected: true, agreementSent: true,
-        finalProfileCompleted: true, accountConfigMode: true,
+        finalProfileCompleted: true, accountConfigMode: true, onboardingReturnNote: true,
         managingPartnerName: true, managingPartnerDesignation: true,
         binNumber: true, tinNumber: true, preferredCarrier: true, natureOfBusiness: true,
         gainType: true, financeMode: true, area: true, zone: true,
@@ -667,6 +677,21 @@ export const approveRate = async (customerId: string, data: any, actorId: string
     skipWorkflowNotification: true,
     // Straight to the Sales Coordinator means it is their turn now.
     notifySalesCoordinators: nextStatus === CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
+  });
+
+  // Whatever was asked for has now been answered. Only grantHodRate closed
+  // these out, so a request a KAM raised during onboarding stayed open for
+  // the life of the account — and every later screen read it as a decision
+  // still outstanding.
+  await prisma.rateRequest.updateMany({
+    where: { customerId, approved: null },
+    data: {
+      approved: true,
+      grantedRate: clean.rate,
+      grantedById: actorId,
+      grantedByRole: source as any,
+      grantedAt: new Date(),
+    },
   });
 
   createNotificationsForUsers([updated.handledById], {
@@ -1663,7 +1688,7 @@ export const submitFinalOnboardingRegular = async (customerId: string, actorId: 
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
     actorId,
-    extraUpdates: { accountProfileType: 'REGULAR' },
+    extraUpdates: { accountProfileType: 'REGULAR', onboardingReturnNote: null },
     historyAction: 'FINAL ONBOARDING REQUESTED (REGULAR ACCOUNT)',
     historySubText: 'Awaiting Head of Department approval',
   });

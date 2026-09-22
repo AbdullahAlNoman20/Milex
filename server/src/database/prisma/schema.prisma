@@ -218,6 +218,11 @@ model Customer {
   // Final Account Profile Data (filled by KAM/SC once Agreement is signed)
   finalProfileCompleted Boolean @default(false)
   accountConfigMode     String  @default("PROVISIONAL")
+  // What the Head of Department flagged when they sent an onboarding back.
+  // It used to be written into lmNote, which is the rate note — so it either
+  // overwrote a live rate note or was quietly overwritten by the next one,
+  // and the Sales Coordinator correcting the profile never saw it.
+  onboardingReturnNote  String?
   managingPartnerName        String?
   // Printed beside the name on the agreement's signature block, so the
   // person signing is identified by role as well as by name.

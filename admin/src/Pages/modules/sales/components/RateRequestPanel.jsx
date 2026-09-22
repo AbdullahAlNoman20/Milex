@@ -108,7 +108,11 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
     load();
   }, [load, reloadToken, customer.revision, customer.approvedRate, stage]);
 
-  const open = items.find((r) => r.approved === null) || null;
+  // Only a request belonging to the re-quote actually running counts. A row
+  // left open by an earlier stage of the account's own onboarding is history,
+  // not a decision anyone is still waiting on — reading it as one left the
+  // KAM permanently locked out of asking for new terms.
+  const open = stage ? items.find((r) => r.approved === null) || null : null;
   const answered = items.filter((r) => r.approved !== null);
 
   const run = async (fn, successMessage) => {
@@ -374,7 +378,9 @@ const RateRequestPanel = ({ customer, onUpdated, reloadToken = 0 }) => {
       );
     }
 
-    if (open) {
+    // Reached only while a re-quote is genuinely sitting on a desk this
+    // person does not hold.
+    if (stage && open) {
       return (
         <Locked>Waiting for the Line Manager to set a new rate or pass it to the Head of Department.</Locked>
       );

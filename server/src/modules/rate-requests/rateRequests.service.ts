@@ -123,14 +123,14 @@ export const createRateRequest = async (
         'A new rate is already going through for this customer. Once it has been offered and answered, another can be raised.',
     };
   }
-  const open = await prisma.rateRequest.findFirst({ where: { customerId, approved: null } });
-  if (open) {
-    throw {
-      statusCode: 409,
-      code: 'REQUEST_ALREADY_OPEN',
-      message: 'There is already a rate request waiting for a decision on this customer.',
-    };
-  }
+  // Nothing else stands in the way. A request row left open by an earlier
+  // stage of the account's own onboarding is not a live re-quote, and
+  // treating it as one meant a KAM could never ask for new terms on a
+  // customer they had once asked for a better rate on.
+  await prisma.rateRequest.updateMany({
+    where: { customerId, approved: null },
+    data: { approved: true, grantedAt: new Date(), grantedNote: 'Closed when a new rate request was raised' },
+  });
 
   const clean = sanitizeAndEscape({ reason });
   const stage = rateDeskStageFor(requester.role);
