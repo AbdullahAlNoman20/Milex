@@ -8,6 +8,7 @@ import { sendCustomerAccountEmail } from '../../jobs/notification.job';
 import { logAudit } from "../../common/utils/auditLog.util";
 import { sanitizeAndEscape } from "../customers/sanitize.helper";
 import { DOCUMENT_TYPE_LABELS, notifyHeadsOfDepartment } from "../customers/customers.service";
+import { createNotificationsForUsers } from "../notifications/notifications.service";
 import { assertKamOwnsCustomerIfKam } from "../../common/utils/scopeGuard.util";
 import { assertLineManagerOwnsCustomer } from "../../common/utils/scopeGuard.util";
 import { ensureCustomerAccount } from "../customers/customerAccount.service";
@@ -238,6 +239,9 @@ export const submitFinalOnboardingRequest = async (
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_FINAL_REVIEW_PENDING,
     actorId: kamId,
+    // Whatever was flagged last time has now been answered by this
+    // resubmission, so the notice comes off the record.
+    extraUpdates: { onboardingReturnNote: null },
     historyAction: 'FINAL ONBOARDING REQUESTED',
     historySubText: 'Awaiting Head of Department approval',
   });
@@ -307,12 +311,16 @@ export const decideFinalOnboarding = async (
     }).catch(() => {});
     return updated;
   }
-  return transitionCustomerStatus({
+  const cleanComments = comments ? sanitizeAndEscape({ c: comments }).c : '';
+
+  const returned = await transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PROVISIONAL_ACTIVE,
     actorId: lmId,
     extraUpdates: {
-      lmNote: comments ? sanitizeAndEscape({ c: comments }).c : undefined,
+      // What needs correcting, kept on the record so the panel can show it
+      // rather than it living only in the audit trail.
+      onboardingReturnNote: cleanComments || null,
       // Reopens the Final Account Profile panel so the Sales Coordinator can
       // correct what was flagged and submit again, with nothing lost in
       // between and the customer still live throughout.
@@ -325,8 +333,32 @@ export const decideFinalOnboarding = async (
       accountProfileType: 'PROVISIONAL',
     },
     historyAction: 'FINAL ONBOARDING RETURNED FOR CORRECTION',
-    historySubText: comments || "",
+    historySubText: cleanComments,
+    // The general workflow audience does not include the Sales Coordinators,
+    // and they are precisely the people who have to act on this — they fill
+    // in the profile and file the documents. Told directly below instead.
+    skipWorkflowNotification: true,
   });
+
+  // Everyone who has to do something about it: the Sales Coordinators who
+  // make the correction, and the account's own holder, who is accountable
+  // for it going through.
+  try {
+    const scs = await prisma.user.findMany({
+      where: { role: { name: 'SALES_COORDINATOR' }, isActive: true },
+      select: { id: true },
+    });
+    const recipients = [...new Set([...scs.map((s) => s.id), returned.handledById])];
+    await createNotificationsForUsers(recipients, {
+      label: `${returned.accountName} — Onboarding returned for correction${cleanComments ? `: ${cleanComments}` : ''}`,
+      link: `/app/customers/${returned.barcode}`,
+      isOverdue: true,
+    });
+  } catch (err) {
+    console.warn('[notifications] onboarding return notice failed (non-fatal):', (err as Error)?.message);
+  }
+
+  return returned;
 };
 
 export const expireOverdueProvisionalAccounts = async () => {

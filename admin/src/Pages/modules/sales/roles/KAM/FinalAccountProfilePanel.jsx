@@ -1,6 +1,6 @@
 // admin/src/Pages/modules/sales/roles/KAM/FinalAccountProfilePanel.jsx
 import { useState, useCallback, useRef } from 'react';
-import { ClipboardEdit, FileCheck, Loader2 } from 'lucide-react';
+import { ClipboardEdit, FileCheck, Loader2, AlertTriangle } from 'lucide-react';
 import { updateFinalProfile, setAccountConfigMode, submitFinalOnboardingRegular, submitFinalOnboarding } from '../../services/customerService';
 import { useToast } from '../../../../../Components/hooks/useToast';
 import { GAIN_TYPE_OPTIONS, DESIGNATION_OPTIONS } from '../../constants/formOptions';
@@ -155,6 +155,26 @@ const FinalAccountProfilePanel = ({ customer, onSaved }) => {
           Agreement is signed. Complete the final tax and operational details to activate the account.
         </p>
       </div>
+
+      {/* What the Head of Department flagged when they sent this back. It was
+          being written into the rate note, where the person correcting the
+          profile never saw it. */}
+      {customer.onboardingReturnNote && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex gap-2.5">
+          <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide mb-1">
+              Returned by the Head of Department
+            </p>
+            <p className="text-xs text-red-700 leading-relaxed break-words">
+              {customer.onboardingReturnNote}
+            </p>
+            <p className="text-[10px] text-red-500 mt-1.5">
+              Correct what is flagged above, then submit for final onboarding again.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div>
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Account Configuration Mode</p>

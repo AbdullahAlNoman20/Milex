@@ -521,6 +521,26 @@ const CustomerDetail = () => {
           </div>
         )}
 
+      {/* Visible to everyone on the record, not only to whoever happens to be
+          editing the profile — the KAM and the Line Manager both need to know
+          the account was sent back and why. */}
+      {customer.onboardingReturnNote && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 sm:p-5 flex gap-3">
+          <Eye size={16} className="text-red-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-red-600 uppercase tracking-wide mb-1">
+              Onboarding Returned for Correction
+            </p>
+            <p className="text-xs text-red-700 leading-relaxed break-words">
+              {customer.onboardingReturnNote}
+            </p>
+            <p className="text-xs text-red-600 mt-2">
+              The Sales Coordinator corrects the profile and submits it for final onboarding again.
+            </p>
+          </div>
+        </div>
+      )}
+
       {customer.accountProfileType === "PROVISIONAL" &&
         customer.provisionalExpiryDate &&
         PROVISIONAL_COUNTDOWN_STATUSES.includes(customer.status) && (
