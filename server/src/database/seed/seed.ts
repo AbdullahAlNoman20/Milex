@@ -115,26 +115,33 @@ async function main() {
     }
   }
 
-  const TEST_PASSWORD = 'Test@Pass123!';
+  // One account, and only one: the Super Admin who sets the system up. Every
+  // other person is created from the user console by them, with a real name
+  // and a real address, so no placeholder login ever exists to be forgotten
+  // about and left working.
+  const ADMIN_EMAIL = 'milexadminair@milexair.com';
+  const ADMIN_PASSWORD = 'Test@Pass123!';
 
-  const testUsers: { name: string; email: string; role: RoleName }[] = [
-    { name: 'Super Admin', email: 'admin@milex.local', role: 'SUPER_ADMIN' },
-    { name: 'Test KAM', email: 'kam@milex.local', role: 'KAM' },
-    { name: 'Test Sales Coordinator', email: 'sc@milex.local', role: 'SALES_COORDINATOR' },
-    { name: 'Test Line Manager', email: 'lm@milex.local', role: 'LINE_MANAGER' },
-    { name: 'Test Head of Department', email: 'hod@milex.local', role: 'HEAD_OF_DEPARTMENT' },
-  ];
-
-  for (const u of testUsers) {
-    const existing = await prisma.user.findUnique({ where: { email: u.email } });
-    if (existing) continue;
-
-    const role = await prisma.role.findUniqueOrThrow({ where: { name: u.role } });
-    const passwordHash = await bcrypt.hash(TEST_PASSWORD, 12);
+  const existingAdmin = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
+  if (existingAdmin) {
+    console.log(`Super Admin already exists (${ADMIN_EMAIL}) — left untouched.`);
+  } else {
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: 'SUPER_ADMIN' as RoleName } });
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
     await prisma.user.create({
-      data: { name: u.name, email: u.email, passwordHash, passwordHistory: [passwordHash], roleId: role.id },
+      data: {
+        name: 'MilexAir Admin',
+        email: ADMIN_EMAIL,
+        passwordHash,
+        passwordHistory: [passwordHash],
+        roleId: role.id,
+        // This password is written in the source, so it is treated as a
+        // one-time key: sign in with it once and the system requires a new
+        // one before anything else can be done.
+        mustChangePassword: true,
+      },
     });
-    console.log(`Seeded ${u.role}: ${u.email} / ${TEST_PASSWORD}`);
+    console.log(`Seeded Super Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   }
 
   const DEFAULT_CARRIERS = ['DHL', 'FedEx', 'UPS', 'Aramex', 'TNT Express'];
@@ -142,7 +149,9 @@ async function main() {
     await prisma.serviceProvider.upsert({ where: { name }, update: {}, create: { name } });
   }
 
-  console.log('Seed complete. Rotate all these passwords before real use.');
+  console.log(
+    'Seed complete. Sign in as the Super Admin, set a new password when prompted, then create everyone else from User & Access Management.'
+  );
 }
 
 main()
