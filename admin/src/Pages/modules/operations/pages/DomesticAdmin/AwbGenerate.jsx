@@ -6,6 +6,7 @@ import SectionCard from '../../components/SectionCard';
 import FormField from '../../components/FormField';
 import StepWizard from '../../components/StepWizard';
 import InfoTooltip from '../../components/InfoTooltip';
+import TermsCheckbox from '../../components/TermsCheckbox';
 import {
   AWB_HEADER_FIELDS, PARTY_ADDRESS_FIELDS, PARCEL_DETAIL_FIELDS, DOCUMENT_CHECKLIST,
   AWB_SHIPMENT_TYPE_OPTIONS, PAYMENT_PARTY_OPTIONS, PACKAGING_OPTIONS, SERVICE_OPTIONS, CURRENCY_OPTIONS,
@@ -70,9 +71,10 @@ const AwbGenerate = () => {
   const [paymentDutiesAcNo, setPaymentDutiesAcNo] = useState('');
   const [packaging, setPackaging] = useState('Carton');
   const [services, setServices] = useState([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingAwb, setIsGeneratingAwb] = useState(false);
   const [createdAwb, setCreatedAwb] = useState(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const toggleDoc = (doc) => setCheckedDocs((prev) => (prev.includes(doc) ? prev.filter((d) => d !== doc) : [...prev, doc]));
   const toggleService = (s) => setServices((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -102,10 +104,10 @@ const AwbGenerate = () => {
     setPaymentTransportAcNo('');
     setPaymentDutiesBy('Recipient');
     setPaymentDutiesAcNo('');
-    setPackaging('Carton');
+setPackaging('Carton');
     setServices([]);
     setCreatedAwb(null);
-    setStep(0);
+    setAgreedToTerms(false);
   }, []);
 
   const validateStep = useCallback(
@@ -142,7 +144,7 @@ const AwbGenerate = () => {
 
   const goBack = useCallback(() => setStep((s) => Math.max(0, s - 1)), []);
 
-  const handleSubmit = useCallback(async () => {
+const handleSubmit = useCallback(async () => {
     for (let i = 0; i <= 3; i += 1) {
       const error = validateStep(i);
       if (error) {
@@ -150,6 +152,10 @@ const AwbGenerate = () => {
         showToast(error, 'warning');
         return;
       }
+    }
+    if (!agreedToTerms) {
+      showToast('Please accept the Terms & Conditions before generating the AWB', 'warning');
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -336,12 +342,14 @@ const AwbGenerate = () => {
             <p><span className="font-bold text-slate-700">Packaging:</span> {packaging}</p>
             <p><span className="font-bold text-slate-700">Services:</span> {services.join(', ') || '—'}</p>
           </div>
-          <p className="text-xs text-slate-400 mt-4">Click Submit below to generate the AWB and create the shipment record.</p>
+          <p className="text-xs text-slate-400 mt-4 mb-3">Click Submit below to generate the AWB and create the shipment record.</p>
+          <TermsCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} disabled={isSubmitting} />
         </SectionCard>
       ),
     },
   ]), [header, pickup, receiver, parcel, declaredValue, currency, shipmentType, paymentTransportBy, paymentTransportAcNo,
-    paymentDutiesBy, paymentDutiesAcNo, packaging, services, checkedDocs, isSubmitting, isGeneratingAwb, handleAutoGenerateAwb]);
+    paymentDutiesBy, paymentDutiesAcNo, packaging, services, checkedDocs, isSubmitting, isGeneratingAwb, handleAutoGenerateAwb,
+    agreedToTerms]);
 
   if (createdAwb) {
     return (
@@ -351,14 +359,14 @@ const AwbGenerate = () => {
             AWB <span className="font-bold text-emerald-700">{createdAwb}</span> has been created.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link to={`/operations/documents/awb/${encodeURIComponent(createdAwb)}`} className="bg-emerald-600 text-white text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition">
+            <Link to={`/operations/documents/awb-invoice/${encodeURIComponent(createdAwb)}`} className="bg-emerald-600 text-white text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition">
+              Print AWB + Invoice
+            </Link>
+            <Link to={`/operations/documents/awb/${encodeURIComponent(createdAwb)}`} className="bg-slate-800 text-white text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-slate-900 transition">
               View AWB
             </Link>
-            <Link to={`/operations/documents/label/${encodeURIComponent(createdAwb)}`} className="bg-slate-800 text-white text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-slate-900 transition">
+            <Link to={`/operations/documents/label/${encodeURIComponent(createdAwb)}`} className="bg-white border border-slate-300 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-slate-50 transition">
               Print Label
-            </Link>
-            <Link to="/operations/domestic/invoice" className="bg-white border border-slate-300 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-lg hover:bg-slate-50 transition">
-              Create Invoice
             </Link>
             <button type="button" onClick={resetForm} className="text-sm font-bold text-slate-500 hover:text-slate-700 transition">
               + Create Another AWB

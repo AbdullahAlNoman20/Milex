@@ -4,7 +4,7 @@ import SectionCard from '../../components/SectionCard';
 import FormField from '../../components/FormField';
 import StepWizard from '../../components/StepWizard';
 import InfoTooltip from '../../components/InfoTooltip';
-import { PARTY_ADDRESS_FIELDS, PARCEL_DETAIL_FIELDS, AWB_SHIPMENT_TYPE_OPTIONS, PACKAGING_OPTIONS, SERVICE_OPTIONS, CURRENCY_OPTIONS } from '../../constants/shipmentFields';
+import TermsCheckbox from '../../components/TermsCheckbox';import { PARTY_ADDRESS_FIELDS, PARCEL_DETAIL_FIELDS, AWB_SHIPMENT_TYPE_OPTIONS, PACKAGING_OPTIONS, SERVICE_OPTIONS, CURRENCY_OPTIONS } from '../../constants/shipmentFields';
 import { createRequest } from '../../services/requestService';
 import { useOperationsAuth } from '../../hooks/useOperationsAuth';
 import { useToast } from '../../../../../Components/hooks/useToast';
@@ -48,6 +48,7 @@ const ImportRequest = () => {
   const [services, setServices] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const toggleService = (s) => setServices((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
 
@@ -84,6 +85,10 @@ const ImportRequest = () => {
     for (let i = 0; i <= 1; i += 1) {
       const error = validateStep(i);
       if (error) { setStep(i); showToast(error, 'warning'); return; }
+    }
+    if (!agreedToTerms) {
+      showToast('Please accept the Terms & Conditions before submitting', 'warning');
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -172,12 +177,15 @@ const ImportRequest = () => {
             <p><span className="font-bold text-slate-700">Weight:</span> {parcel.weightKg || '—'} kg</p>
             <p><span className="font-bold text-slate-700">Type:</span> {shipmentType}</p>
             <p><span className="font-bold text-slate-700">Packaging:</span> {packaging}</p>
-            <p><span className="font-bold text-slate-700">Services:</span> {services.join(', ') || '—'}</p>
+           <p><span className="font-bold text-slate-700">Services:</span> {services.join(', ') || '—'}</p>
+          </div>
+          <div className="mt-4">
+            <TermsCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} disabled={isSubmitting} />
           </div>
         </SectionCard>
       ),
     },
-  ]), [pickup, parcel, declaredValue, currency, shipmentType, packaging, services, isSubmitting]);
+  ]), [pickup, parcel, declaredValue, currency, shipmentType, packaging, services, isSubmitting, agreedToTerms]);
 
   if (submitted) {
     return (

@@ -6,9 +6,11 @@ import InvoicePrintView from './pages/Documents/InvoicePrintView';
 import ManifestPrintView from './pages/Documents/ManifestPrintView';
 import LabelPrintView from './pages/Documents/LabelPrintView';
 import PodPrintView from './pages/Documents/PodPrintView';
+import AwbInvoiceCombinedView from './pages/Documents/AwbInvoiceCombinedView';
 
 const OperationsDocumentRoutes = [
   { path: 'awb/:awbNumber', element: <AwbPrintView /> },
+  { path: 'awb-invoice/:awbNumber', element: <AwbInvoiceCombinedView /> },
   { path: 'invoice/:awbNumber', element: <InvoicePrintView /> },
   { path: 'manifest/:manifestId', element: <ManifestPrintView /> },
   { path: 'label/:awbNumber', element: <LabelPrintView /> },
