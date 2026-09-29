@@ -1,18 +1,15 @@
-// src/modules/daily-reports/dailyReports.service.ts
+// server/src/modules/daily-reports/dailyReports.service.ts
 import { prisma } from '../../config/db';
 import { logAudit } from '../../common/utils/auditLog.util';
 import { notifyLineManagerOfPlanChange } from '../weekly-plans/weeklyPlans.service';
 
-// Mirrors the frontend's Saturday-start work week (see
-// admin/.../constants/weeklyPlanStatus.js#getWeekStart), but computed from
-// the report's own date rather than "today" so a report for a past/future
-// date maps to the correct week. Uses local Date field arithmetic only (no
-// toISOString/UTC conversion), so it can't shift the date by a day depending
-// on the server's timezone.
+// Mirrors the frontend's Saturday-start work week, computed from the report's
+// own date with local field arithmetic only, so it cannot shift by a day
+// depending on the server's timezone.
 const getWeekStartForDate = (isoDate: string): string => {
   const [year, month, day] = isoDate.split('-').map(Number);
   const date = new Date(year, month - 1, day);
-  const dow = date.getDay(); // 0=Sun ... 6=Sat
+  const dow = date.getDay();
   const diff = dow === 6 ? 0 : -(dow + 1);
   date.setDate(date.getDate() + diff);
   const y = date.getFullYear();
@@ -24,36 +21,24 @@ const getWeekStartForDate = (isoDate: string): string => {
 export const getReportByDate = async (kamId: string, date: string) => {
   const existing = await prisma.dailyReport.findUnique({ where: { kamId_date: { kamId, date } }, include: { visits: true } });
 
-  // Always pull the latest Weekly Plan entries for this date, so newly
-  // added/edited plan rows keep showing up even after a report already
-  // exists for the day (e.g. the KAM adds another planned visit later).
-  //
-  // This used to load EVERY weekly plan and EVERY visit this KAM had ever
-  // created and then filter by day in memory — after a few months that is
-  // thousands of rows fetched to find two. The filter now happens in the
-  // database, against the new Visit(day) index.
   const scheduled = await prisma.visit.findMany({
     where: {
       day: date,
       OR: [{ existingPlan: { kamId } }, { prospectPlan: { kamId } }],
     },
+    orderBy: { createdAt: 'asc' },
   });
   const scheduledById = new Map(scheduled.map((v) => [v.id, v]));
 
   if (existing) {
-    // Merge in any scheduled visit not already represented in the saved
-    // report (matched by sourceVisitId if the DB tracked it, else by name).
     const existingSourceIds = new Set(existing.visits.map((v: any) => v.sourceVisitId).filter(Boolean));
     const existingNames = new Set(existing.visits.map((v) => v.customerName.trim().toLowerCase()));
     const missing = scheduled.filter(
       (v) => !existingSourceIds.has(v.id) && !existingNames.has(v.customerName.trim().toLowerCase())
     );
 
-    // Keep already-saved rows' customer name / purpose / customerId in sync
-    // with their source Weekly Plan visit — otherwise editing the purpose in
-    // the Weekly Plan after a daily report already exists for that date
-    // never showed up here. Completion status, skip reason, and outcome
-    // notes (the KAM's own input for today) are left untouched.
+    // Keep saved rows' name / purpose / customerId in step with their source
+    // plan visit. The KAM's own answer for the day is never touched.
     const syncedExistingVisits = existing.visits.map((v: any) => {
       if (!v.sourceVisitId) return v;
       const source = scheduledById.get(v.sourceVisitId);
@@ -80,6 +65,7 @@ export const getReportByDate = async (kamId: string, date: string) => {
           reasonIfNotCompleted: '',
           outcomeNotes: '',
           sourceVisitId: v.id,
+          autoClosedAt: null,
         })),
       ],
     };
@@ -100,13 +86,11 @@ export const getReportByDate = async (kamId: string, date: string) => {
       reasonIfNotCompleted: '',
       outcomeNotes: '',
       sourceVisitId: v.id,
+      autoClosedAt: null,
     })),
   };
 };
 
-// No limit by default — Team Reports filters by date across the full history,
-// so anything the database holds must be reachable. Callers that only need a
-// recent window (the personal activity page) pass one explicitly.
 export const listReportsForKam = async (kamId: string, limit?: number) =>
   prisma.dailyReport.findMany({
     where: { kamId },
@@ -116,7 +100,7 @@ export const listReportsForKam = async (kamId: string, limit?: number) =>
   });
 
 const cleanVisit = (v: any) => ({
-  customerName: v.customerName,
+  customerName: typeof v.customerName === 'string' ? v.customerName.trim() : '',
   customerId: v.customerId || null,
   purpose: v.purpose || null,
   completed: v.completed === true || v.completed === false ? v.completed : null,
@@ -126,28 +110,40 @@ const cleanVisit = (v: any) => ({
 });
 
 export const upsertReport = async (kamId: string, data: { date: string; visits: any[] }) => {
-
-  // A visit added directly on this page (no sourceVisitId — i.e. not already
-  // synced from a Weekly Plan) is pushed into that date's Weekly Plan as a
-  // prospect visit too, so "Add Visit" here actually shows up in Weekly
-  // Sales Planning for that week instead of only living in the daily report.
-  // Visits that already carry a sourceVisitId (already synced, or originally
-  // scheduled from the plan) are left untouched to avoid duplicates on every
-  // re-save.
   const weekStartDate = getWeekStartForDate(data.date);
-  const needsSync = data.visits.some((v) => !v.sourceVisitId && v.customerName?.trim());
-
-  // Everything below runs in ONE transaction. Previously the old rows were
-  // deleted in one call and recreated in another — if anything failed in
-  // between (connection blip, timeout), that day's report was left empty
-  // with no way to recover it.
   let wasUpdate = false;
+  let addedToPlan = false;
 
   const report = await prisma.$transaction(
     async (tx) => {
-      let visitsForSave = data.visits;
+      const existing = await tx.dailyReport.findUnique({ where: { kamId_date: { kamId, date: data.date } } });
 
+      // Lines the nightly sweep closed are the one thing a save never
+      // touches. This used to delete and recreate every line on the day, so
+      // an overnight "not updated" would have been wiped the next time
+      // anything on that date was saved.
+      const closed = existing
+        ? await tx.reportVisit.findMany({
+            where: { dailyReportId: existing.id, NOT: { autoClosedAt: null } },
+            select: { id: true, sourceVisitId: true },
+          })
+        : [];
+      const closedIds = new Set(closed.map((r) => r.id));
+      const closedSourceIds = new Set(closed.map((r) => r.sourceVisitId).filter((id): id is string => !!id));
+
+      const open = (data.visits || []).filter(
+        (v) =>
+          !(typeof v.id === 'string' && closedIds.has(v.id)) &&
+          !(v.sourceVisitId && closedSourceIds.has(v.sourceVisitId))
+      );
+
+      // A visit added directly on this page goes into that week's plan as
+      // well — as an existing-client visit when it names a customer on the
+      // books, as a prospect otherwise.
+      let visitsForSave = open;
+      const needsSync = open.some((v) => !v.sourceVisitId && v.customerName?.trim());
       if (needsSync) {
+        addedToPlan = true;
         const plan = await tx.weeklyPlan.upsert({
           where: { kamId_weekStartDate: { kamId, weekStartDate } },
           update: {},
@@ -155,7 +151,7 @@ export const upsertReport = async (kamId: string, data: { date: string; visits: 
         });
 
         visitsForSave = [];
-        for (const v of data.visits) {
+        for (const v of open) {
           if (v.sourceVisitId || !v.customerName?.trim()) {
             visitsForSave.push(v);
             continue;
@@ -164,10 +160,10 @@ export const upsertReport = async (kamId: string, data: { date: string; visits: 
           const created = await tx.visit.create({
             data: {
               day: data.date,
-              customerName: v.customerName,
+              customerName: v.customerName.trim(),
               customerId: v.customerId || null,
               purpose: v.purpose || '',
-              prospectPlanId: plan.id,
+              ...(v.customerId ? { existingPlanId: plan.id } : { prospectPlanId: plan.id }),
             },
           });
           visitsForSave.push({ ...v, sourceVisitId: created.id });
@@ -175,11 +171,10 @@ export const upsertReport = async (kamId: string, data: { date: string; visits: 
       }
 
       const cleaned = visitsForSave.map(cleanVisit);
-      const existing = await tx.dailyReport.findUnique({ where: { kamId_date: { kamId, date: data.date } } });
 
       if (existing) {
         wasUpdate = true;
-        await tx.reportVisit.deleteMany({ where: { dailyReportId: existing.id } });
+        await tx.reportVisit.deleteMany({ where: { dailyReportId: existing.id, autoClosedAt: null } });
         return tx.dailyReport.update({
           where: { id: existing.id },
           data: { visits: { create: cleaned } },
@@ -195,15 +190,13 @@ export const upsertReport = async (kamId: string, data: { date: string; visits: 
     { timeout: 20000 }
   );
 
-  // Audit + notification are deliberately off the response path — they must
-  // never slow down or fail the save the person just made.
   logAudit({
     entity: 'DailyReport',
     entityId: report.id,
     action: wasUpdate ? 'DAILY_REPORT_UPDATED' : 'DAILY_REPORT_SUBMITTED',
     actorId: kamId,
   }).catch(() => {});
-  if (needsSync) notifyLineManagerOfPlanChange(kamId).catch(() => {});
+  if (addedToPlan) notifyLineManagerOfPlanChange(kamId).catch(() => {});
 
   return report;
 };

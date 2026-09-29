@@ -11,7 +11,12 @@ const visitSchema = z
     day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Please choose a valid date.'),
     customerName: z.string().min(1, 'Please enter the customer name.').max(200),
     customerId: z.string().max(100).optional().nullable(),
-    purpose: z.string().min(1, 'Please describe the purpose of this visit.').max(300),
+    // Not required here. Visits added from the Daily Visiting Report arrive
+    // in the plan with no purpose, and requiring one on every row meant that
+    // any later save of the week failed on a visit the person had not even
+    // touched — the "please describe the purpose" message appearing at random.
+    // A new visit still needs one; the service checks that.
+    purpose: z.string().max(300),
     // The server sends this back as null for a visit with no daily-report
     // entry yet, so the same shape has to be accepted on the way in.
     outcomeNotes: z.string().max(500).optional().nullable(),

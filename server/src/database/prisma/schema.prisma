@@ -571,6 +571,9 @@ model DailyReport {
   @@index([kamId, date])
 }
 
+// A visit nobody reported on by the end of its own day is closed out by the
+// system rather than left sitting as "planned" for ever. `autoClosedAt` marks
+// those, and is what stops the day being rewritten after the fact.
 model ReportVisit {
   id                   String      @id @default(uuid())
   customerName         String
@@ -580,11 +583,15 @@ model ReportVisit {
   reasonIfNotCompleted String?
   outcomeNotes         String?
   sourceVisitId        String?
+  // Set only by the nightly sweep. A row carrying this was never answered by
+  // the KAM on its own day, and cannot be answered now — the day is closed.
+  autoClosedAt         DateTime?
   dailyReportId        String
   dailyReport          DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
 
   @@index([dailyReportId])
   @@index([sourceVisitId])
+  @@index([autoClosedAt])
 }
 
 // Real, persisted notifications — one row per user per event. Replaces the
