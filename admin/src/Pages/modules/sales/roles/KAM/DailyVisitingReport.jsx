@@ -41,8 +41,17 @@ const normalize = (v) => ({
   // so id prefix can't tell us which rows were actually decided. A visit is
   // only "locked" once it truly has a completed/skipped decision recorded.
   locked: v.completed === true || v.completed === false,
+  // Closed overnight because the day ended without an answer. It stays
+  // closed: there is no edit control for it and the server refuses one.
+  autoClosed: !!v.autoClosedAt,
 });
-const StatusPill = ({ completed }) => {
+const StatusPill = ({ completed, autoClosed }) => {
+  if (autoClosed)
+    return (
+      <span className="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">
+        Not Updated
+      </span>
+    );
   if (completed === true)
     return (
       <span className="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset bg-emerald-50 text-[#0D8A68] ring-emerald-100">
@@ -94,8 +103,8 @@ const VisitCard = ({ v, savingId, onUpdate, onSave, onUnlock }) => {
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <StatusPill completed={v.completed} />
-          {v.locked && (
+          <StatusPill completed={v.completed} autoClosed={v.autoClosed} />
+          {v.locked && !v.autoClosed && (
             <button
               type="button"
               onClick={() => onUnlock(v.id)}
@@ -116,8 +125,10 @@ const VisitCard = ({ v, savingId, onUpdate, onSave, onUnlock }) => {
       )}
 
       {v.locked && isSkipped && v.reasonIfNotCompleted && (
-        <p className="text-xs text-red-700 mt-2 break-words">
-          <span className="font-medium text-red-800">Reason for Skipping: </span>
+        <p className={`text-xs mt-2 break-words ${v.autoClosed ? 'text-amber-700' : 'text-red-700'}`}>
+          <span className={`font-medium ${v.autoClosed ? 'text-amber-800' : 'text-red-800'}`}>
+            {v.autoClosed ? 'Closed automatically: ' : 'Reason for Skipping: '}
+          </span>
           {v.reasonIfNotCompleted}
         </p>
       )}
@@ -271,7 +282,8 @@ const DailyVisitingReport = () => {
     // skipped, no reason given yet) would be refused by the server, so those
     // rows fall back to their last saved form rather than blocking this save.
     const savedById = new Map(savedVisits.map((r) => [r.id, r]));
-    const payload = visits.map((row) => {
+    // Closed lines are never sent; the server keeps them exactly as they are.
+    const payload = visits.filter((row) => !row.autoClosed).map((row) => {
       if (row.id === v.id) return v;
       if (!row.customerName.trim()) return savedById.get(row.id) || row;
       if (row.completed === false && !row.reasonIfNotCompleted.trim()) {

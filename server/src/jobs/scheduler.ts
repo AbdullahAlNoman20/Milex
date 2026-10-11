@@ -4,15 +4,14 @@ import { logger } from "../app";
 import { expireOverdueProvisionalAccounts } from "../modules/onboarding/onboarding.service";
 import { runRetentionCleanup } from "./retention-cleanup.job";
 import { runDocumentExpiryReminders } from "./document-expiry.job";
+import { autoCloseUnreportedVisits } from "./visit-autoclose.job";
+import { BUSINESS_TIMEZONE } from "../common/utils/businessDate.util";
 
 // No external queue/infra added — node-cron runs in-process, which is
 // sufficient for a single-instance (fork mode) deployment. If this app is
 // ever scaled to multiple PM2 workers, move these to one dedicated worker
 // or a distributed lock so the jobs don't fire once per worker.
 export const startScheduledJobs = () => {
-  // Every ten minutes rather than hourly. The on-screen countdown reaches
-  // zero the moment it does, so an hourly sweep left the record claiming to
-  // be live for up to an hour after the window had visibly closed.
   cron.schedule("*/10 * * * *", async () => {
     try {
       const count = await expireOverdueProvisionalAccounts();
@@ -23,6 +22,24 @@ export const startScheduledJobs = () => {
     }
   });
 
+  // Five past midnight in Dhaka, not on the server's UTC clock. Late enough
+  // that a KAM filing at 11:58pm is safely in; early enough that the day is
+  // closed before anyone opens their dashboard in the morning.
+  cron.schedule(
+    "5 0 * * *",
+    async () => {
+      try {
+        const result = await autoCloseUnreportedVisits();
+        if (result.closedExisting + result.closedPlanned > 0) {
+          logger.info({ result }, "[cron] closed unreported visits from previous days");
+        }
+      } catch (err) {
+        logger.error({ err }, "[cron] visit auto-close failed");
+      }
+    },
+    { timezone: BUSINESS_TIMEZONE },
+  );
+
   cron.schedule("0 3 * * *", async () => {
     try {
       const result = await runRetentionCleanup();
@@ -32,8 +49,6 @@ export const startScheduledJobs = () => {
     }
   });
 
-  // Early morning, before the working day, so a licence about to lapse is
-  // already sitting in the KAM's notifications when they sign in.
   cron.schedule("0 7 * * *", async () => {
     try {
       const result = await runDocumentExpiryReminders();
@@ -44,6 +59,6 @@ export const startScheduledJobs = () => {
   });
 
   logger.info(
-    "[cron] Scheduled jobs registered (provisional expiry every 10 min, expiry reminders 07:00, retention cleanup 03:00)",
+    "[cron] Scheduled jobs registered (visit auto-close 00:05 Dhaka, provisional expiry every 10 min, expiry reminders 07:00, retention cleanup 03:00)",
   );
 };

@@ -29,11 +29,20 @@ const isNewRow = (id) => typeof id === "string" && id.startsWith("v_");
 const VISIT_STATUS_STYLES = {
   Completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   Skipped: "bg-red-50 text-red-600 ring-red-200",
+  "Not Updated": "bg-amber-50 text-amber-700 ring-amber-200",
   Planned: "bg-slate-100 text-slate-600 ring-slate-200",
 };
 
+// "Not Updated" is the day closing on a visit nobody answered — distinct from
+// a skip, which is a decision somebody made and gave a reason for.
 const StatusBadge = ({ v }) => {
-  const label = v.completed === true ? "Completed" : v.completed === false ? "Skipped" : "Planned";
+  const label = v.autoClosed
+    ? "Not Updated"
+    : v.completed === true
+      ? "Completed"
+      : v.completed === false
+        ? "Skipped"
+        : "Planned";
   return (
     <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${VISIT_STATUS_STYLES[label]}`}>
       {label}
@@ -57,7 +66,16 @@ const AddVisitModal = ({ section, onClose, onSave }) => {
       showToast("Date, customer name and purpose are required", "warning");
       return;
     }
-    onSave({ ...buildEmptyVisit(day), customerName, customerId, purpose });
+    if (day < todayLocalISO()) {
+      showToast("That date has already passed. Visits can only be planned from today onwards.", "warning", 6000);
+      return;
+    }
+    onSave({
+      ...buildEmptyVisit(day),
+      customerName: customerName.trim(),
+      customerId,
+      purpose: purpose.trim(),
+    });
   };
 
   return (
@@ -76,6 +94,7 @@ const AddVisitModal = ({ section, onClose, onSave }) => {
           <label className="text-[11px] font-semibold text-[#111827] mb-1 block">Date</label>
           <input
             type="date"
+            min={todayLocalISO()}
             value={day}
             onChange={(e) => setDay(e.target.value)}
             className="w-full border border-[#E5E7EB] p-2.5 rounded-[10px] text-xs outline-none focus:border-[#059669]"
@@ -227,8 +246,10 @@ const VisitRowCard = ({ v, locked, readOnly = false, onChange, onRemove, onUnloc
       <div className="space-y-1.5">
         <StatusBadge v={v} />
         {v.completed === false && (
-          <p className="text-[11px] text-red-600 break-words">
-            <span className="font-semibold text-red-700">Reason for skipping: </span>
+          <p className={`text-[11px] break-words ${v.autoClosed ? 'text-amber-700' : 'text-red-600'}`}>
+            <span className={`font-semibold ${v.autoClosed ? 'text-amber-800' : 'text-red-700'}`}>
+              {v.autoClosed ? 'Closed automatically: ' : 'Reason for skipping: '}
+            </span>
             {v.reasonIfNotCompleted || 'No reason recorded'}
           </p>
         )}
@@ -282,6 +303,49 @@ const WeeklySalesPlan = () => {
     loadPlans();
   }, [loadPlans]);
 
+  // Completed, skipped and not-updated all come from the Daily Visiting
+  // Report, usually filled in on another page. Coming back to this one pulls
+  // those outcomes in again — and only those, so anything being typed here
+  // is never thrown away by a refresh.
+  const refreshOutcomes = useCallback(async () => {
+    try {
+      const plans = await listPlansForKam();
+      setAllPlans(plans);
+      setPlan((prev) => {
+        const fresh = plans.find((p) => p.weekStartDate === prev.weekStartDate);
+        if (!fresh) return prev;
+        const byId = new Map([...fresh.existingVisits, ...fresh.prospectVisits].map((v) => [v.id, v]));
+        const merge = (v) => {
+          const f = byId.get(v.id);
+          return f
+            ? {
+                ...v,
+                completed: f.completed,
+                outcomeNotes: f.outcomeNotes,
+                reasonIfNotCompleted: f.reasonIfNotCompleted,
+                autoClosed: f.autoClosed,
+              }
+            : v;
+        };
+        return { ...prev, existingVisits: prev.existingVisits.map(merge), prospectVisits: prev.prospectVisits.map(merge) };
+      });
+    } catch {
+      /* the next visit to the page will try again */
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshOutcomes();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refreshOutcomes]);
+
 
 
   // Saves the visit to the server immediately when added from the modal,
@@ -291,7 +355,12 @@ const WeeklySalesPlan = () => {
   const addVisitAndSave = async (section, visitData) => {
     if (saveLockRef.current) return;
     saveLockRef.current = true;
-    const key = section === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
+    // Existing Clients holds only customers the system knows. A name typed on
+    // that tab that matches no customer record is a prospect, and is filed
+    // there — the person is told, so it does not look as though it vanished.
+    const targetSection = visitData.customerId ? VISIT_SECTIONS.EXISTING : VISIT_SECTIONS.PROSPECT;
+    const movedToProspect = section === VISIT_SECTIONS.EXISTING && targetSection === VISIT_SECTIONS.PROSPECT;
+    const key = targetSection === VISIT_SECTIONS.EXISTING ? "existingVisits" : "prospectVisits";
     const updatedPlan = { ...plan, [key]: [...plan[key], visitData] };
     setIsSaving(true);
     try {
@@ -307,7 +376,14 @@ const WeeklySalesPlan = () => {
         const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
         return [saved, ...others].sort((a, b) => (a.weekStartDate < b.weekStartDate ? 1 : -1));
       });
-      showToast("Visit added", "success");
+      setActiveTab(targetSection);
+      showToast(
+        movedToProspect
+          ? `${visitData.customerName} isn't a customer in the system yet, so the visit was added under Prospects.`
+          : "Visit added",
+        movedToProspect ? "info" : "success",
+        movedToProspect ? 7000 : undefined
+      );
     } catch (err) {
       showToast(err?.message || "Failed to add visit", "error");
     } finally {
@@ -356,11 +432,32 @@ const WeeklySalesPlan = () => {
 
   const unlockRow = (id) => setEditingRowIds((prev) => new Set(prev).add(id));
 
+  // Only what the person has added or opened for editing is checked. Visits
+  // that arrived from the Daily Visiting Report often carry no purpose, and
+  // checking every row meant a save could fail on a visit nobody touched.
   const validate = () => {
-    const allVisits = [...plan.existingVisits, ...plan.prospectVisits];
-    const incomplete = allVisits.find((v) => !isRequired(v.customerName) || !isRequired(v.purpose) || !isRequired(v.day));
+    const today = todayLocalISO();
+    const savedPlan = allPlans.find((p) => p.weekStartDate === plan.weekStartDate);
+    const savedDayById = new Map(
+      [...(savedPlan?.existingVisits || []), ...(savedPlan?.prospectVisits || [])].map((v) => [v.id, v.day])
+    );
+    const touched = [...plan.existingVisits, ...plan.prospectVisits].filter(
+      (v) => isNewRow(v.id) || editingRowIds.has(v.id)
+    );
+    const incomplete = touched.find(
+      (v) => !isRequired(v.customerName) || !isRequired(v.purpose) || !isRequired(v.day)
+    );
     if (incomplete) {
-      showToast("Every visit needs a date, customer name and purpose", "warning");
+      showToast(`${incomplete.customerName?.trim() || "A visit"} needs a date, customer name and purpose`, "warning");
+      return false;
+    }
+    const past = touched.find((v) => v.day < today && savedDayById.get(v.id) !== v.day);
+    if (past) {
+      showToast(
+        `${past.customerName || "A visit"} is dated ${past.day}, which has already passed. Pick today or a later date.`,
+        "warning",
+        6000
+      );
       return false;
     }
     return true;
@@ -391,6 +488,10 @@ const sanitizeVisit = (v) => ({
         prospectVisits: plan.prospectVisits.map(sanitizeVisit),
       };
       const saved = await savePlan(sanitizedPlan);
+      // A row edited on the existing tab to a name with no customer record
+      // is filed under Prospects by the server; say so rather than let it
+      // quietly disappear from the list being looked at.
+      const moved = plan.existingVisits.filter((v) => !v.customerId).length;
       // The response is the authoritative state, so the freshness marker
       // restarts from this moment rather than the original page load.
       setPlan({ ...saved, loadedAt: new Date().toISOString() });
@@ -399,7 +500,13 @@ const sanitizeVisit = (v) => ({
         const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
         return [saved, ...others].sort((a, b) => (a.weekStartDate < b.weekStartDate ? 1 : -1));
       });
-      showToast("Weekly plan saved", "success");
+      showToast(
+        moved > 0
+          ? `Weekly plan saved. ${moved} visit(s) didn't match a customer in the system and were moved to Prospects.`
+          : "Weekly plan saved",
+        moved > 0 ? "info" : "success",
+        moved > 0 ? 7000 : undefined
+      );
     } catch (err) {
       showToast(err?.message || "Failed to save plan", "error");
     } finally {
@@ -411,10 +518,30 @@ const sanitizeVisit = (v) => ({
   // Imported rows are saved immediately, in one write, for the same reason a
   // visit added from the modal is: a spreadsheet the person just uploaded
   // sitting only in the browser is a plan they think they have and don't.
-  const importVisits = async ({ existing, prospect }) => {
+  const importVisits = async ({ existing: importedExisting, prospect: importedProspect }) => {
     if (saveLockRef.current) return;
     setShowImport(false);
-    if (existing.length === 0 && prospect.length === 0) return;
+    if (importedExisting.length === 0 && importedProspect.length === 0) return;
+
+    // The same rule as adding by hand, checked before anything is sent so a
+    // file with one bad row is refused whole rather than half-imported.
+    const today = todayLocalISO();
+    const past = [...importedExisting, ...importedProspect].filter((v) => !v.day || v.day < today);
+    if (past.length > 0) {
+      showToast(
+        `${past.length} row(s) in the file are dated before today — for example ${past[0].customerName || "a visit"} on ${past[0].day || "no date"}. Visits can only be planned from today onwards. Correct the file and import it again.`,
+        "error",
+        9000
+      );
+      return;
+    }
+
+    // Sorted by the customer record, not by which sheet a row was on: only
+    // customers the system knows go under Existing Clients.
+    const allImported = [...importedExisting, ...importedProspect];
+    const existing = allImported.filter((v) => v.customerId);
+    const prospect = allImported.filter((v) => !v.customerId);
+
     saveLockRef.current = true;
     setIsSaving(true);
     try {
@@ -472,7 +599,11 @@ const sanitizeVisit = (v) => ({
   const totalExisting = plan.existingVisits.length;
   const totalProspect = plan.prospectVisits.length;
   const totalVisits = totalExisting + totalProspect;
-  const activeVisits = activeTab === VISIT_SECTIONS.EXISTING ? plan.existingVisits : plan.prospectVisits;
+  // Always in date order. A copy is sorted, so the order rows were added in
+  // is left alone in state and nothing shifts under the person while typing.
+  const activeVisits = [
+    ...(activeTab === VISIT_SECTIONS.EXISTING ? plan.existingVisits : plan.prospectVisits),
+  ].sort((a, b) => (a.day || "").localeCompare(b.day || ""));
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] pb-28 md:pb-8">
@@ -594,6 +725,7 @@ const sanitizeVisit = (v) => ({
                           ) : (
                             <input
                               type="date"
+                              min={todayLocalISO()}
                               className="w-full border border-[#E5E7EB] p-1.5 rounded-[8px] text-xs outline-none focus:border-[#059669]"
                               value={v.day}
                               onChange={(e) => updateVisit(activeTab, v.id, { ...v, day: e.target.value })}
