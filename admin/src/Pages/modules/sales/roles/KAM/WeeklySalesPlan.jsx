@@ -768,7 +768,9 @@ const sanitizeVisit = (v) => ({
                             date — the plan itself holds no outcome, so this
                             is the only place the two views meet. */}
                         <td className="py-2.5 px-3 text-xs">
-                          {v.completed === false ? (
+                          {v.autoClosed ? (
+                            <span className="text-amber-700 break-words">{v.reasonIfNotCompleted || 'Not updated by the end of the day'}</span>
+                          ) : v.completed === false ? (
                             <span className="text-red-600 break-words">{v.reasonIfNotCompleted || 'No reason recorded'}</span>
                           ) : v.completed === true ? (
                             <span className="text-[#6B7280] break-words">{v.outcomeNotes || 'No notes added'}</span>

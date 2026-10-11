@@ -52,7 +52,21 @@ const isWithinDateRange = (dateStr, from, to) => {
 const matchesText = (q, ...values) =>
   !q || values.some((v) => v != null && String(v).toLowerCase().includes(q));
 
-const planVisits = (p) => [...(p?.existingVisits ?? []), ...(p?.prospectVisits ?? [])];
+// Earliest first, wherever a list of visits is shown. Existing and prospect
+// visits arrive as two separately ordered lists, so simply joining them gave
+// 27, 28, 27 — each half in order, the whole thing not.
+const byDay = (a, b) => (a.day || a.date || "").localeCompare(b.day || b.date || "");
+
+const planVisits = (p) =>
+  [...(p?.existingVisits ?? []), ...(p?.prospectVisits ?? [])].sort(byDay);
+
+// Closed by the system because the day ended without an answer — not a skip
+// anyone chose. Weekly plan visits carry `autoClosed`; daily report lines
+// carry the raw `autoClosedAt`.
+const isNotUpdated = (v) => !!(v?.autoClosed || v?.autoClosedAt);
+
+const statusLabel = (v) =>
+  isNotUpdated(v) ? "Not Updated" : v.completed === true ? "Completed" : v.completed === false ? "Skipped" : "Planned";
 
 // Prevent CSV/formula injection when opened in Excel/Sheets.
 const sanitizeCsvCell = (val) => {
@@ -108,13 +122,16 @@ const Avatar = ({ name, size = "w-10 h-10 text-xs" }) => {
   );
 };
 
-const VisitStatusBadge = ({ completed }) => {
-  const map = {
-    true: ["Completed", "bg-emerald-50 text-emerald-700 ring-emerald-200"],
-    false: ["Skipped", "bg-red-50 text-red-600 ring-red-200"],
-    planned: ["Planned", "bg-blue-50 text-blue-700 ring-blue-200"],
-  };
-  const [label, cls] = completed === true ? map.true : completed === false ? map.false : map.planned;
+const STATUS_STYLES = {
+  Completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  Skipped: "bg-red-50 text-red-600 ring-red-200",
+  "Not Updated": "bg-amber-50 text-amber-700 ring-amber-200",
+  Planned: "bg-blue-50 text-blue-700 ring-blue-200",
+};
+
+const VisitStatusBadge = ({ v }) => {
+  const label = statusLabel(v);
+  const cls = STATUS_STYLES[label];
   return (
     <span
       className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ring-inset ${cls}`}
@@ -125,7 +142,9 @@ const VisitStatusBadge = ({ completed }) => {
 };
 
 const VisitNote = ({ v }) =>
-  v.completed === false ? (
+  isNotUpdated(v) ? (
+    <span className="text-amber-700 break-words">{v.reasonIfNotCompleted || "Not updated by the end of the day"}</span>
+  ) : v.completed === false ? (
     <span className="text-red-600 break-words">{v.reasonIfNotCompleted || "No reason given"}</span>
   ) : (
     <span className="text-slate-500 break-words">{v.outcomeNotes || "—"}</span>
@@ -153,7 +172,7 @@ const VisitList = ({ visits, showDate = true, showPurpose = true }) => (
         <li key={`${v.id ?? "v"}_${i}`} className="py-3 space-y-1">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-semibold text-slate-800 break-words min-w-0">{v.customerName || "—"}</p>
-            <VisitStatusBadge completed={v.completed} />
+            <VisitStatusBadge v={v} />
           </div>
           {(showDate || (showPurpose && v.purpose)) && (
             <p className="text-[11px] text-slate-400 break-words">
@@ -192,7 +211,7 @@ const VisitList = ({ visits, showDate = true, showPurpose = true }) => (
               <td className="py-2.5 pr-3 text-slate-700 font-medium break-words">{v.customerName || "—"}</td>
               {showPurpose && <td className="py-2.5 pr-3 text-slate-500 break-words">{v.purpose || "—"}</td>}
               <td className="py-2.5 pr-3">
-                <VisitStatusBadge completed={v.completed} />
+                <VisitStatusBadge v={v} />
               </td>
               <td className="py-2.5">
                 <VisitNote v={v} />
@@ -328,7 +347,8 @@ const TeamReportsPage = () => {
   const toggleExpanded = (key) =>
     setExpandedKeys((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
@@ -366,6 +386,8 @@ const TeamReportsPage = () => {
   const pagedKams = filteredKams.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE);
 
   /* --- detail stats --- */
+  // A visit the day closed on is counted against completion — it was not done
+  // — but not as a skip, which is a decision somebody made and explained.
   const stats = useMemo(() => {
     let total = 0;
     let completed = 0;
@@ -374,7 +396,7 @@ const TeamReportsPage = () => {
       (r.visits ?? []).forEach((v) => {
         total += 1;
         if (v.completed === true) completed += 1;
-        else if (v.completed === false) skipped += 1;
+        else if (v.completed === false && !isNotUpdated(v)) skipped += 1;
       })
     );
     return { total, completed, skipped, rate: total ? Math.round((completed / total) * 100) : 0 };
@@ -402,22 +424,30 @@ const TeamReportsPage = () => {
   /* --- daily --- */
   const filteredDailyReports = useMemo(
     () =>
-      dailyReports.filter(
-        (r) =>
-          isWithinDateRange(r.date, dateFrom, dateTo) &&
-          (matchesText(q, r.date) || (r.visits ?? []).some((v) => matchesText(q, v.customerName)))
-      ),
+      dailyReports
+        .filter(
+          (r) =>
+            isWithinDateRange(r.date, dateFrom, dateTo) &&
+            (matchesText(q, r.date) || (r.visits ?? []).some((v) => matchesText(q, v.customerName)))
+        )
+        .slice()
+        .sort(byDay),
     [dailyReports, q, dateFrom, dateTo]
   );
 
   /* --- skipped --- */
+  // Only real skips — someone chose not to go and said why. Days the system
+  // closed would otherwise swamp "Top Skip Reasons" with one line that tells
+  // a manager nothing about why visits are being dropped.
   const skippedVisits = useMemo(
     () =>
       dailyReports
         .flatMap((r) =>
-          (r.visits ?? []).filter((v) => v.completed === false).map((v) => ({ ...v, date: r.date }))
+          (r.visits ?? [])
+            .filter((v) => v.completed === false && !isNotUpdated(v))
+            .map((v) => ({ ...v, date: r.date }))
         )
-        .sort((a, b) => ((a.date || "") < (b.date || "") ? 1 : -1)),
+        .sort(byDay),
     [dailyReports]
   );
 
@@ -443,7 +473,7 @@ const TeamReportsPage = () => {
   /* --- export --- */
   const exportReports = () => {
     if (!activeKam) return;
-    let rows = [];
+    let rows;
     if (tab === "weekly") {
       rows = hasDateFilter
         ? weekSets.flatMap((set) =>
@@ -452,7 +482,7 @@ const TeamReportsPage = () => {
               Date: v.day,
               Customer: v.customerName,
               Purpose: v.purpose,
-              Status: v.completed === true ? "Completed" : v.completed === false ? "Skipped" : "Planned",
+              Status: statusLabel(v),
               Outcome: v.completed === false ? v.reasonIfNotCompleted || "" : v.outcomeNotes || "",
             }))
           )
@@ -462,7 +492,8 @@ const TeamReportsPage = () => {
               Day: v.day,
               Customer: v.customerName,
               Purpose: v.purpose,
-              Outcome: v.outcomeNotes || "",
+              Status: statusLabel(v),
+              Outcome: v.completed === false ? v.reasonIfNotCompleted || "" : v.outcomeNotes || "",
             }))
           );
     } else if (tab === "daily") {
@@ -470,7 +501,7 @@ const TeamReportsPage = () => {
         (r.visits ?? []).map((v) => ({
           Date: r.date,
           Customer: v.customerName,
-          Status: v.completed ? "Completed" : "Not Completed",
+          Status: statusLabel(v),
           Reason: v.reasonIfNotCompleted || "",
           Outcome: v.outcomeNotes || "",
         }))
@@ -528,13 +559,6 @@ const TeamReportsPage = () => {
               id={key}
               title={`Week of ${formatShortDate(p.weekStartDate)}`}
               subtitle={`${visits.length} visit(s)`}
-              right={
-                p.status ? (
-                  <span className="hidden min-[400px]:inline-flex shrink-0 rounded-full bg-slate-100 text-slate-600 px-2 py-0.5 text-[10px] font-bold uppercase">
-                    {p.status}
-                  </span>
-                ) : null
-              }
               isOpen={expandedKeys.has(key)}
               onToggle={() => toggleExpanded(key)}
             >
@@ -555,7 +579,9 @@ const TeamReportsPage = () => {
     return (
       <div className="space-y-3">
         {filteredDailyReports.map((r) => {
-          const visits = r.visits ?? [];
+          const visits = (r.visits ?? []).slice().sort((a, b) =>
+            (a.customerName || "").localeCompare(b.customerName || "")
+          );
           const done = visits.filter((v) => v.completed === true).length;
           const key = `d_${r.id}`;
           return (
@@ -581,7 +607,7 @@ const TeamReportsPage = () => {
               {visits.length === 0 ? (
                 <p className="text-xs text-slate-400 py-4 text-center">No visits logged.</p>
               ) : (
-                <VisitList visits={visits} showDate={false} showPurpose={false} />
+                <VisitList visits={visits} showDate={false} />
               )}
             </Section>
           );
