@@ -246,8 +246,10 @@ const VisitRowCard = ({ v, locked, readOnly = false, onChange, onRemove, onUnloc
       <div className="space-y-1.5">
         <StatusBadge v={v} />
         {v.completed === false && (
-          <p className="text-[11px] text-red-600 break-words">
-            <span className="font-semibold text-red-700">Reason for skipping: </span>
+          <p className={`text-[11px] break-words ${v.autoClosed ? 'text-amber-700' : 'text-red-600'}`}>
+            <span className={`font-semibold ${v.autoClosed ? 'text-amber-800' : 'text-red-700'}`}>
+              {v.autoClosed ? 'Closed automatically: ' : 'Reason for skipping: '}
+            </span>
             {v.reasonIfNotCompleted || 'No reason recorded'}
           </p>
         )}
@@ -490,13 +492,6 @@ const sanitizeVisit = (v) => ({
       // is filed under Prospects by the server; say so rather than let it
       // quietly disappear from the list being looked at.
       const moved = plan.existingVisits.filter((v) => !v.customerId).length;
-      if (moved > 0) {
-        showToast(
-          `${moved} visit(s) didn't match a customer in the system and were moved to Prospects.`,
-          "info",
-          7000
-        );
-      }
       // The response is the authoritative state, so the freshness marker
       // restarts from this moment rather than the original page load.
       setPlan({ ...saved, loadedAt: new Date().toISOString() });
@@ -505,7 +500,13 @@ const sanitizeVisit = (v) => ({
         const others = prev.filter((p) => p.weekStartDate !== saved.weekStartDate);
         return [saved, ...others].sort((a, b) => (a.weekStartDate < b.weekStartDate ? 1 : -1));
       });
-      showToast("Weekly plan saved", "success");
+      showToast(
+        moved > 0
+          ? `Weekly plan saved. ${moved} visit(s) didn't match a customer in the system and were moved to Prospects.`
+          : "Weekly plan saved",
+        moved > 0 ? "info" : "success",
+        moved > 0 ? 7000 : undefined
+      );
     } catch (err) {
       showToast(err?.message || "Failed to save plan", "error");
     } finally {
