@@ -12,6 +12,14 @@ import { BUSINESS_TIMEZONE } from "../common/utils/businessDate.util";
 // ever scaled to multiple PM2 workers, move these to one dedicated worker
 // or a distributed lock so the jobs don't fire once per worker.
 export const startScheduledJobs = () => {
+  // PM2 cluster mode runs this file once per instance. Scheduled jobs must run
+  // once per night, not once per worker — only instance 0 registers them.
+  const pm2Instance = process.env.NODE_APP_INSTANCE ?? process.env.pm_id;
+  if (pm2Instance !== undefined && String(pm2Instance) !== "0") {
+    logger.info(`[cron] Skipped on instance ${pm2Instance} — jobs run on instance 0 only`);
+    return;
+  }
+
   cron.schedule("*/10 * * * *", async () => {
     try {
       const count = await expireOverdueProvisionalAccounts();
