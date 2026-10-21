@@ -644,7 +644,75 @@ export const AgreementLetter = ({ c }) => {
   );
 };
 
+// A4 (297mm x 210mm) minus the 10mm @page margin on each side: the exact box
+// the browser prints the recommendation form into.
+const MM_TO_PX = 96 / 25.4;
+const REC_PAGE_HEIGHT_PX = 277 * MM_TO_PX;
+const REC_PAGE_WIDTH_PX = 190 * MM_TO_PX;
+const REC_FIT_SAFETY_PX = 8;
+
+// Tightened a little at a time: spacing first, then type. Only used when the
+// form would otherwise spill onto a second page.
+const REC_FIT_STEPS = [
+  { fs: 11, lh: 1.3, py: 2, gap: 8, sign: 56 },
+  { fs: 10.5, lh: 1.25, py: 2, gap: 6, sign: 48 },
+  { fs: 10, lh: 1.2, py: 1, gap: 5, sign: 42 },
+  { fs: 9.5, lh: 1.2, py: 1, gap: 4, sign: 38 },
+  { fs: 9, lh: 1.15, py: 1, gap: 4, sign: 34 },
+  { fs: 8.5, lh: 1.12, py: 0, gap: 3, sign: 30 },
+  { fs: 8, lh: 1.1, py: 0, gap: 3, sign: 28 },
+  { fs: 7.5, lh: 1.08, py: 0, gap: 2, sign: 26 },
+  { fs: 7, lh: 1.05, py: 0, gap: 2, sign: 24 },
+];
+const REC_FIT_VARS = ['--rf-fs', '--rf-lh', '--rf-py', '--rf-gap', '--rf-sign'];
+
+const clearRecFit = (el) => {
+  delete el.dataset.fit;
+  REC_FIT_VARS.forEach((v) => el.style.removeProperty(v));
+};
+
+const applyRecFit = (el, step) => {
+  el.dataset.fit = '1';
+  el.style.setProperty('--rf-fs', `${step.fs}px`);
+  el.style.setProperty('--rf-lh', String(step.lh));
+  el.style.setProperty('--rf-py', `${step.py}px`);
+  el.style.setProperty('--rf-gap', `${step.gap}px`);
+  el.style.setProperty('--rf-sign', `${step.sign}px`);
+};
+
+// The print wrapper is display:none on screen, so it is laid out off-screen
+// at the printed width just long enough to measure, then put back untouched.
+const fitRecommendationToOnePage = (host, el) => {
+  if (!host || !el) return;
+  clearRecFit(el);
+  const prevHostStyle = host.getAttribute('style');
+  const prevWidth = el.style.width;
+  try {
+    host.setAttribute(
+      'style',
+      'display:block;position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;'
+    );
+    const rootFs = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const framePad = rootFs * 1.25 * 2; // print:p-5 on the page frame
+    el.style.width = `${REC_PAGE_WIDTH_PX - framePad}px`;
+    const available = REC_PAGE_HEIGHT_PX - framePad - REC_FIT_SAFETY_PX;
+    const fits = () => el.getBoundingClientRect().height <= available;
+    if (!fits()) {
+      for (const step of REC_FIT_STEPS) {
+        applyRecFit(el, step);
+        if (fits()) break;
+      }
+    }
+  } finally {
+    el.style.width = prevWidth;
+    if (prevHostStyle === null) host.removeAttribute('style');
+    else host.setAttribute('style', prevHostStyle);
+  }
+};
+
 const PrintTemplate = ({ data, onClose }) => {
+  const printHostRef = useRef(null);
+  const recFormRef = useRef(null);
  useEffect(() => {
     if (!data) return undefined;
     // No on-screen preview at all — this component stays invisible (see
@@ -657,7 +725,12 @@ const PrintTemplate = ({ data, onClose }) => {
       closed = true;
       onClose?.();
     };
-    const timer = setTimeout(() => window.print(), 60);
+    const timer = setTimeout(() => {
+      if (data.type === 'recommendation') {
+        fitRecommendationToOnePage(printHostRef.current, recFormRef.current);
+      }
+      window.print();
+    }, 60);
     // Some browsers never raise afterprint when the dialog is cancelled, and
     // because this component replaces the whole application while it is open,
     // that left the person looking at a blank page with no way back. Regaining
@@ -681,15 +754,27 @@ const PrintTemplate = ({ data, onClose }) => {
   const c = data.customer;
 
   return (
-    <div className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
+    <div ref={printHostRef} className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
       <style>{`
         @media print {
           @page { size: A4; margin: ${data.type === 'offer' ? '23mm 13mm 10mm 25mm' : data.type === 'agreement' ? '47mm 20.3mm 25.4mm 20.3mm' : '10mm'}; }
           ${data.type === 'agreement' ? `@page { @top-right { content: "Page " counter(page) " of " counter(pages); font: 12pt 'Times New Roman', Times, serif; text-align: right; vertical-align: bottom; } }` : ''}
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
-          .rec-form { line-height: 1.35; }
-          .rec-form td, .rec-form th { padding-top: 3px; padding-bottom: 3px; }
         }
+        .rec-form { line-height: 1.35; }
+        .rec-form td, .rec-form th { padding-top: 3px; padding-bottom: 3px; }
+        .rec-form[data-fit] { line-height: var(--rf-lh); }
+        .rec-form[data-fit] td, .rec-form[data-fit] th { padding-top: var(--rf-py) !important; padding-bottom: var(--rf-py) !important; }
+        .rec-form[data-fit] .text-\\[11px\\] { font-size: var(--rf-fs) !important; }
+        .rec-form[data-fit] .text-\\[12px\\] { font-size: calc(var(--rf-fs) + 1px) !important; }
+        .rec-form[data-fit] .text-\\[15px\\] { font-size: calc(var(--rf-fs) + 4px) !important; }
+        .rec-form[data-fit] .text-\\[10px\\] { font-size: calc(var(--rf-fs) - 1px) !important; }
+        .rec-form[data-fit] .mt-3, .rec-form[data-fit] .mt-4, .rec-form[data-fit] .mt-6 { margin-top: var(--rf-gap) !important; }
+        .rec-form[data-fit] .mb-3 { margin-bottom: var(--rf-gap) !important; }
+        .rec-form[data-fit] .mb-1\\.5 { margin-bottom: calc(var(--rf-gap) / 2) !important; }
+        .rec-form[data-fit] .pt-2 { padding-top: calc(var(--rf-gap) / 2) !important; }
+        .rec-form[data-fit] .h-16 { height: var(--rf-sign) !important; }
+        .rec-form[data-fit] .h-8 { height: calc(var(--rf-sign) / 2) !important; }
       `}</style>
 
      <div className={`bg-white w-full max-w-[210mm] min-h-[297mm] text-black p-12 shadow-2xl relative print:shadow-none print:m-0 print:w-full print:max-w-none print:min-h-0 ${data.type === 'offer' || data.type === 'agreement' ? 'print:p-0' : 'print:p-5'}`}>
@@ -717,7 +802,7 @@ const PrintTemplate = ({ data, onClose }) => {
           const rateRefDisplay = buildRateRefs(c).join('  /  ');
 
           return (
-            <div className="text-slate-900 text-[11px] rec-form">
+            <div ref={recFormRef} className="text-slate-900 text-[11px] rec-form">
               <div className="flex items-center justify-between gap-3 mb-3">
                 {/* The bars are for the scanner; the code underneath is for
                     whoever is reading the printed page and needs to quote it. */}

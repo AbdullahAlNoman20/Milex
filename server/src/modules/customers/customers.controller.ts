@@ -66,7 +66,9 @@ export const escalateRateHandler = wrap((req) => customersService.escalateRateTo
 export const grantHodRateHandler = wrap((req) => customersService.grantHodRate(asString(req.params.id), req.body, req.user!.id, req.user!.role));
 export const sendForOfferHandler = wrap((req) => customersService.sendRateToSalesCoordinator(asString(req.params.id), req.user!.id, req.user!.role));
 export const kamRequestRateHandler = wrap((req) => customersService.kamRequestBetterRate(asString(req.params.id), req.body.reason, req.user!.id, req.user!.role));
-export const rejectRateHandler = wrap((req) => customersService.rejectRate(asString(req.params.id), req.user!.id));
+export const rejectRateHandler = wrap((req) =>
+  customersService.rejectRate(asString(req.params.id), req.body.reason, req.user!.id, req.user!.role)
+);
 export const draftOfferHandler = wrap((req) => customersService.draftOffer(asString(req.params.id), req.user!.id));
 export const finalizeOfferHandler = wrap((req) =>
   customersService.finalizeOffer(asString(req.params.id), req.body.offerText, req.user!.id, req.body.sentVia)
@@ -91,7 +93,13 @@ export const clientFeedbackHandler = wrap((req) =>
   customersService.submitClientFeedback(asString(req.params.id), req.body, req.user!.id, req.user!.role)
 );
 export const reviseRateHandler = wrap((req) =>
-  customersService.reviseRateAfterRejection(asString(req.params.id), req.body.proposedRate, req.user!.id, req.user!.role)
+  customersService.reviseRateAfterRejection(
+    asString(req.params.id),
+    req.body.proposedRate,
+    req.user!.id,
+    req.user!.role,
+    req.body.note
+  )
 );
 export const draftAgreementHandler = wrap((req) => customersService.draftAgreement(asString(req.params.id), req.user!.id));
 export const finalizeAgreementHandler = wrap((req) =>

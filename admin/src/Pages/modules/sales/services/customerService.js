@@ -67,8 +67,8 @@ export const requestBetterRate = async (id, reason) => {
   return data.customer;
 };
 
-export const rejectRate = async (id) => {
-  const { data } = await request(`/customers/${id}/reject-rate`, { method: 'POST' });
+export const rejectRate = async (id, reason) => {
+  const { data } = await request(`/customers/${id}/reject-rate`, { method: 'POST', body: { reason } });
   return data.customer;
 };
 
@@ -106,8 +106,11 @@ export const submitClientFeedback = async (id, accepted, rejectReason) => {
   return data.customer;
 };
 
-export const reviseRate = async (id, proposedRate) => {
-  const { data } = await request(`/customers/${id}/revise-rate`, { method: 'POST', body: { proposedRate } });
+export const reviseRate = async (id, proposedRate, note) => {
+  const { data } = await request(`/customers/${id}/revise-rate`, {
+    method: 'POST',
+    body: note ? { proposedRate, note } : { proposedRate },
+  });
   return data.customer;
 };
 

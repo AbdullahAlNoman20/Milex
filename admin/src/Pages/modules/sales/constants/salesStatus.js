@@ -37,7 +37,7 @@ export const TERMINAL_STATUSES = Object.freeze([STATUS.ACTIVE, STATUS.PROVISIONA
 export const isPipelineStatus = (status) => !TERMINAL_STATUSES.includes(status) || status === STATUS.PROVISIONAL_ACTIVE;
 
 export const STATUS_STYLE = Object.freeze({
-  danger: [STATUS.OFFER_REJECTED, STATUS.PROVISIONAL_EXPIRED],
+  danger: [STATUS.OFFER_REJECTED, STATUS.PROVISIONAL_EXPIRED, STATUS.PENDING_RATE],
   success: [STATUS.ACTIVE, STATUS.PROVISIONAL_ACTIVE],
 });
 
@@ -93,7 +93,7 @@ export const getWorkflowStageLabel = (customer) => {
   if (!customer) return '';
   switch (customer.status) {
     case STATUS.PENDING_RATE:
-      return 'Waiting for KAM to Submit / Revise Rate';
+      return 'Recommendation Rejected — Waiting for KAM to Correct & Resubmit';
     case STATUS.PENDING_APPROVAL:
       return 'Waiting for Line Manager to Set the Rate or Escalate to HOD';
     case STATUS.PENDING_HOD_RATE:

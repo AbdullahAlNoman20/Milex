@@ -203,5 +203,18 @@ export const directFieldEditSchema = z
   .strict();
 
 export const reviseRateSchema = z
-  .object({ proposedRate: z.string().min(1, 'Please enter a proposed rate.').max(300) })
+  .object({
+    proposedRate: z.string().trim().min(1, 'Please enter a proposed rate.').max(300),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export const rejectRecommendationSchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .min(3, 'Please explain why the recommendation is rejected.')
+      .max(1000, 'Reason must be 1000 characters or fewer.'),
+  })
   .strict();
