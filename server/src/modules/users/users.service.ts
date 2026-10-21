@@ -392,7 +392,19 @@ export const updateUser = async (
   }
 
   const data: any = {};
-  if (updates.name) data.name = updates.name;
+  if (updates.name !== undefined) {
+    // Only the display name changes: the id (and so every permission, customer,
+    // report and history row tied to it) and the login email stay as they are.
+    const name = String(updates.name).replace(/\s+/g, ' ').trim();
+    if (name.length < 2 || name.length > 150 || /[<>]/.test(name) || /\p{Cc}/u.test(name)) {
+      throw {
+        statusCode: 400,
+        code: 'INVALID_NAME',
+        message: 'Name must be 2–150 characters and cannot contain < or >.',
+      };
+    }
+    data.name = name;
+  }
   if (typeof updates.isActive === 'boolean') data.isActive = updates.isActive;
   if (updates.role) {
     const role = await prisma.role.findUniqueOrThrow({ where: { name: updates.role as any } });
@@ -417,8 +429,8 @@ export const updateUser = async (
     entityId: id,
     action: 'USER_UPDATED',
     actorId,
-    beforeState: { isActive: before.isActive, role: before.role.name, lineManagerId: before.lineManagerId },
-    afterState: { isActive: user.isActive, role: user.role.name, lineManagerId: user.lineManagerId, deactivationSnapshot },
+    beforeState: { name: before.name, isActive: before.isActive, role: before.role.name, lineManagerId: before.lineManagerId },
+    afterState: { name: user.name, isActive: user.isActive, role: user.role.name, lineManagerId: user.lineManagerId, deactivationSnapshot },
   });
   return toSafeUser(user);
 };

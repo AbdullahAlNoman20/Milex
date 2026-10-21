@@ -62,6 +62,8 @@ export const CUSTOMER_STATUS_TRANSITIONS: Record<string, string[]> = {
     CUSTOMER_STATUS.PENDING_LM_RATE_REVIEW,
     CUSTOMER_STATUS.RATE_APPROVED_PENDING_OFFER,
     CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
+    // The Head of Department rejecting the recommendation back to the KAM.
+    CUSTOMER_STATUS.PENDING_RATE_PREPARATION,
   ],
 
   // The KAM's desk. They take the rate to the Sales Coordinator, or send it

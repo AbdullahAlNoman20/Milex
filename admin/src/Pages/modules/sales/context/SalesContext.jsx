@@ -9,7 +9,7 @@ import { SalesContext } from './SalesContextObject';
 // panel keeps calling updateStatus(...) exactly as before, unchanged.
 const ACTION_TO_SERVICE_CALL = {
   'RATE APPROVED BY LM': (id, updates) => customerService.approveRate(id, updates),
-  'RATE REJECTED BY LM': (id) => customerService.rejectRate(id),
+  'RATE REJECTED BY LM': (id, updates) => customerService.rejectRate(id, updates.reason),
   'DRAFTING OFFER LETTER': (id) => customerService.draftOffer(id),
   'OFFER LETTER SENT': (id, updates) => customerService.finalizeOffer(id, updates.offerText, updates.sentVia),
   'OFFER ACCEPTED BY CUSTOMER': (id) => customerService.submitClientFeedback(id, true),

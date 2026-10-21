@@ -195,6 +195,9 @@ const roleQueueFilter = (role: string, userId: string): any | null => {
     case 'KAM':
       return {
         OR: [
+          // A recommendation sent back by the Line Manager / Head of
+          // Department, waiting for the KAM to correct and resubmit it.
+          { status: CUSTOMER_STATUS.PENDING_RATE_PREPARATION },
           { status: CUSTOMER_STATUS.PENDING_KAM_RATE_REVIEW },
           { status: CUSTOMER_STATUS.OFFER_SENT_AWAITING_FEEDBACK },
           { status: CUSTOMER_STATUS.PROVISIONAL_ACTIVE, offerSent: true, offerAccepted: false },
@@ -906,15 +909,83 @@ export const kamRequestBetterRate = async (
   return updated;
 };
 
-export const rejectRate = async (customerId: string, lmId: string) => {
-  await assertLineManagerOwnsCustomer(customerId, lmId);
-  return transitionCustomerStatus({
+// Only a recommendation a KAM (or Sales Coordinator) raised can be sent back:
+// a manager's own recommendation has nobody below it to correct it.
+const REJECTABLE_RECOMMENDATION_OWNERS = ['KAM', 'SALES_COORDINATOR'];
+
+export const rejectRate = async (customerId: string, reason: string, actorId: string, actorRole: string) => {
+  if (!['LINE_MANAGER', 'HEAD_OF_DEPARTMENT'].includes(actorRole)) {
+    throw { statusCode: 403, code: 'FORBIDDEN', message: 'Only the Line Manager or Head of Department can reject a recommendation.' };
+  }
+
+  const existing = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { status: true, createdByRole: true, offerAccepted: true, rateProcessActive: true, isDeleted: true, approvedRate: true },
+  });
+  if (!existing || existing.isDeleted) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: "We couldn't find that customer. It may have been removed." };
+  }
+
+  // The Line Manager rejects from their own desk; the Head of Department can
+  // also reject one that was escalated to them.
+  const rejectableStatuses: string[] =
+    actorRole === 'HEAD_OF_DEPARTMENT'
+      ? [CUSTOMER_STATUS.PENDING_RATE_APPROVAL, CUSTOMER_STATUS.PENDING_HOD_RATE_APPROVAL]
+      : [CUSTOMER_STATUS.PENDING_RATE_APPROVAL];
+  if (!rejectableStatuses.includes(existing.status as string)) {
+    throw { statusCode: 409, code: 'NOT_REJECTABLE', message: "This recommendation isn't waiting on your rate decision, so it can't be rejected now." };
+  }
+  // Only the recommendation as the KAM submitted it can be rejected — once a
+  // rate has been set the normal rate loop takes over.
+  if (existing.approvedRate) {
+    throw { statusCode: 409, code: 'NOT_REJECTABLE', message: 'A rate has already been set on this recommendation, so it can no longer be rejected.' };
+  }
+  if (existing.offerAccepted || existing.rateProcessActive) {
+    throw { statusCode: 409, code: 'NOT_REJECTABLE', message: 'The customer has already accepted an offer on this account, so the recommendation can no longer be rejected.' };
+  }
+  if (existing.createdByRole && !REJECTABLE_RECOMMENDATION_OWNERS.includes(existing.createdByRole as string)) {
+    throw { statusCode: 409, code: 'NOT_REJECTABLE', message: 'This recommendation was raised by a manager, so there is no KAM to send it back to.' };
+  }
+
+  await assertLineManagerOwnsCustomer(customerId, actorId);
+
+  const clean = sanitizeAndEscape({ reason });
+  const byLabel = actorRole === 'HEAD_OF_DEPARTMENT' ? 'Head of Department' : 'Line Manager';
+
+  const updated = await transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PENDING_RATE_PREPARATION,
-    actorId: lmId,
-    historyAction: 'RATE REJECTED BY LM',
-    historySubText: 'Sent back to the KAM for a revised proposal',
+    actorId,
+    // The reason stays on the record until the KAM resubmits; the history
+    // entry keeps it for good, however many rounds it takes.
+    extraUpdates: { lmNote: clean.reason },
+    historyAction: `RECOMMENDATION REJECTED BY ${byLabel.toUpperCase()}`,
+    historySubText: clean.reason,
+    skipWorkflowNotification: true,
   });
+
+  // Anything that was being asked on this recommendation is closed as rejected.
+  await prisma.rateRequest.updateMany({
+    where: { customerId, approved: null },
+    data: {
+      approved: false,
+      grantedNote: `Recommendation rejected: ${clean.reason}`,
+      grantedById: actorId,
+      grantedByRole: actorRole as any,
+      grantedAt: new Date(),
+    },
+  });
+
+  notifyCustomerWorkflowUsers(
+    updated.handledById,
+    {
+      label: `${updated.accountName} — Recommendation rejected by ${byLabel}. Please correct and resubmit.`,
+      link: `/app/customers/${updated.barcode}`,
+    },
+    actorId
+  ).catch(() => {});
+
+  return updated;
 };
 
 export const draftOffer = async (customerId: string, scId: string) =>
@@ -1477,14 +1548,40 @@ export const reapproveRateAfterRejection = async (
   return updated;
 };
 
-export const reviseRateAfterRejection = async (customerId: string, proposedRate: string, kamId: string, actorRole = 'KAM') => {
+export const reviseRateAfterRejection = async (
+  customerId: string,
+  proposedRate: string,
+  kamId: string,
+  actorRole = 'KAM',
+  note?: string
+) => {
   await assertKamOwnsCustomerIfKam(customerId, kamId, actorRole);
+  const existing = await prisma.customer.findUnique({ where: { id: customerId }, select: { status: true } });
+  if (!existing) {
+    throw { statusCode: 404, code: 'NOT_FOUND', message: "We couldn't find that customer. It may have been removed." };
+  }
+  const clean = sanitizeAndEscape({ proposedRate: proposedRate || '', note: note || '' });
+  if (!String(clean.proposedRate).trim()) {
+    throw { statusCode: 400, code: 'VALIDATION_ERROR', message: 'Please enter a proposed rate.' };
+  }
+
+  const isRejectedRecommendation = existing.status === CUSTOMER_STATUS.PENDING_RATE_PREPARATION;
+
   return transitionCustomerStatus({
     customerId,
     toStatus: CUSTOMER_STATUS.PENDING_RATE_APPROVAL,
     actorId: kamId,
-    extraUpdates: { proposedRate: sanitizeAndEscape({ proposedRate }).proposedRate },
-    historyAction: 'REVISED RATE SUBMITTED TO LM',
+    extraUpdates: {
+      proposedRate: clean.proposedRate,
+      // The rejection has been answered; it remains in the history trail.
+      ...(isRejectedRecommendation ? { lmNote: null } : {}),
+    },
+    historyAction: isRejectedRecommendation
+      ? 'RECOMMENDATION CORRECTED AND RESUBMITTED TO LM'
+      : 'REVISED RATE SUBMITTED TO LM',
+    ...(isRejectedRecommendation
+      ? { historySubText: clean.note ? `${clean.proposedRate} — ${clean.note}` : clean.proposedRate }
+      : {}),
   });
 };
 

@@ -34,6 +34,8 @@ import Loader from "../../../../Components/Shared/Loader";
 import Countdown from "../../../../Components/Shared/Countdown";
 
 import RateApprovalPanel from "../roles/LineManager/RateApprovalPanel";
+import RejectRecommendationPanel from "../roles/LineManager/RejectRecommendationPanel";
+import ResubmitRecommendationPanel from "../roles/KAM/ResubmitRecommendationPanel";
 import HodRatePanel from "../roles/HOD/HodRatePanel";
 import LmRateReviewPanel from "../roles/LineManager/LmRateReviewPanel";
 import KamRateDecisionPanel from "../roles/KAM/KamRateDecisionPanel";
@@ -246,12 +248,34 @@ const CustomerDetail = () => {
 
     // The Line Manager's desk: set the rate here, or hand the decision up to
     // the Head of Department.
-    if (
-      [STATUS.PENDING_RATE, STATUS.PENDING_APPROVAL].includes(customer.status)
-    ) {
+    // Only a recommendation a KAM raised can be sent back for correction, and
+    // only until the customer has accepted an offer.
+    const canRejectRecommendation =
+      !customer.approvedRate &&
+      !customer.offerAccepted &&
+      !customer.rateProcessActive &&
+      [ROLES.KAM, ROLES.SALES_COORDINATOR].includes(owner);
+
+    // Rejected by the Line Manager / Head of Department — back with the KAM.
+    if (customer.status === STATUS.PENDING_RATE) {
+      if (isAccountOwner)
+        return (
+          <ResubmitRecommendationPanel customer={customer} onUpdated={refreshCustomer} />
+        );
+      return (
+        <Waiting>Recommendation rejected — waiting for the KAM to correct and resubmit</Waiting>
+      );
+    }
+
+    if (customer.status === STATUS.PENDING_APPROVAL) {
       if (isApprover)
         return (
-          <RateApprovalPanel customer={customer} onUpdated={refreshCustomer} />
+          <div className="space-y-4">
+            <RateApprovalPanel customer={customer} onUpdated={refreshCustomer} />
+            {canRejectRecommendation && (
+              <RejectRecommendationPanel customer={customer} onUpdated={refreshCustomer} />
+            )}
+          </div>
         );
       return <Waiting>Waiting for the Line Manager to decide on the rate</Waiting>;
     }
@@ -260,7 +284,14 @@ const CustomerDetail = () => {
     // raised themselves — either way the decision is theirs alone.
     if (customer.status === STATUS.PENDING_HOD_RATE) {
       if (role === ROLES.HEAD_OF_DEPARTMENT || isSuperAdmin) {
-        return <HodRatePanel customer={customer} onUpdated={refreshCustomer} />;
+        return (
+          <div className="space-y-4">
+            <HodRatePanel customer={customer} onUpdated={refreshCustomer} />
+            {role === ROLES.HEAD_OF_DEPARTMENT && canRejectRecommendation && (
+              <RejectRecommendationPanel customer={customer} onUpdated={refreshCustomer} />
+            )}
+          </div>
+        );
       }
       return (
         <Waiting>Waiting for the Head of Department to set the best rate</Waiting>

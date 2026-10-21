@@ -29,6 +29,7 @@ import {
   decideFieldChangeSchema,
   directFieldEditSchema,
   reviseRateSchema,
+  rejectRecommendationSchema,
 } from './customers.schema';
 import { uploadMiddleware } from '../../common/middlewares/upload.middleware';
 
@@ -66,7 +67,7 @@ router.post('/:id/escalate-rate', requirePermission(PERMISSIONS.REQUEST_NEW_RATE
 router.post('/:id/grant-hod-rate', requirePermission(PERMISSIONS.GRANT_NEW_RATE), validateBody(grantHodRateSchema), controller.grantHodRateHandler);
 router.post('/:id/send-for-offer', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION, PERMISSIONS.CREATE_RECOMMENDATION), controller.sendForOfferHandler);
 router.post('/:id/request-better-rate', requirePermission(PERMISSIONS.REVISE_RECOMMENDATION, PERMISSIONS.CREATE_RECOMMENDATION), validateBody(kamRateRequestSchema), controller.kamRequestRateHandler);
-router.post('/:id/reject-rate', requirePermission(PERMISSIONS.REJECT_RATE), controller.rejectRateHandler);
+router.post('/:id/reject-rate', requirePermission(PERMISSIONS.REJECT_RATE), validateBody(rejectRecommendationSchema), controller.rejectRateHandler);
 router.post('/:id/draft-offer', requirePermission(PERMISSIONS.DRAFT_OFFER), controller.draftOfferHandler);
 router.post('/:id/finalize-offer', requirePermission(PERMISSIONS.FINALIZE_OFFER), validateBody(offerTextSchema), controller.finalizeOfferHandler);
 router.post('/:id/send-agreement', requirePermission(PERMISSIONS.FINALIZE_AGREEMENT), validateBody(agreementTextSchema), controller.sendAgreementHandler);

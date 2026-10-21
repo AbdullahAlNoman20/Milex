@@ -4,6 +4,7 @@ import {
   Users,
   Plus,
   KeyRound,
+  Pencil,
   Loader2,
   ShieldCheck,
   Download,
@@ -235,6 +236,10 @@ const AdminOverview = () => {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const savePasswordLockRef = useRef(false);
   const [requireChangeOnLogin, setRequireChangeOnLogin] = useState(true);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
+  const renameLockRef = useRef(false);
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -410,6 +415,40 @@ const AdminOverview = () => {
       reloadAll();
     } catch (err) {
       showToast(err?.message || 'Failed to update user', 'error');
+    }
+  };
+
+  const openRename = (user) => {
+    setRenameTarget(user);
+    setRenameValue(user.name || '');
+  };
+
+  const closeRename = () => {
+    setRenameTarget(null);
+    setRenameValue('');
+  };
+
+  const handleRename = async () => {
+    if (!renameTarget || renameLockRef.current) return;
+    const name = renameValue.replace(/\s+/g, ' ').trim();
+    if (name.length < 2 || name.length > 150) {
+      return showToast('Name must be 2–150 characters', 'warning');
+    }
+    if (/[<>]/.test(name)) return showToast('Name cannot contain < or >', 'warning');
+    if (name === renameTarget.name) return closeRename();
+
+    renameLockRef.current = true;
+    setIsRenaming(true);
+    try {
+      await updateUserAdmin(renameTarget.id, { name });
+      showToast('Name updated', 'success');
+      closeRename();
+      reloadAll();
+    } catch (err) {
+      showToast(err?.message || 'Failed to update name', 'error');
+    } finally {
+      renameLockRef.current = false;
+      setIsRenaming(false);
     }
   };
 
@@ -728,6 +767,15 @@ const AdminOverview = () => {
                             </button>
                           </td>
                           <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => openRename(u)}
+                              aria-label="Edit name"
+                              title="Edit name"
+                              className="text-slate-300 hover:text-emerald-600 transition mr-3"
+                            >
+                              <Pencil size={14} />
+                            </button>
                             <button
                               type="button"
                               onClick={() => setPasswordTargetId(u.id)}
@@ -1059,6 +1107,59 @@ const AdminOverview = () => {
               <button
                 type="button"
                 onClick={() => { setPasswordTargetId(null); setNewPassword(''); }}
+                className="px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-4 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Pencil size={16} className="text-emerald-600" /> Edit Name
+              </h3>
+              <button
+                type="button"
+                onClick={closeRename}
+                aria-label="Close"
+                className="w-7 h-7 rounded-full inline-flex items-center justify-center text-slate-400 hover:bg-slate-100 transition shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 break-all">
+              Login email stays the same: <span className="font-semibold text-slate-700">{renameTarget.email}</span>
+            </p>
+            <input
+              type="text"
+              value={renameValue}
+              maxLength={150}
+              autoFocus
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRename();
+                if (e.key === 'Escape') closeRename();
+              }}
+              placeholder="Full name"
+              className="w-full border border-slate-200 p-3 rounded-lg text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={isRenaming}
+                onClick={handleRename}
+                className="flex-1 bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm disabled:opacity-50"
+              >
+                {isRenaming ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Save Name'}
+              </button>
+              <button
+                type="button"
+                onClick={closeRename}
                 className="px-4 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold"
               >
                 Cancel
