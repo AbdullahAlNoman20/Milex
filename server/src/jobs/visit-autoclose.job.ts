@@ -59,7 +59,17 @@ export const autoCloseUnreportedVisits = async () => {
     const [kamId, day] = key.split('|');
     try {
       // eslint-disable-next-line no-await-in-loop
-      await prisma.$transaction(async (tx) => {
+      const created = await prisma.$transaction(async (tx) => {
+        // Re-checked inside the transaction: a visit reported (or closed) since
+        // the sweep query ran is left alone instead of getting a second line.
+        const already = await tx.reportVisit.findMany({
+          where: { sourceVisitId: { in: visits.map((v) => v.id) } },
+          select: { sourceVisitId: true },
+        });
+        const done = new Set(already.map((r) => r.sourceVisitId));
+        const fresh = visits.filter((v) => !done.has(v.id));
+        if (fresh.length === 0) return 0;
+
         const report = await tx.dailyReport.upsert({
           where: { kamId_date: { kamId, date: day } },
           update: {},
@@ -67,7 +77,7 @@ export const autoCloseUnreportedVisits = async () => {
           select: { id: true },
         });
         await tx.reportVisit.createMany({
-          data: visits.map((v) => ({
+          data: fresh.map((v) => ({
             dailyReportId: report.id,
             sourceVisitId: v.id,
             customerId: v.customerId,
@@ -78,8 +88,9 @@ export const autoCloseUnreportedVisits = async () => {
             autoClosedAt: now,
           })),
         });
+        return fresh.length;
       });
-      closedPlanned += visits.length;
+      closedPlanned += created;
     } catch (err) {
       // One KAM's day failing must not stop the rest of the sweep.
       console.warn(`[cron] visit auto-close failed for ${kamId} on ${day}:`, (err as Error)?.message);
