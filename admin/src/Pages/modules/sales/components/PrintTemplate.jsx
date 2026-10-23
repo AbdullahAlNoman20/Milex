@@ -773,7 +773,7 @@ const PrintTemplate = ({ data, onClose }) => {
         .rec-form[data-fit] .mb-3 { margin-bottom: var(--rf-gap) !important; }
         .rec-form[data-fit] .mb-1\\.5 { margin-bottom: calc(var(--rf-gap) / 2) !important; }
         .rec-form[data-fit] .pt-2 { padding-top: calc(var(--rf-gap) / 2) !important; }
-        .rec-form[data-fit] .h-16 { height: var(--rf-sign) !important; }
+        .rec-form[data-fit] .h-9 { height: calc(var(--rf-sign) / 2) !important; }
         .rec-form[data-fit] .h-8 { height: calc(var(--rf-sign) / 2) !important; }
       `}</style>
 
@@ -951,10 +951,10 @@ const PrintTemplate = ({ data, onClose }) => {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
-                    <td className="border border-slate-800 px-2 py-1 h-16 align-top">{c.recommendedBy?.name || ''}</td>
+                    <td className="border border-slate-800 px-2 py-1 h-9 align-top">{c.recommendedBy?.name || ''}</td>
+                    <td className="border border-slate-800 px-2 py-1 h-9 align-top">{c.recommendedBy?.name || ''}</td>
                     {/* Signed by hand on the printed copy. */}
-                    <td className="border border-slate-800 px-2 py-1 h-16 align-top"></td>
+                    <td className="border border-slate-800 px-2 py-1 h-9 align-top"></td>
                   </tr>
                 </tbody>
               </table>
