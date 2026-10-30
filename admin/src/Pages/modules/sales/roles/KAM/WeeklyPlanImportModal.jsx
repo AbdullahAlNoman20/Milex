@@ -24,31 +24,47 @@ const pick = (row, keys) => {
   return '';
 };
 
-// Excel stores a date as a serial number, but a sheet typed by hand usually
-// holds text. Both are normalised to the ISO form the plan works in.
-const toIsoDate = (value) => {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+// The sheet's date format is DD.MM.YYYY (e.g. 28.10.2026). "/" and "-" are
+// accepted as separators too, and ISO (2026-10-28) still works for older
+// files. Free-form text is never handed to new Date(): it reads 05.11.2026 as
+// May 11, which is exactly the wrong way round here.
+const DMY_PATTERN = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/;
+const ISO_PATTERN = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+
+const buildIso = (y, m, d) => {
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return '';
+  // Rejects dates that do not exist, such as 31.02.2026.
+  const check = new Date(Date.UTC(year, month - 1, day));
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
+    return '';
   }
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+const toIsoDate = (value) => {
+  // A real date cell in Excel arrives as a serial number.
   if (typeof value === 'number') {
     const parsed = XLSX.SSF?.parse_date_code?.(value);
-    if (parsed?.y) {
-      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
-    }
+    return parsed?.y ? buildIso(parsed.y, parsed.m, parsed.d) : '';
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return buildIso(value.getFullYear(), value.getMonth() + 1, value.getDate());
   }
   const text = String(value || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
+  const dmy = text.match(DMY_PATTERN);
+  if (dmy) return buildIso(dmy[3], dmy[2], dmy[1]);
+  const iso = text.match(ISO_PATTERN);
+  if (iso) return buildIso(iso[1], iso[2], iso[3]);
   return '';
+};
+
+// ISO (2026-10-28) -> 28.10.2026, for showing back to the person.
+const toDisplayDate = (iso) => {
+  const [y, m, d] = String(iso || '').split('-');
+  return y && m && d ? `${d}.${m}.${y}` : iso;
 };
 
 const WeeklyPlanImportModal = ({ onClose, onImport }) => {
@@ -59,10 +75,17 @@ const WeeklyPlanImportModal = ({ onClose, onImport }) => {
   const lockRef = useRef(false);
 
   const downloadTemplate = () => {
+    // Example dates are tomorrow and the day after, written as DD.MM.YYYY
+    // text so Excel keeps them exactly as typed.
+    const exampleDate = (offsetDays) => {
+      const d = new Date();
+      d.setDate(d.getDate() + offsetDays);
+      return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+    };
     const sheet = XLSX.utils.aoa_to_sheet([
       ['Date', 'Customer Name', 'Purpose'],
-      ['2026-09-21', 'Acme Textiles Ltd', 'Quarterly rate review'],
-      ['2026-09-22', 'New Prospect Trading', 'Introductory meeting'],
+      [exampleDate(1), 'Acme Textiles Ltd', 'Follow Up'],
+      [exampleDate(2), 'New Prospect Trading', 'Introductory meeting'],
     ]);
     sheet['!cols'] = [{ wch: 14 }, { wch: 32 }, { wch: 40 }];
     const book = XLSX.utils.book_new();
@@ -121,7 +144,9 @@ const WeeklyPlanImportModal = ({ onClose, onImport }) => {
     if (!file) return;
     try {
       const buffer = await file.arrayBuffer();
-      const book = XLSX.read(buffer, { type: 'array', cellDates: true });
+      // raw: a CSV cell such as "28.10.2026" stays text and is parsed as
+      // DD.MM.YYYY above, instead of being guessed at in US (month-first) order.
+      const book = XLSX.read(buffer, { type: 'array', raw: true });
       const firstSheet = book.Sheets[book.SheetNames[0]];
       if (!firstSheet) throw new Error('empty');
       const raw = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
@@ -148,7 +173,7 @@ const WeeklyPlanImportModal = ({ onClose, onImport }) => {
       const incomplete = parsed.filter((r) => !r.day || !r.purpose);
       if (incomplete.length > 0) {
         showToast(
-          `${incomplete.length} row(s) are missing a date or a purpose and will be skipped.`,
+          `${incomplete.length} row(s) have a missing or invalid date (use DD.MM.YYYY, e.g. 28.10.2026) or no purpose, and will be skipped.`,
           'warning',
           7000
         );
@@ -156,7 +181,11 @@ const WeeklyPlanImportModal = ({ onClose, onImport }) => {
 
       const usable = parsed.filter((r) => r.day && r.purpose);
       if (usable.length === 0) {
-        return showToast('Every row is missing a date or a purpose — nothing to import.', 'warning');
+        return showToast(
+          'Every row has a missing or invalid date (use DD.MM.YYYY, e.g. 28.10.2026) or no purpose — nothing to import.',
+          'warning',
+          8000
+        );
       }
 
       setFileName(file.name);
@@ -197,7 +226,8 @@ const WeeklyPlanImportModal = ({ onClose, onImport }) => {
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
             <p className="text-xs text-slate-600 leading-relaxed">
               The sheet needs three columns: <strong>Date</strong>, <strong>Customer Name</strong> and{' '}
-              <strong>Purpose</strong>. Each row becomes one planned visit on that date.
+              <strong>Purpose</strong>. Each row becomes one planned visit on that date. Write the date as{' '}
+              <strong>DD.MM.YYYY</strong> (e.g. 28.10.2026).
             </p>
             <p className="text-xs text-slate-600 leading-relaxed">
               Names are checked against your customer list: anyone already on file is filed under
@@ -252,7 +282,7 @@ const WeeklyPlanImportModal = ({ onClose, onImport }) => {
                           {r.matchedName || r.customerName}
                         </p>
                         <p className="text-[10px] text-slate-400 truncate">
-                          {r.day} · {r.purpose}
+                          {toDisplayDate(r.day)} · {r.purpose}
                         </p>
                       </div>
                       <span

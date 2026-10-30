@@ -649,7 +649,9 @@ export const AgreementLetter = ({ c }) => {
 const MM_TO_PX = 96 / 25.4;
 const REC_PAGE_HEIGHT_PX = 277 * MM_TO_PX;
 const REC_PAGE_WIDTH_PX = 190 * MM_TO_PX;
-const REC_FIT_SAFETY_PX = 8;
+// Room for the small differences in how each OS/browser measures text when it
+// prints (macOS in particular), so the last line never tips onto a second page.
+const REC_FIT_SAFETY_PX = 20;
 
 // Tightened a little at a time: spacing first, then type. Only used when the
 // form would otherwise spill onto a second page.
@@ -754,12 +756,16 @@ const PrintTemplate = ({ data, onClose }) => {
   const c = data.customer;
 
   return (
-    <div ref={printHostRef} className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
+    <div ref={printHostRef} data-print-type={data.type} className="hidden print:block print:static print:h-auto print:min-h-0 print:p-0 print:bg-white print:overflow-visible">
       <style>{`
         @media print {
           @page { size: A4; margin: ${data.type === 'offer' ? '23mm 13mm 10mm 25mm' : data.type === 'agreement' ? '47mm 20.3mm 25.4mm 20.3mm' : '10mm'}; }
           ${data.type === 'agreement' ? `@page { @top-right { content: "Page " counter(page) " of " counter(pages); font: 12pt 'Times New Roman', Times, serif; text-align: right; vertical-align: bottom; } }` : ''}
           .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+          ${data.type === 'recommendation' ? `
+          html, body, #root { height: auto !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; }
+          [data-print-type="recommendation"] { height: 276mm !important; max-height: 276mm !important; overflow: hidden !important; break-after: avoid; page-break-after: avoid; }
+          ` : ''}
         }
         .rec-form { line-height: 1.35; }
         .rec-form td, .rec-form th { padding-top: 3px; padding-bottom: 3px; }
